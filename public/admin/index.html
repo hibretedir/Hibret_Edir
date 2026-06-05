@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hibret Edir — Member CRM & Invoice Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0b0e14; --surface:#141820; --surface2:#1b2130; --surface3:#222840;
+  --border:#252d3d; --border2:#2e3850;
+  --accent:#e8a020; --accent2:#f0c060; --accent3:#c07010;
+  --red:#e05040; --red-bg:rgba(224,80,64,.12); --red-border:rgba(224,80,64,.25);
+  --green:#3dba6e; --green-bg:rgba(61,186,110,.1); --green-border:rgba(61,186,110,.25);
+  --blue:#4a9eff; --blue-bg:rgba(74,158,255,.1);
+  --muted:#5a6580; --muted2:#3e4a60; --text:#dde4f0; --text2:#a0aec0;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'DM Mono',monospace;font-size:13px;min-height:100vh;overflow-x:hidden}
+a{color:var(--accent);text-decoration:none}
+
+/* ===== LAYOUT ===== */
+.app{display:flex;height:100vh;overflow:hidden}
+.sidebar{width:220px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto}
+.main{flex:1;overflow-y:auto;display:flex;flex-direction:column}
+
+/* ===== SIDEBAR ===== */
+.sidebar-brand{padding:20px 16px 16px;border-bottom:1px solid var(--border)}
+.brand-logo{display:flex;align-items:center;gap:10px}
+.logo-sq{width:36px;height:36px;background:var(--accent);display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:16px;color:#000;flex-shrink:0}
+.brand-name{font-family:'Syne',sans-serif;font-weight:800;font-size:14px;letter-spacing:.3px}
+.brand-sub{color:var(--muted);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
+
+.nav-section{padding:12px 8px 4px}
+.nav-label{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);padding:0 8px 6px}
+.nav-item{display:flex;align-items:center;gap:9px;padding:9px 10px;cursor:pointer;border-radius:3px;transition:all .15s;color:var(--muted);font-size:12px;letter-spacing:.3px;margin-bottom:1px}
+.nav-item:hover{background:var(--surface2);color:var(--text2)}
+.nav-item.active{background:var(--surface3);color:var(--accent);border-left:2px solid var(--accent);padding-left:8px}
+.nav-icon{font-size:14px;width:18px;text-align:center}
+.nav-badge{margin-left:auto;background:var(--surface3);color:var(--muted);font-size:9px;padding:1px 6px;border-radius:0}
+.nav-item.active .nav-badge{background:var(--accent);color:#000}
+
+.sidebar-footer{margin-top:auto;padding:12px 16px;border-top:1px solid var(--border)}
+.sidebar-footer .sync-date{color:var(--muted);font-size:10px}
+
+/* ===== TOPBAR ===== */
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 28px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;flex-shrink:0}
+.page-title{font-family:'Syne',sans-serif;font-weight:700;font-size:18px}
+.page-sub{color:var(--muted);font-size:11px;margin-top:2px}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.kpi-chip{background:var(--surface2);border:1px solid var(--border);padding:6px 14px;display:flex;flex-direction:column;align-items:center}
+.kpi-val{font-family:'Syne',sans-serif;font-weight:700;font-size:16px}
+.kpi-val.red{color:var(--red)}
+.kpi-val.green{color:var(--green)}
+.kpi-val.amber{color:var(--accent)}
+.kpi-label{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-top:2px}
+
+/* ===== CONTROLS ===== */
+.controls{padding:14px 28px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap;flex-shrink:0}
+input[type=text],select{background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:12px;padding:8px 12px;outline:none;transition:border-color .2s;min-width:0}
+input[type=text]:focus,select:focus{border-color:var(--accent)}
+.search-wrap{position:relative;flex:1;min-width:180px}
+.search-wrap input{width:100%;padding-left:30px}
+.search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px}
+.btn{background:transparent;border:1px solid var(--border);color:var(--text2);font-family:'DM Mono',monospace;font-size:11px;padding:7px 14px;cursor:pointer;transition:all .2s;letter-spacing:.3px;white-space:nowrap}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#000;font-weight:500}
+.btn.primary:hover{background:var(--accent2)}
+.btn.danger{border-color:var(--red);color:var(--red)}
+.result-count{margin-left:auto;color:var(--muted);font-size:11px;white-space:nowrap}
+
+/* ===== FILTER TABS ===== */
+.filter-tabs{display:flex;gap:1px;padding:0 28px;background:var(--bg);border-bottom:1px solid var(--border);flex-shrink:0}
+.ftab{padding:10px 16px;font-family:'Syne',sans-serif;font-size:11px;font-weight:600;letter-spacing:.5px;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;transition:all .2s;display:flex;align-items:center;gap:6px}
+.ftab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.ftab:hover:not(.active){color:var(--text2)}
+.ftab-badge{background:var(--surface2);font-size:9px;padding:1px 6px;color:var(--muted)}
+.ftab.active .ftab-badge{background:var(--accent);color:#000}
+
+/* ===== TABLE ===== */
+.table-area{flex:1;padding:0 28px 40px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;margin-top:16px}
+thead tr{border-bottom:2px solid var(--border)}
+th{font-family:'Syne',sans-serif;font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);padding:8px 12px;text-align:left;white-space:nowrap;cursor:pointer;user-select:none}
+th:hover{color:var(--text)}
+tbody tr{border-bottom:1px solid var(--border);transition:background .12s;animation:fadeIn .25s ease both}
+tbody tr:hover{background:var(--surface)}
+@keyframes fadeIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+td{padding:10px 12px;vertical-align:middle}
+.member-num{color:var(--muted);font-size:11px}
+.member-name{font-family:'Syne',sans-serif;font-size:13px;font-weight:600}
+.member-full{color:var(--muted);font-size:10px;margin-top:2px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.contact-line{font-size:11px;color:var(--text2);margin-bottom:2px}
+.contact-line.email{color:var(--blue);font-size:10px}
+.contact-line.no-email{color:var(--muted);font-style:italic;font-size:10px}
+.status-pill{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;font-size:10px;letter-spacing:.3px}
+.status-pill.active{background:var(--green-bg);color:var(--green);border:1px solid var(--green-border)}
+.status-pill.not-active{background:var(--red-bg);color:var(--red);border:1px solid var(--red-border)}
+.status-dot{width:5px;height:5px;border-radius:50%;background:currentColor}
+.inv-count{font-family:'Syne',sans-serif;font-size:13px;font-weight:700}
+.inv-count.has-unpaid{color:var(--red)}
+.inv-count.all-paid{color:var(--green)}
+.inv-count.none{color:var(--muted)}
+.tag{display:inline-block;background:var(--surface3);color:var(--accent2);font-size:9px;padding:2px 7px;border-left:2px solid var(--accent);margin:1px}
+.action-btns{display:flex;gap:6px}
+.icon-btn{background:transparent;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:4px 9px;cursor:pointer;transition:all .15s}
+.icon-btn:hover{border-color:var(--accent);color:var(--accent)}
+.empty{text-align:center;padding:60px 0;color:var(--muted)}
+
+/* ===== MODAL ===== */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:1000;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border2);width:680px;max-width:95vw;max-height:90vh;overflow-y:auto;animation:slideUp .2s ease}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
+.modal-header{padding:20px 24px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-title{font-family:'Syne',sans-serif;font-weight:700;font-size:16px}
+.modal-close{background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:0 4px}
+.modal-close:hover{color:var(--text)}
+.modal-body{padding:20px 24px}
+.modal-footer{padding:14px 24px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:flex-end}
+
+/* Member detail modal */
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.detail-field{display:flex;flex-direction:column;gap:5px}
+.detail-field.full{grid-column:1/-1}
+.field-label{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
+.field-value{color:var(--text);font-size:13px}
+.field-input{background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:12px;padding:8px 10px;width:100%;outline:none}
+.field-input:focus{border-color:var(--accent)}
+.section-divider{grid-column:1/-1;border-top:1px solid var(--border);padding-top:14px;margin-top:2px}
+.section-head{font-family:'Syne',sans-serif;font-weight:700;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
+
+/* Invoice rows inside modal */
+.inv-row{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--surface2);margin-bottom:6px;border-left:3px solid var(--border2)}
+.inv-row.unpaid{border-left-color:var(--red)}
+.inv-row.paid{border-left-color:var(--green)}
+.inv-event{font-size:11px;color:var(--accent2);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.inv-date{font-size:10px;color:var(--muted)}
+.inv-amt{font-family:'Syne',sans-serif;font-weight:700;font-size:13px}
+.inv-amt.red{color:var(--red)}
+.inv-amt.green{color:var(--green)}
+
+/* ===== INVOICE VIEW ===== */
+.event-banner{display:flex;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid var(--border);margin-bottom:6px}
+.event-dot{width:10px;height:10px;background:var(--accent);flex-shrink:0}
+
+/* ===== RESPONSIVE ===== */
+@media(max-width:768px){
+  .sidebar{width:48px;overflow:hidden}
+  .sidebar-brand .brand-name,.sidebar-brand .brand-sub,.nav-item span,.nav-label,.sidebar-footer{display:none}
+  .nav-icon{margin:0 auto}
+  .kpi-chip{display:none}
+  .topbar{padding:12px 16px}
+  .controls{padding:10px 16px}
+  .table-area{padding:0 16px 30px}
+  .filter-tabs{padding:0 16px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-logo">
+      <div class="logo-sq">HE</div>
+      <div>
+        <div class="brand-name">Hibret Edir</div>
+        <div class="brand-sub">Member Portal</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">Main</div>
+    <div class="nav-item active" id="nav-members" onclick="switchView('members')">
+      <span class="nav-icon">◉</span>
+      <span>Members CRM</span>
+      <span class="nav-badge" id="nb-members">—</span>
+    </div>
+    <div class="nav-item" id="nav-invoices" onclick="switchView('invoices')">
+      <span class="nav-icon">◈</span>
+      <span>Invoices</span>
+      <span class="nav-badge" id="nb-invoices">—</span>
+    </div>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-label">Reports</div>
+    <div class="nav-item" id="nav-overview" onclick="switchView('overview')">
+      <span class="nav-icon">▦</span>
+      <span>Overview</span>
+    </div>
+  </div>
+
+  <div class="sidebar-footer">
+    <div class="sync-date">Data as of Jun 3, 2026</div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<div class="main" id="mainArea">
+  <!-- injected per view -->
+</div>
+
+</div><!-- .app -->
+
+<!-- MEMBER DETAIL MODAL -->
+<div class="modal-overlay" id="memberModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modalMemberName">Member Detail</div>
+        <div style="color:var(--muted);font-size:10px;margin-top:2px" id="modalMemberSub"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal('memberModal')">✕</button>
+    </div>
+    <div class="modal-body" id="modalMemberBody"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('memberModal')">Close</button>
+      <button class="btn primary" onclick="saveMemberEdit()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== DATA =====================
+const MEMBERS = [{"id":1,"status":"Active","paypal_name":"Alemu Biru","first":"Alemu","last":"Biru","full_name":"Alemu Biru/Tsehay Yifru","home":"818-810-6716","mobile":"310-866-1716","email":"afbiru9@gmail.com","address":"15730 Marilla St., North Hills, CA 91343","notes":""},{"id":2,"status":"Active","paypal_name":"Ferede Deribie","first":"Ferede","last":"Deribie","full_name":"Ferede Ayelew Deribie/Emawayesh T. Moges","home":"310-671-5423","mobile":"310-462-3942","email":"fer-fer@sbcglobal.net","address":"4912 Lennox Bld. #4, Inglwood, CA 90304","notes":""},{"id":3,"status":"Active","paypal_name":"Girma Habtewold","first":"Girma","last":"Habtewold","full_name":"Girma Habtewold","home":"323-938-4256","mobile":"323-217-8806","email":"isaac.habtewolde@yahoo.com","address":"4563 Lomita St., Los Angeles, CA 90019","notes":""},{"id":4,"status":"Active","paypal_name":"Taterework Mulugeta","first":"Taterework","last":"Mulugeta","full_name":"Taterework Mulugeta","home":"310-645-3510","mobile":"310-384-2807","email":"terimulu@gmail.com","address":"5925 Canterbury Dr. 212, Culver City, CA 90230","notes":""},{"id":5,"status":"Active","paypal_name":"Henok Tafesse","first":"Henok","last":"Tafesse","full_name":"Henok Tafesse","home":"714-891-4216","mobile":"626-422-7335","email":"henoktaf@verizon.net","address":"6170 Grenada Ave, Cypress, CA 90630-5345","notes":""},{"id":6,"status":"Active","paypal_name":"Betelhem Mulugeta","first":"Betelhem","last":"Mulugeta","full_name":"Betelhem Mulugeta","home":"424-277-9353","mobile":"213-434-6458","email":"babimuli@yahoo.com","address":"1316 S. Highland Av. Apt. 2, Los Angeles, CA 90019","notes":""},{"id":7,"status":"Active","paypal_name":"Jonathan Gebremariam","first":"Jonathan","last":"Gebremariam","full_name":"Tirhas Berehe Temanu","home":"310-337-1577","mobile":"310-592-7332","email":"jonathangebremariam@yahoo.com","address":"6060 Buckingham PKWY #201, Culver City, CA 90230","notes":""},{"id":8,"status":"Not Active","paypal_name":"Abebe","first":"Abebe","last":"","full_name":"Birhanu Abebe","home":"310-280-9184","mobile":"310-873-7258","email":"abatatek1@att.net","address":"3668 Moter Ave. #204, Los Angeles, CA 90034","notes":""},{"id":9,"status":"Active","paypal_name":"Almaz Tasisa Moti","first":"Almaz","last":"Tasisa Moti","full_name":"Almaz Tasisa Moti","home":"323-747-5181","mobile":"909-614-3531","email":"almazmoti@gmail.com","address":"3730 27st # 119, Los Angeles, CA 90018","notes":""},{"id":10,"status":"Active","paypal_name":"Yigzaw Tiku","first":"Yigzaw","last":"Tiku","full_name":"Yigzaw Tiku","home":"323-732-9092","mobile":"323-596-5782","email":"deli.miki@yahoo.com","address":"","notes":""},{"id":11,"status":"Active","paypal_name":"Tsehay Mogus","first":"Tsehay","last":"Mogus","full_name":"Tsehay Mogus","home":"310-390-9337","mobile":"310-927-6710","email":"tsehay@usc.edu","address":"3939 Sawtelle Blvd., Los Angeles, CA 90066","notes":""},{"id":11,"status":"Not Active","paypal_name":"Mulugeta","first":"Mulugeta","last":"","full_name":"Samsom  Mulugeta","home":"","mobile":"310-384-4283","email":"tsehay@usc.edu","address":"3939 Sawtelle Blvd., Los Angeles, CA 90066","notes":""},{"id":12,"status":"Active","paypal_name":"Weinshet Kifle","first":"Weinshet","last":"Kifle","full_name":"Weinshet Kifle/ Biniam Teklu","home":"310-926-8704","mobile":"310-926-7996","email":"bteklu54@gmail.com","address":"444 Lafayette Pk Place #301, Los Angeles, CA 90057","notes":""},{"id":13,"status":"Not Active","paypal_name":"Abreha","first":"Abreha","last":"","full_name":"Tigest K. Abreha","home":"","mobile":"323-557-5498","email":"tigestyeab@yahoo.com","address":"1559 South Fairfax Ave., Los Angeles, CA 90019","notes":""},{"id":14,"status":"Active","paypal_name":"Elizabeth Teshome","first":"Elizabeth","last":"Teshome","full_name":"ElizabethTeshome Girmachew Damte Ayele","home":"310-258-9851","mobile":"213-400-8210","email":"eteshome@ucla.edu","address":"6150 Buckingham pkwy. #206, Culver City, CA 90230","notes":""},{"id":15,"status":"Active","paypal_name":"Daniel Fekede","first":"Daniel","last":"Fekede","full_name":"Daniel Fekede/Meaza Kebede","home":"310-902-0223","mobile":"310-902-0223","email":"danfekede@hotmail.com","address":"3635 W. 63rd St., Los Angeles, CA 90043","notes":""},{"id":16,"status":"Active","paypal_name":"Netsanet Tsegay","first":"Netsanet","last":"Tsegay","full_name":"Netsanet A. Tsegay/Solomon T. Tsegaye","home":"","mobile":"310-719-5968","email":"netsbeab@gmail.com","address":"5830 Green Valley Cir. #310, Culver City, CA 90230","notes":""},{"id":17,"status":"Active","paypal_name":"Zemedkun Solomon","first":"Zemedkun","last":"Solomon","full_name":"Zemedkun Solomon/Yodit E. Solomon","home":"323-937-4184","mobile":"323-788-8454","email":"Yodit68@yahoo.com","address":"1837 Stearns Dr., Los Angeles, CA 90035","notes":""},{"id":18,"status":"Active","paypal_name":"Tsehay Bekele","first":"Tsehay","last":"Bekele","full_name":"Tsehay Bekele","home":"310-999-4707","mobile":"310-999-4707","email":"Bekeletsehay@yahoo.com","address":"1437 S. Cochran Ave. Apt.1, Los Angeles, CA 90019","notes":""},{"id":19,"status":"Active","paypal_name":"Wondwossen Gizaw","first":"Wondwossen","last":"Gizaw","full_name":"Wondwossen Negussee Gizaw","home":"310-399-7818","mobile":"310-436-5536","email":"wondwessen.gizaw@yahoo.com","address":"2411 Centinela Ave. #212, Santa Monica CA 90405","notes":""},{"id":20,"status":"Active","paypal_name":"Tassew Bekele","first":"Tassew","last":"Bekele","full_name":"Tassew Bekele\n/Fetlework Atlabachew","home":"562-944-5240","mobile":"562-506-7105","email":"tassewb22@yahoo.com","address":"13109 De Alcala Dr., La Mirade, CA 90638","notes":""},{"id":21,"status":"Active","paypal_name":"Getnet Alebel","first":"Getnet","last":"Alebel","full_name":"Getnet Alebel","home":"","mobile":"213-804-0333","email":"g.alebel@att.net","address":"339 S. Ardmore Ave. Apt. 223, Los Angeles, CA 90020","notes":""},{"id":22,"status":"Active","paypal_name":"Tensay Belay","first":"Tensay","last":"Belay","full_name":"Tensay Belay/Belaynesh","home":"213-369-4688","mobile":"213-369-2966","email":"tbelay@yahoo.com","address":"1424 Broad Way #203, Santa Monica CA 90404","notes":""},{"id":23,"status":"Not Active","paypal_name":"Engida","first":"Engida","last":"","full_name":"Belayhun Engida","home":"310-977-8629","mobile":"310-844-5172","email":"belay6634@gmail.com","address":"821 Geln Way Dr. #05, Inglewood, CA 90302","notes":""},{"id":24,"status":"Active","paypal_name":"Yonas Asefa","first":"Yonas","last":"Asefa","full_name":"Yonas Asefa (Hewan Ayele)","home":"714-686-1086","mobile":"714-865-9412","email":"heywee26@yahoo.com","address":"2859 W. Lincova Ave. #135, Anahiem, CA 92801","notes":""},{"id":25,"status":"Active","paypal_name":"Mekurab Asfaw","first":"Mekurab","last":"Asfaw","full_name":"Mekurab Asfaw/ Mendaye Terefe (husband deceased) wife will continue","home":"323-954-9724","mobile":"310-595-5382","email":"","address":"1238 S. Sycamore Ave, Los Angeles, CA 90019","notes":""},{"id":27,"status":"Active","paypal_name":"Mekonen Bekele","first":"Mekonen","last":"Bekele","full_name":"Mekonen Bekele","home":"","mobile":"213-300-7727","email":"mekubekele76@yahoo.com","address":"5469 Sanveciente Blvd., Los Angeles, CA 90016","notes":""},{"id":28,"status":"Active","paypal_name":"Abera Jembere","first":"Abera","last":"Jembere","full_name":"Abera Jembere/Selam Taye","home":"323-301-8916","mobile":"323-301-8997","email":"selamlolit@yahoo.com","address":"5344 Hillcrest Dr., Los Angeles, CA 90043-2321","notes":""},{"id":29,"status":"Active","paypal_name":"Asnakech Yigezu","first":"Asnakech","last":"Yigezu","full_name":"Asnakech Yigezu","home":"323-733-5230","mobile":"323-733-5230","email":"","address":"3003 S. Boronson, Los Angeles, CA 90018","notes":""},{"id":30,"status":"Active","paypal_name":"Mekdes Bekele","first":"Mekdes","last":"Bekele","full_name":"Mekdes Bekele","home":"310-980-6742","mobile":"310-437-9654","email":"ganmade@yahoo.cm","address":"12441 Short Ave, Apt. #22, Los Angeles, CA 90066-6455","notes":""},{"id":31,"status":"Active","paypal_name":"Tefera Taye","first":"Tefera","last":"Taye","full_name":"Tefera Taye","home":"310-965-4045","mobile":"310-721-6643","email":"terataye@yahoo.com","address":"3437 S. La Brea Ave. Apt. 102, Los Angeles, CA 90016-5233","notes":""},{"id":32,"status":"Active","paypal_name":"Atsede Wolde Amanueal","first":"Atsede","last":"Wolde Amanueal","full_name":"Atsede Wolde Amanueal","home":"310-677-6172","mobile":"310-430-5112","email":"SF.kidest@gmail.com","address":"2345 Virginia Ave.#303, Santa Monica, CA 90404","notes":""},{"id":34,"status":"Not Active","paypal_name":"Mulugeta Gebrewold","first":"Mulugeta","last":"Gebrewold","full_name":"Tafesse Mulugeta Gebrewold","home":"310-645-3510","mobile":"310-237-2867","email":"terimulugeta@yahoo.com","address":"5925 Canterbury Dr. #212, Culver City, CA 90230","notes":""},{"id":35,"status":"Active","paypal_name":"Assefa Woldearegay","first":"Assefa","last":"Woldearegay","full_name":"Assefa Tsegaye Woldearegay","home":"310-717-9723","mobile":"310-717-7182","email":"Netseab@gmail.com","address":"5830 Green Valley CircLe #310, CulverCity, CA 90230","notes":""},{"id":36,"status":"Active","paypal_name":"Shewaye Haile","first":"Shewaye","last":"Haile","full_name":"Shewaye Haile/Belachew Bekele (husband deceased) wife will continue","home":"310-773-8450","mobile":"310-773-8450","email":"","address":"1002 5th Av. #23, Venice, CA 90291","notes":""},{"id":37,"status":"Active","paypal_name":"Haimanot Merid","first":"Haimanot","last":"Merid","full_name":"Haimanot Merid","home":"424-298-8049","mobile":"310-621-6945","email":"nardos 555@yahoo.com","address":"3367 Overland Ave #3, Los Angeles, CA 90034","notes":""},{"id":38,"status":"Active","paypal_name":"Girmachew Assefa","first":"Girmachew","last":"Assefa","full_name":"Girmachew Assefa","home":"","mobile":"","email":"assefagirmachew1@yahoo.com","address":"","notes":""},{"id":39,"status":"Active","paypal_name":"Yewenshet Shenkute","first":"Yewenshet","last":"Shenkute","full_name":"Yewenshet Shenkute","home":"323-293-0932","mobile":"323-559-1483","email":"","address":"5542 Secrest Drive, Los Angeles CA 90043","notes":""},{"id":40,"status":"Active","paypal_name":"Dagmawi Andarge Tensaye","first":"Dagmawi","last":"Andarge Tensaye","full_name":"Dagmawi A.ndarge Tensaye","home":"","mobile":"310-484-4222","email":"nd2719@outlook.com","address":"2719 W. 109 St, Inglewood, CA 90303","notes":""},{"id":41,"status":"Active","paypal_name":"Nigist Yimer","first":"Nigist","last":"Yimer","full_name":"Nigist Yimer/Yesuf Said","home":"323-293-5814","mobile":"323-710-5857","email":"kikityesuf@yahoo.cm","address":"125 W. 64th St, Inglewood, CA 90302","notes":""},{"id":42,"status":"Active","paypal_name":"Tsehai Mamo","first":"Tsehai","last":"Mamo","full_name":"Daniel Deda/Tsehai Mamo","home":"323-903-6498","mobile":"323-839-5180","email":"tsehaimamo@gmail.com","address":"3944 Mcclunng Dr., Los Angeles, CA 90008","notes":""},{"id":43,"status":"Active","paypal_name":"Wondwesen Medehin","first":"Wondwesen","last":"Medehin","full_name":"Wondwesen G.Medehin","home":"310-671-4734","mobile":"310-908-6282","email":"wnednin1@yahoo.com","address":"4912 Lennox Blvd. #2, Inglewood, CA 90304","notes":""},{"id":44,"status":"Active","paypal_name":"Bizuye Ayele","first":"Bizuye","last":"Ayele","full_name":"Bizuye Abate Ayele/Zenebe Worku","home":"310-806-1121","mobile":"310-980-5610","email":"bizuyeayele@gmail.com","address":"4215 W. Slauson Apt # 108, Los Angeles, CA 90043","notes":""},{"id":45,"status":"Active","paypal_name":"Hirut Abera","first":"Hirut","last":"Abera","full_name":"Hirut Demissie","home":"310-677-1506","mobile":"310-985-2095","email":"hdemissie@yahoo.com","address":"728 S. Fir Ave. #13, Inglewood CA 90301","notes":""},{"id":46,"status":"Active","paypal_name":"Dawit Bedane","first":"Dawit","last":"Bedane","full_name":"Dawit Tadesse Bedane","home":"310-419-9503","mobile":"310-462-9396","email":"dawitbedane1@yahoo.com","address":"433 E. Hardy St. #A, Inglewood, CA 90301","notes":""},{"id":47,"status":"Active","paypal_name":"Sentayehu Silassie","first":"Sentayehu","last":"Silassie","full_name":"Sentayehu G. Silassie","home":"310-392-0170","mobile":"323-376-9703","email":"silassie@att.net","address":"217 Bicknell Ave. #4, Santa Monica CA 90405","notes":""},{"id":47,"status":"Not Active","paypal_name":"Ayele","first":"Ayele","last":"","full_name":"Emebet Ayele","home":"","mobile":"213-407-6478","email":"silassie@att.net","address":"217 Bicknell Ave. #4, Santa Monica CA 90405","notes":""},{"id":48,"status":"Active","paypal_name":"Tsegie Negusse","first":"Tsegie","last":"Negusse","full_name":"Tsegie Negusse","home":"310-277-3785","mobile":"310-423-4415","email":"miminegussie10@yahoo.com","address":"8761 Airdrome St., Los Angeles, CA 90035-3415","notes":""},{"id":49,"status":"Not Active","paypal_name":"Habte Michael","first":"Habte","last":"Michael","full_name":"Shewaye Habte Michael","home":"310-657-9022","mobile":"424-264-6623","email":"","address":"1475 1/2 S. Shenandoah St., Los Angeles, CA 90035","notes":""},{"id":50,"status":"Active","paypal_name":"Addisu Abebaw","first":"Addisu","last":"Abebaw","full_name":"Addisu Abebaw/Eleni Afera","home":"323-373-1664","mobile":"323-362-8967","email":"fentanesh22@yahoo.com","address":"2054 W. Adms Blvd #2, Los Angeles, CA 90018","notes":""},{"id":51,"status":"Active","paypal_name":"Getachew Mersha","first":"Getachew","last":"Mersha","full_name":"Getachew Mersha/Betelhem Kiros","home":"","mobile":"323-510-1336","email":"getmersha@gmail.com","address":"3722 Carmona Ave. #3, Los Angeles CA 90016","notes":""},{"id":52,"status":"Active","paypal_name":"Behailu Aklilu","first":"Behailu","last":"Aklilu","full_name":"Behailu Aklilu/Mimi Mendaye","home":"310-556-7723","mobile":"310-386-7475","email":"Jaklilu@gmail.com","address":"324 S. Rexford Dr. #2, Beverly Hills, CA 90212","notes":""},{"id":53,"status":"Active","paypal_name":"Sable Eshete","first":"Sable","last":"Eshete","full_name":"Sable Eshete/Asfaw Wolde Giorgis (husband deceased) wife will continue)","home":"310-671-8645","mobile":"310-259-4331","email":"sableeshete@sbcglobal.net","address":"850 S. Victor Ave. #3, Inglewood, CA 90302","notes":""},{"id":54,"status":"Active","paypal_name":"Samson Shewalema","first":"Samson","last":"Shewalema","full_name":"Samson Shewalema","home":"310-559-9520","mobile":"323-819-8995","email":"mesay@netzero.com","address":"4460 Overland Ave. #21, Culver City, CA 90230","notes":""},{"id":55,"status":"Active","paypal_name":"Fasica Assefa","first":"Fasica","last":"Assefa","full_name":"Fasica Assefa","home":"323-292-3219","mobile":"323-445-7556","email":"fasika7@yahoo.com","address":"4251 Don Carlos Dr., Los Angeles, CA 90008","notes":""},{"id":56,"status":"Active","paypal_name":"Genet Mengesha","first":"Genet","last":"Mengesha","full_name":"Genet Mengesha","home":"323-296-4005","mobile":"323-445-2258","email":"yenegenet4@yahoo.com","address":"3635 S. Genesee Ave, Los Angeles,CA 90016","notes":""},{"id":57,"status":"Active","paypal_name":"Hirut Abraha","first":"Hirut","last":"Abraha","full_name":"Hirut Abraha/Getachew Abate","home":"310-452-6670","mobile":"310-922-7289","email":"titireda@yahoo.com","address":"2021 Ocean Av. #116, Santa Monica CA 90405","notes":""},{"id":59,"status":"Active","paypal_name":"Asnakech Adeduo","first":"Asnakech","last":"Adeduo","full_name":"Asnakech Adeduo","home":"310-706-7562","mobile":"310-706-7562","email":"aabedub@yahoo.com","address":"","notes":""},{"id":60,"status":"Active","paypal_name":"Zyana Solomon","first":"Zyana","last":"Solomon","full_name":"Zyana Berhane Solomon","home":"310-219-1105","mobile":"323-793-2509","email":"eugenebatiste@hotmail.com","address":"4031 W. 132nd St Apt #H, Hawthorne, CA 90250","notes":""},{"id":61,"status":"Active","paypal_name":"Maaza Hiskyas","first":"Maaza","last":"Hiskyas","full_name":"Maaza Hiskyas","home":"310-641-1476","mobile":"310-600-9354","email":"maaza@att.net","address":"5925 Canterbary Dr. #104, Culver City, CA 90230","notes":""},{"id":62,"status":"Not Active","paypal_name":"Asamere","first":"Asamere","last":"","full_name":"Tsedale M. Asamere","home":"818-360-5604","mobile":"818-307-4055","email":"TsedaleAsmare@yahoo.com","address":"16722 Flanders St.","notes":""},{"id":63,"status":"Active","paypal_name":"Emebet Mekonnen","first":"Emebet","last":"Mekonnen","full_name":"Emebet Mekonnen","home":"213-389-2313","mobile":"213-210-4735","email":"emugela5@yahoo.com","address":"2500 West 4th St. #B201, Los Angles, CA90057","notes":""},{"id":64,"status":"Not Active","paypal_name":"Tamerat","first":"Tamerat","last":"","full_name":"Hanna Tamerat","home":"310-673-0496","mobile":"310-220-1975","email":"","address":"3500 W. Manchester Blvd. Unit 26, Inglewood, CA 90305-4026","notes":""},{"id":65,"status":"Not Active","paypal_name":"Woldegiorgis","first":"Woldegiorgis","last":"","full_name":"Abebech Hailu Woldegiorgis","home":"818-920-7019","mobile":"818-458-3418","email":"sirgut65@yahoo.com","address":"8619 Noble Ave. #5, North Hills, cA 91343","notes":""},{"id":66,"status":"Active","paypal_name":"Enu Alemayehu","first":"Enu","last":"Alemayehu","full_name":"Enu Alemayehu/Emebet Berhanu","home":"323-754-8825","mobile":"323-514-3047","email":"emebetb@aol.com","address":"11519 Tarron Avenue, Hawthorne, CA 90250","notes":""},{"id":67,"status":"Active","paypal_name":"Almaz Haile","first":"Almaz","last":"Haile","full_name":"Almaz Haile (husband deceased) wife will continue)","home":"323-936-4342","mobile":"323-936-4342","email":"","address":"5740 Clemson St., Los Angeles , CA 90016","notes":""},{"id":68,"status":"Active","paypal_name":"Fantaye Koricha","first":"Fantaye","last":"Koricha","full_name":"Fantaye Wolde Koricha/Getachew Tadesse","home":"","mobile":"310-800-6376","email":"getatade1@msn.com","address":"5306 W. 93rd St. #207, Los Angeles, CA 90045","notes":""},{"id":69,"status":"Active","paypal_name":"Aster Bekele","first":"Aster","last":"Bekele","full_name":"Aster Bekele","home":"310-658-9958","mobile":"310-658-9958","email":"","address":"3719 Clarington Ave. #16, Los Angeles, CA 90034","notes":""},{"id":70,"status":"Active","paypal_name":"Elias Belete","first":"Elias","last":"Belete","full_name":"Elias F. Belete/Bizuayehu Zewdie","home":"323-363-8325","mobile":"323-363-8325","email":"elias_belete@yahoo.com","address":"15001 Grevillea Ave., Lawnedale, CA 900260","notes":""},{"id":71,"status":"Active","paypal_name":"Kebede Negatu","first":"Kebede","last":"Negatu","full_name":"Kebede Negatu Taffesse","home":"323-373-9485","mobile":"323-839-6542","email":"kasbyk@hotmail.com","address":"3730 West 27th St. #318, Los Angeles, CA 90018","notes":""},{"id":72,"status":"Not Active","paypal_name":"Askale","first":"Askale","last":"","full_name":"Feseha","home":"310-237-2427","mobile":"310-237-2427","email":"","address":"5419 Slauson Blvd, Los Angeles, CA 90065","notes":""},{"id":73,"status":"Active","paypal_name":"Haimanot Negatu","first":"Haimanot","last":"Negatu","full_name":"Haimanot Negatu","home":"909-829-0258","mobile":"951-533-7960","email":"haimanotnegatu@sbcglobal.net","address":"14181 Lauramore CT, Fontana, CA 92336","notes":""},{"id":74,"status":"Active","paypal_name":"Tsehay Azmach","first":"Tsehay","last":"Azmach","full_name":"Tsehay F. Azmach","home":"","mobile":"323-443-4024","email":"tsehaye70@gmail.com","address":"3730 W. 27 St. Apt. 418, Los Angeles CA 90018","notes":""},{"id":75,"status":"Active","paypal_name":"Zewditu Tadesse","first":"Zewditu","last":"Tadesse","full_name":"Zewdi T. Hagos","home":"323-731-4432","mobile":"323-559-0546","email":"","address":"1511 South St. Andrews Pl. #219, Los Angeles, CA 90019","notes":""},{"id":76,"status":"Active","paypal_name":"Hana Aliye","first":"Hana","last":"Aliye","full_name":"Assefa Argaw/(deceased) his wife Hana Aliye continued","home":"","mobile":"310-980-9073","email":"hannaexp@gmail,com","address":"4022 W. 141 St. #10, Hawthorne, CA 90250","notes":""},{"id":77,"status":"Active","paypal_name":"Yerom Yesuf","first":"Yerom","last":"Yesuf","full_name":"Yerom K Yesuf/Fesseha G. Mulat","home":"951-421-7069","mobile":"323-945-5975","email":"","address":"5720 W. Centinela Ave #107, Los Angeles, CA 90045","notes":""},{"id":78,"status":"Active","paypal_name":"Roman Negatu","first":"Roman","last":"Negatu","full_name":"Roman Negatu Tafesse/Yeheis","home":"","mobile":"323-413-1667","email":"tidynm@yahoo.com","address":"1810 W. 12th St., Los Angeles, CA 90006","notes":""},{"id":79,"status":"Active","paypal_name":"Adefres Negatu","first":"Adefres","last":"Negatu","full_name":"Adefres Tafesse Negatu/Mulu","home":"323-766-8544","mobile":"323-742-2727","email":"muluyirefu@sbcglobal.net","address":"3429 Buckingham Road, Los Angeles, CA 90016","notes":""},{"id":80,"status":"Active","paypal_name":"Samson Zegeye","first":"Samson","last":"Zegeye","full_name":"Samson Zegeye","home":"323-294-4722","mobile":"213-864-3401","email":"onerawhide@comcast.net","address":"3744 Virginia Rd.,, Los Angeles, CA 90016","notes":""},{"id":81,"status":"Active","paypal_name":"Wesenyelesh Smith","first":"Wesenyelesh","last":"Smith","full_name":"Wesenyelesh Smith","home":"951-277-4980","mobile":"714-225-4907","email":"wesenye1999@yahoo.com","address":"9500 Nickellaus Ct., Corona, CA 92883","notes":""},{"id":82,"status":"Active","paypal_name":"Netsuh Mulugeta","first":"Netsuh","last":"Mulugeta","full_name":"Netsuh T. Mulugeta/Tamrat Demissie","home":"323-933-1975","mobile":"323-401-5606","email":"tidynm@yahoo.com","address":"1533 Hipoint St. #307, Los Angeles, CA 90035","notes":""},{"id":83,"status":"Not Active","paypal_name":"Negatu","first":"Negatu","last":"","full_name":"Dereje Negatu","home":"","mobile":"310-756-2993","email":"d.jnegatu@gmail.com","address":"3121 S. Canifield Av., Los Angeles, CA 90034","notes":""},{"id":84,"status":"Active","paypal_name":"Genet Wondimu","first":"Genet","last":"Wondimu","full_name":"Genet Wondimu","home":"818-358-3986","mobile":"818-691-6607","email":"wondimug@gmail.com","address":"7031 Mary Ellen Av., North Hollywood, CA 91605","notes":""},{"id":85,"status":"Active","paypal_name":"Gorgorios Haile","first":"Gorgorios","last":"Haile","full_name":"Gorgorios Baslios Haile/Yetnayet Teklu","home":"818-994-7903","mobile":"818-634-5541","email":"gorgorios@yahoo.com","address":"7250 Hazeltine Av. #308, Van Nuys CA 91405","notes":""},{"id":86,"status":"Active","paypal_name":"Yesame Asfaw","first":"Yesame","last":"Asfaw","full_name":"Yesame Asfaw","home":"818-406-1426","mobile":"818-955-6042","email":"y-asfaw@ hotmail.com","address":"9254 N. Wildwood Ave., Sun Valley, CA 91352","notes":""},{"id":87,"status":"Active","paypal_name":"Telahoun Eshetu","first":"Telahoun","last":"Eshetu","full_name":"Telahoun Eshetu Gebretsadik","home":"","mobile":"310-904-8807","email":"metiy1A@gmail.com","address":"12537 Ramona Ave. Apt F, Howthorne, CA 90250","notes":""},{"id":88,"status":"Active","paypal_name":"Merete Abate","first":"Merete","last":"Abate","full_name":"Merete Abate/Azeb Fesseha","home":"909-574-4968","mobile":"909-574-4968","email":"AmAm6972@gmail.com","address":"6972 Garden Rose St., Fontana, CA 92336","notes":""},{"id":89,"status":"Active","paypal_name":"Nassisie Gemeda","first":"Nassisie","last":"Gemeda","full_name":"Nassisie Gemeda/Daniel Abebe","home":"323-936-9962","mobile":"424-219-3618","email":"nasi_ita@yahoo.com","address":"1223 Stearns Dr., Los Angles, CA 90035","notes":""},{"id":90,"status":"Active","paypal_name":"Elias Alemu","first":"Elias","last":"Alemu","full_name":"Elias Berhanu Alemu/Etsegenet Getaneh","home":"310-591-0135","mobile":"310-220-1010","email":"eeliasalemu@yahoo.com","address":"1533 S Gramercy Pl #105, Los Angeles, CA 90019","notes":""},{"id":91,"status":"Active","paypal_name":"Mik Dagmawi","first":"Mik","last":"Dagmawi","full_name":"Mik Dagmawi","home":"323-503-8296","mobile":"323-503-8296","email":"sableandergea@yahoo.com","address":"4630 W. MLK Blvd. #5, Los Angeles, CA 90016","notes":""},{"id":92,"status":"Active","paypal_name":"Almaz Jotea","first":"Almaz","last":"Jotea","full_name":"Almaz Jotea","home":"323-503-8296","mobile":"323-503-8296","email":"sableandergea@yahoo.com","address":"4805 W. MLK Blvd. #26, Los Angeles, CA 90016","notes":""},{"id":93,"status":"Active","paypal_name":"Shewaye Beyene","first":"Shewaye","last":"Beyene","full_name":"Shewaye Beyene","home":"323-503-8296","mobile":"213-386-8013","email":"","address":"4630 W. MLK Blvd. #5, Los Angeles CA 90016","notes":""},{"id":94,"status":"Active","paypal_name":"Laketch Negatu","first":"Laketch","last":"Negatu","full_name":"Laketch Negatu","home":"","mobile":"323-921-6894","email":"laketchnegatu@yahoo.com","address":"2078 W. Adam Blvd Apt 1, Los Angeles, CA 90018","notes":""},{"id":95,"status":"Active","paypal_name":"Tsegaberhan Berhe","first":"Tsegaberhan","last":"Berhe","full_name":"Tsegaberhan Gebreselassie Berhe","home":"424-207-8322","mobile":"310-867-1873","email":"stegab@sbcglobsl.net","address":"9714 Glasagow PL, Los Angeles, CA 90045","notes":""},{"id":96,"status":"Active","paypal_name":"Genene Lulseged","first":"Genene","last":"Lulseged","full_name":"Tigist Abebe Bahiru/Gene Lulseged","home":"","mobile":"310-693-8303","email":"lulsegedg@sbcglobal.net","address":"3724 Rutherford Court, Inglewood CA 90305","notes":""},{"id":97,"status":"Active","paypal_name":"Samuel Woldeyes","first":"Samuel","last":"Woldeyes","full_name":"Samuel Shewandagn Woldeyes","home":"323-733-6561","mobile":"213-926-4708","email":"woldeyes.samuel@yahoo.com","address":"2279 W. 24th St., Los Angeles, CA 90018","notes":""},{"id":98,"status":"Active","paypal_name":"Mengistu Tefera","first":"Mengistu","last":"Tefera","full_name":"Mengistu Tefera/Birtukan Tefera","home":"424-268-4132","mobile":"323-219-3022","email":"mtefera@ca.rr.com","address":"3031 Santa Monica blvd. #309, Santa Monica CA 90404","notes":""},{"id":100,"status":"Active","paypal_name":"Hewan Mengistu","first":"Hewan","last":"Mengistu","full_name":"Hewan Amare Mengistu","home":"","mobile":"619-665-3732","email":"akiye@hotmail.com","address":"4363 Overland Av., Culver City, CA 90230","notes":""},{"id":101,"status":"Active","paypal_name":"Yenensh Mengistu","first":"Yenensh","last":"Mengistu","full_name":"Yenensh Mengistu","home":"323-735-2557","mobile":"310-752-3967","email":"yeneneshmengistu321@gmail.com","address":"2088 W. Adams Blvd. #1, Los Angeles CA 90018","notes":""},{"id":101,"status":"Not Active","paypal_name":"Tsadik","first":"Tsadik","last":"","full_name":"KibaseworkTsadik","home":"213-389-2313","mobile":"213-210-4735","email":"yeneneshmengistu321@gmail.com","address":"2088 W. Adams Blvd. #1, Los Angeles CA 90018","notes":""},{"id":102,"status":"Active","paypal_name":"Mulatwa Asfaw","first":"Mulatwa","last":"Asfaw","full_name":"Mulatwa Asfaw/Teferi Metaferia","home":"310-673-0889","mobile":"310-963-8581","email":"asftef@yahoo.com","address":"5421 San Vincente Blvd. #4, Los Angeles, CA 90019","notes":""},{"id":103,"status":"Not Active","paypal_name":"Seifu","first":"Seifu","last":"","full_name":"Messay  Seifu","home":"310-562-0923","mobile":"310-489-0820","email":"mwondi80@gmail.com","address":"15197 Larch Ave., Lawndale, CA 90260","notes":""},{"id":104,"status":"Active","paypal_name":"Ayelech Kebede Ledettie","first":"Ayelech","last":"Kebede Ledettie","full_name":"Ayelech Kebede Ledettie","home":"","mobile":"323-247-5726","email":"","address":"1002 5th Ave. Apt. #15, Venice, CA 90291","notes":""},{"id":105,"status":"Not Active","paypal_name":"Argaw","first":"Argaw","last":"","full_name":"Aziza Argaw","home":"818-241-4608","mobile":"818-257-4113","email":"Aziza.Argaw@sbcglobal.net","address":"11560 Wyandotte St, N. Hollywood, CA 91605","notes":""},{"id":106,"status":"Not Active","paypal_name":"Goitom","first":"Goitom","last":"","full_name":"Tsehay Goitom","home":"323-901-4793","mobile":"323-901-4793","email":"lily-mulugeta@yahoo.com","address":"3451 S. Labrea Ave., Los Angeles, CA 90016","notes":""},{"id":107,"status":"Not Active","paypal_name":"Misrak Mulugeta","first":"Misrak","last":"Mulugeta","full_name":"Liliy Misrak Mulugeta","home":"213-200-8255","mobile":"213-200-8255","email":"liliy-mulugeta@yahoo.com","address":"20006 Flallon Ave, Lakewood, CA 90715","notes":""},{"id":109,"status":"Active","paypal_name":"Hailu Geberekidan","first":"Hailu","last":"Geberekidan","full_name":"Hailu Fekadu Geberekidan/Mekdes Mamo Bayou","home":"","mobile":"424-341-9011","email":"hailugebrekidan@yahoo.com","address":"11048 W. Washington Blvd., Culver City CA 90232","notes":""},{"id":110,"status":"Active","paypal_name":"Berhanu Woldeyohannis","first":"Berhanu","last":"Woldeyohannis","full_name":"Berhanu Woldeyohannis/Atsede Senay","home":"","mobile":"424-250-5643","email":"atsedesenay@yahoo.com","address":"5440 W. 99th Pl Apt #205, Los Angeles CA 90045","notes":""},{"id":111,"status":"Active","paypal_name":"Hanna Terfa","first":"Hanna","last":"Terfa","full_name":"Hanna Mokennen Terfa/Amare F. Afera","home":"323-295+1399","mobile":"323-875-3004","email":"","address":"4630 W. M.L King Blvd #22, Los Angeles, CA 90016","notes":""},{"id":112,"status":"Not Active","paypal_name":"Tessema","first":"Tessema","last":"","full_name":"Iyob Tessema","home":"323-854-4020","mobile":"323-854-3990","email":"itendurance@sbcglobal.net","address":"5822 S. Lacienega Blvd, Los Angeles, CA 90056","notes":""},{"id":113,"status":"Active","paypal_name":"Amare Tsegie","first":"Amare","last":"Tsegie","full_name":"Amare Tsegie/Bereket Tadele","home":"909-860-4038","mobile":"213-926-9582","email":"Atamare14@gmail.com","address":"23839 Highland Valley, Diamond Bar CA 91765","notes":""},{"id":114,"status":"Active","paypal_name":"Belletu Aklilu","first":"Belletu","last":"Aklilu","full_name":"Beletu Aklilu/Remo Patroni","home":"323-732-7045","mobile":"323-382-5197","email":"baklilu@kacib.com","address":"2209 W. 20th St., Los Angeles, CA 90018","notes":""},{"id":115,"status":"Active","paypal_name":"Zenebech Eshetu","first":"Zenebech","last":"Eshetu","full_name":"Zenebech Eshetu","home":"310-287-1055","mobile":"310-287-1055","email":"LZBR310@yahoo.com","address":"4842 Hollow Corner Rd. #307, Culver City, CA 90230","notes":""},{"id":116,"status":"Active","paypal_name":"Berkeneshe Ababa","first":"Berkeneshe","last":"Ababa","full_name":"Berkeneshe Ababa","home":"","mobile":"213-270-5072","email":"","address":"2232 S. Harvard Blvd. Apt 11, Los Angeles, CA 90018","notes":""},{"id":117,"status":"Active","paypal_name":"Teddy Worku","first":"Teddy","last":"Worku","full_name":"Teddy Worku/Saba Mesgena","home":"","mobile":"323-620-0933","email":"teddysab@hotmail.com","address":"2802 Pico Blvd #201, Santa Monica, CA 90405","notes":""},{"id":119,"status":"Not Active","paypal_name":"Getachew","first":"Getachew","last":"","full_name":"Nafkot Getachew","home":"","mobile":"213-713-5676","email":"Nafkotgetachew@hotmail.com","address":"5408 W. 57 St., Los Angeles, CA 90056","notes":""},{"id":120,"status":"Active","paypal_name":"Mulugeta Fanta","first":"Mulugeta","last":"Fanta","full_name":"Mulugeta Belay Fanta/Atsede Tesfaye Hagos","home":"310 837 3117","mobile":"909-908-4289","email":"queenaster911@yahoo.com","address":"3326 Keystone Ave #1, Los Angeles CA 90034","notes":""},{"id":122,"status":"Active","paypal_name":"Elias Weldetsadik","first":"Elias","last":"Weldetsadik","full_name":"Elias Z. Weldetsadik/Genet G. Woldegiorgis","home":"424-750-9132","mobile":"310-694-4449","email":"eliaszeleke@yahoo.com","address":"3650 W. Medici Ln, Inglewood, Ca 90305","notes":""},{"id":123,"status":"Active","paypal_name":"Rahel Egzierdegu","first":"Rahel","last":"Egzierdegu","full_name":"Rahel Egzierdegu/Deres G. Egziabher","home":"923-733-6577","mobile":"213-595-1839","email":"","address":"2120 2nd Ave, Los Angeles CA 90018","notes":""},{"id":124,"status":"Active","paypal_name":"Berhanu Asfaw","first":"Berhanu","last":"Asfaw","full_name":"Berhanu Asfaw","home":"323-938-8827","mobile":"310-877-3530","email":"berhanuasfaw@yahoo.com","address":"10849 Jeferson Blvd, Culver City, CA 90230","notes":""},{"id":125,"status":"Active","paypal_name":"Magdella Germachew","first":"Magdella","last":"Germachew","full_name":"Magdella Germachew/Teklewold Ayalew","home":"909-843-7017","mobile":"909-843-7017","email":"mgermachew@gmail.com","address":"1310 E. Orange Grove, Pasedena, CA 91104","notes":""},{"id":127,"status":"Active","paypal_name":"Ephrem Duki","first":"Ephrem","last":"Duki","full_name":"Ephrem G. Duki/ Tanjerina D. Challa","home":"818-325-6842","mobile":"818-325-6842","email":"eduki@aol.com","address":"18508 Mayall Street, Northridge, CA 91324","notes":""},{"id":128,"status":"Not Active","paypal_name":"Setetu","first":"Setetu","last":"","full_name":"Teshome Setetu","home":"310-946-1317","mobile":"310-384-4482","email":"Teshome2010@yahoo.com","address":"11430 Cedar Ave., Hawthore, CA 90250","notes":""},{"id":129,"status":"Not Active","paypal_name":"Teshome","first":"Teshome","last":"","full_name":"Eskias Teshome","home":"","mobile":"657-281-9909","email":"eskias@aol.com","address":"1525 Poinsettia St., Corona,CA 92882","notes":""},{"id":130,"status":"Active","paypal_name":"Etagegn Abebe","first":"Etagegn","last":"Abebe","full_name":"Etagegn Assefa Abebe/Teferi Mesfin Abebe","home":"323-899-4437","mobile":"310-646-2911","email":"etagegnAabebe@gmail.com","address":"5861 South Orlando Ave.\nLos Angeles CA 90056, 2080 W. Adams Blvd #3\nLos Angeles, CA 90018","notes":""},{"id":131,"status":"Active","paypal_name":"Fantu Haile","first":"Fantu","last":"Haile","full_name":"Fantu Haile/Tsegaye Abria","home":"323-450-6378","mobile":"323-4506378","email":"c/o sehamemi@gmail.com","address":"2080 W. Adams Blvd #3\nLos Angeles, CA 90018, 1002 5th Ave. Apt # 21\nVenice, CA 90291","notes":""},{"id":132,"status":"Active","paypal_name":"Hanna Tsegaye","first":"Hanna","last":"Tsegaye","full_name":"Hanna Tsegaye/Seifu Abza","home":"","mobile":"323-606-3573","email":"sehamemi@gmail.com","address":"1002 5th Ave. Apt # 21\nVenice, CA 90291, 8703 La Tijera Blvd. Suite 211","notes":""},{"id":133,"status":"Active","paypal_name":"Betelhem Shiferaw","first":"Betelhem","last":"Shiferaw","full_name":"Betelhem Shiferaw/Abiyou Admassu","home":"310-634-3171","mobile":"310-634-3173","email":"betty8117@gmail.com","address":"8703 La Tijera Blvd. Suite 211, Los Angeles, CA 90045","notes":""},{"id":135,"status":"Active","paypal_name":"Abaynesh Belayneh","first":"Abaynesh","last":"Belayneh","full_name":"Abaynesh Belayneh","home":"310-956-8399","mobile":"310-956-8399","email":"Saronabb.212@gmail.com","address":"8531 Alcott St. Apt # 304, Los Angeles CA 90035","notes":""},{"id":136,"status":"Active","paypal_name":"Aznaketch Firdyiwek","first":"Aznaketch","last":"Firdyiwek","full_name":"Aznaketch Firdyiwek/Almaw Yohannes","home":"","mobile":"424-702-2181","email":"azni-yohannes@yahoo.com","address":"6467 W.85th Pl., Los Angeles CA 90045","notes":""},{"id":137,"status":"Active","paypal_name":"Samson Woldehana","first":"Samson","last":"Woldehana","full_name":"Samson Jemal Woldehana/Hirut Bizuneh Abebe","home":"323-539-7671","mobile":"424-266-1020","email":"samsonjemal@gmail.com","address":"6467 W.85th Pl., Los Angeles CA 90045","notes":""},{"id":138,"status":"Not Active","paypal_name":"Assefa","first":"Assefa","last":"","full_name":"Mulugeta Assefa","home":"","mobile":"201-424-4133","email":"massefa@gmail.com","address":"315 W. 3rd Street, Unit 304, Long Beach, CA 90802","notes":""},{"id":139,"status":"Active","paypal_name":"Frehiwot Demise","first":"Frehiwot","last":"Demise","full_name":"Frehiwot Regasa Demise/Girma Moges Sitotaw","home":"310-399-0916","mobile":"323-362-3288","email":"","address":"2411 Centinela Ave #305, Santa Monica CA 90405","notes":""},{"id":140,"status":"Active","paypal_name":"Almaz Kebede","first":"Almaz","last":"Girma Kebede","full_name":"Almaz Girma Kebede","home":"323-202-6792","mobile":"323-202-6792","email":"","address":"5000 South Main St, Los Angeles,cA 90037","notes":""},{"id":141,"status":"Not Active","paypal_name":"Gashawbeza","first":"Gashawbeza","last":"","full_name":"Abiy Gashawbeza","home":"","mobile":"651-404-5557","email":"kemawd22@gmail.com","address":"Howthorne, CA 90250, 11430 Cedar Ave #6","notes":""},{"id":142,"status":"Active","paypal_name":"Kemaw Debaleke","first":"Kemaw","last":"Debaleke","full_name":"Kemaw Ababe Debaleke/Hana Tadesse Melesse","home":"310-801-3883","mobile":"310-801-3883","email":"kemawd22@gmail.com","address":"11430 Cedar Ave #6, Howthorne CA 90250","notes":""},{"id":143,"status":"Active","paypal_name":"Zerfe Alemayehu","first":"Zerfe","last":"Alemayehu","full_name":"Zerfe Alemayehu","home":"310-795-0964","mobile":"310-795-0964","email":"","address":"2345 Virginia Ave. #307, Santamonica, CA 90404","notes":""},{"id":144,"status":"Active","paypal_name":"Wosinachew Gebregiorgis","first":"Wosinachew","last":"Gebregiorgis","full_name":"Wosinachew Kiflu GebregiorgisMeklit Bogale","home":"310-259-5338","mobile":"323-474-1814","email":"wossenkiflu@yahoo.com","address":"729 East Nutwood Street, Inglewood CA 90301","notes":""},{"id":145,"status":"Active","paypal_name":"Tseday Michael","first":"Tseday","last":"Michael","full_name":"Tseday Kinfe-Michael","home":"310-376-2064","mobile":"818-419-3158","email":"tsedaykm@yahoo.com","address":"729 East Nutwood Street, Inglewood,CA 90301","notes":""},{"id":147,"status":"Active","paypal_name":"Etaferahu Gebeyehu","first":"Etaferahu","last":"Gebeyehu","full_name":"Etaferahu Gebeyehu","home":"310-986-7765","mobile":"310-7986-7765","email":"mimi-mulatu@yahoo.com","address":"1328Centinela Ave. Apt.2, Inglewood, Ca, 90302","notes":""},{"id":148,"status":"Active","paypal_name":"Asres Lefe","first":"Asres","last":"Lefe","full_name":"Asres G. Lefe/Alem T.desta","home":"310-470-1758","mobile":"323-395-4519","email":"asreslefe@yahoo.com","address":"3236 West Adas Blvd, Los Angeles CA 90018","notes":""},{"id":149,"status":"Active","paypal_name":"Shega Aragaw","first":"Shega","last":"Aragaw","full_name":"Shega Argaw","home":"323-493-7363","mobile":"323-493-7363","email":"shega123@yahoo.com","address":"2850 Chesapeake Ave, Los Angeles CA 90016","notes":""},{"id":150,"status":"Active","paypal_name":"Alem Abraham","first":"Alem","last":"Abraham","full_name":"Alem Abraham","home":"909-625-8271","mobile":"310-210-9699","email":"6ald432@gmail.com","address":"7230 Avocado Ct, Fontana,CA 92336","notes":""},{"id":151,"status":"Not Active","paypal_name":"Deneke","first":"Deneke","last":"","full_name":"Hewan Deneke","home":"","mobile":"571-344-4703","email":"hewandesign@gmail.com","address":"5015 LotusAve, Yorbalinda, Ca92887","notes":""},{"id":152,"status":"Active","paypal_name":"Mekonnen Selassie","first":"Mekonnen","last":"Selassie","full_name":"Mekonnen T/Selassie/Meseret Deneke","home":"714-883-8412","mobile":"714-305-5801","email":"mekonnen99@yahoo.com","address":"3529 Jackfrosg Ct, Riverside ,CA 92503","notes":""},{"id":153,"status":"Active","paypal_name":"Solomon Assefa","first":"Solomon","last":"Assefa","full_name":"Solomon Assefa/Aster Assefa","home":"310-420-7277","mobile":"310-420-7277","email":"aassefa@elcamino.edu","address":"5390 Fairview Blvd #1, Los Angeles, 90056","notes":""},{"id":154,"status":"Active","paypal_name":"Woldeemanuel Workneh","first":"Woldeemanuel","last":"Workneh","full_name":"Woldeemanuel Workneh/Emyou Yemane","home":"310-430-3801","mobile":"310-569-4344","email":"wworkneh@gmail.com","address":"4013 West 59th St, Los Angeles, CA 90043","notes":""},{"id":156,"status":"Active","paypal_name":"Daniel Desta","first":"Daniel","last":"Desta","full_name":"Daniel M. Desta/Tsigemariam T. Madot","home":"323-252-1681","mobile":"323-251-9033","email":"","address":"5959 Canterbury Dr. #120, Culvercity , CA 90230","notes":""},{"id":157,"status":"Active","paypal_name":"Seleshi Workneh","first":"Seleshi","last":"Workneh","full_name":"Seleshi Workneh/Tenaye Tegegne","home":"310-672-1467","mobile":"323-403-8704","email":"seleshitegegne@yahoo.com","address":"720 N. Eucalyptus, Inglewood, CA 90302","notes":""},{"id":158,"status":"Active","paypal_name":"Anwar Seid Mohamed","first":"Anwar","last":"Seid Mohamed","full_name":"Anuwar Seid Mohamed","home":"310-672-1467","mobile":"424-356-8184","email":"","address":"720 N. Eucalyptus Ave. Apt 107, Inglewood CA, 90302","notes":""},{"id":159,"status":"Active","paypal_name":"Solomon Demissie","first":"Solomon","last":"Demissie","full_name":"Solomon T.Demissie/Selamawit N.Bedasso","home":"310-384-2066","mobile":"310-384-2066","email":"solrock@live.com","address":"14135 Coriso Ave #312, Hawthorne, CA 90250","notes":""},{"id":160,"status":"Active","paypal_name":"Belay Adera","first":"Belay","last":"Adera","full_name":"Belay Kassa Adera/Wosenyelesh Ayele","home":"310-228-7558","mobile":"310-228-7558","email":"aderabelay@yahoo.com","address":"4215 W. Slauson Ave. Apt. #221, Los Angeles, CA 90043","notes":""},{"id":161,"status":"Active","paypal_name":"Samuel Belhu","first":"Samuel","last":"Belhu","full_name":"Samuel Belhu/Tigist Tessema","home":"310-658-2423","mobile":"310-658-2423","email":"samuelbelhu@yshoo.com","address":"1349 26th St. Apt. #212, Santa Monica, CA 90404","notes":""},{"id":162,"status":"Active","paypal_name":"Abiye Wossene","first":"Abiye","last":"Wossene","full_name":"Abiye Tadesse Wossene/Elisabeth Liben","home":"310-658-7080","mobile":"310-658-7080","email":"arada23@yahoo.com","address":"11877 Grevillea Ave. #14, Hawthorne, CA 90250","notes":""},{"id":163,"status":"Active","paypal_name":"Solomon Abebe","first":"Solomon","last":"Abebe","full_name":"Solomon Taye Abebe/Yayeabeba W. Argaw","home":"626-332-3674","mobile":"626-373-3951","email":"solomonta@yahoo.com","address":"1865 Newcastle Lane, San Dimas Ca, 91773","notes":""},{"id":164,"status":"Active","paypal_name":"Mame Endeshaw","first":"Mame","last":"Endeshaw","full_name":"Mame Endeshaw","home":"424-268-4762","mobile":"323-447-8697","email":"","address":"2401 Vergina Ave. #312, Santamonica,CA 90404","notes":""},{"id":165,"status":"Active","paypal_name":"Yeshareg Mengesha","first":"Yeshareg","last":"Mengesha","full_name":"Yeshareg Mengesha/Mesfin A Tadessa","home":"310-415-4179","mobile":"310-968-7919","email":"yeshareg@gmail.com","address":"8721 Dartford Pl, Inglewood, CA 90305","notes":""},{"id":166,"status":"Active","paypal_name":"Alemayehu Befekadu","first":"Alemayehu","last":"Befekadu","full_name":"Alemayehu Asrat Befekadu/Etsegenet Mekonen","home":"469-952-8035","mobile":"310-695-0292","email":"befekadu@mail.com/etsegent74Qmail.com","address":"934 W. Beach Ave. #10, Inglewood CA 90302","notes":""},{"id":167,"status":"Active","paypal_name":"Abiy Fissha","first":"Abiy","last":"Fissha","full_name":"Abiy Fissha/Nishan Tesfaye","home":"323-309-3459","mobile":"323-309-3459","email":"Abiyfissha@yahoo.com","address":"2324 Hillcrest Dr, Los Angeles, CA 90016","notes":""},{"id":168,"status":"Active","paypal_name":"Samuel Tessema","first":"Samuel","last":"Tessema","full_name":"Samuel Tessema/Tiruye Endeshaw","home":"310-430-2405\next.98 office","mobile":"310-430-2405","email":"samutess@yahoo.com","address":"3862 Cherrywood Av., Los Angeles, CA 90008","notes":""},{"id":169,"status":"Active","paypal_name":"Yeshiwork Tekleabe","first":"Yeshiwork","last":"Tekleabe","full_name":"Yeshiwork Tekleabe/Gebremariam Beyene","home":"310-592-0498","mobile":"310-592-0498","email":"yeshiworkt@yahoo.com","address":"5000 S. Main St. APt 307\nLos Angeles, CA 90037, 3415 Keystone Ave. Apt 1\nLos Angeles, CA 90034","notes":""},{"id":170,"status":"Active","paypal_name":"Zelleka Makonnen","first":"Zelleka","last":"Makonnen","full_name":"Zelleka Makonnen","home":"310-815-8948","mobile":"310-270-7809","email":"elshadaikiflu@gmail.com","address":"3415 Keystone Ave. Apt 1\nLos Angeles, CA 90034, 3477 Maricopa St. Apt 26","notes":""},{"id":171,"status":"Active","paypal_name":"Elshadai Kiflu","first":"Elshadai","last":"Kiflu","full_name":"Elshadai Kiflu/ Dawit T. Tafese","home":"310-923-3136","mobile":"310-310-0991","email":"elshadaikiflu@gmail.com\n\ndawittensai@gmail.com","address":"3477 Maricopa St. Apt 26, Torrance, CA 90503","notes":""},{"id":172,"status":"Active","paypal_name":"Metasebia Tadesse","first":"Metasebia","last":"Tadesse","full_name":"Metasebia Tadesse/Sebsibe Desta","home":"","mobile":"323-861-0102","email":"metisha65@gmail.com","address":"","notes":""},{"id":173,"status":"Active","paypal_name":"Tariku Kassa","first":"Tariku","last":"Kassa","full_name":"Tariku Massa / Biruktawit Tsegaye Abrie","home":"","mobile":"323-251-9038","email":"Kassafa@yahoo.com","address":"","notes":""},{"id":174,"status":"Active","paypal_name":"Chalachew Belay","first":"Chalachew","last":"Belay","full_name":"Chalachew Beder Belay/ Zebader Agengehu Belachew","home":"","mobile":"323-557-5239","email":"Cbelay01@gmail.com","address":"","notes":"3 unpaid"},{"id":176,"status":"Active","paypal_name":"Tsion Hagos","first":"Tsion","last":"Hagos","full_name":"Tsion Hagos/meshesha Biru","home":"","mobile":"323-877-1721","email":"tsionzzhagos@gmail.com","address":"","notes":""},{"id":177,"status":"Active","paypal_name":"Tafesech Kemaw","first":"Tafesech","last":"Kemaw","full_name":"Tafesech B. Kemaw/Seyoum Woldemeskel","home":"","mobile":"323-641-1114","email":"dtadesse834@gmail.com","address":"","notes":""},{"id":178,"status":"Active","paypal_name":"Yared Teshale","first":"Yared","last":"Teshale","full_name":"Yared Teshale/Meseret Sahlu","home":"","mobile":"310-800-0166","email":"yaredteshale@rocketmail.com","address":"","notes":""},{"id":179,"status":"Active","paypal_name":"Nunu Tekletsdik","first":"Nunu","last":"Tekletsdik","full_name":"Nunu Tekletsdik","home":"","mobile":"424-436-7048","email":"yaredteshale@rocketmail.com","address":"","notes":""},{"id":180,"status":"Active","paypal_name":"Frewoini Gebreyesus","first":"Frewoini","last":"Gebreyesus","full_name":"Frewoini C. Gebreyesus","home":"","mobile":"323-599-2418","email":"frewoinic@gmail.com","address":"","notes":""},{"id":181,"status":"Active","paypal_name":"Emebet Yalew","first":"Emebet","last":"Yalew","full_name":"Emebet Yalew/Mesfin Makonnen","home":"310-654-0782","mobile":"424-537-3346","email":"M2007masfin@yahoo.com","address":"","notes":""},{"id":182,"status":"Active","paypal_name":"Desalegn Akalu","first":"Desalegn","last":"Akalu","full_name":"Desalegn Akalu Hailu/Etiye Lewte Sahile","home":"323-3160408","mobile":"323-316-0408","email":"workeakalu@gmail.com","address":"","notes":""},{"id":183,"status":"Active","paypal_name":"Anchinalu Anteneh","first":"Anchinalu","last":"Anteneh","full_name":"Anchinalu Anteneh","home":"323-237-5809","mobile":"323-237-5809","email":"anchin02@yahoo.com","address":"","notes":""},{"id":184,"status":"Active","paypal_name":"Simegnew Shumye","first":"Simegnew","last":"Shumye","full_name":"Simegnew Leul Shumye/Meaza Genetue Kebede","home":"","mobile":"714-782-2478","email":"shmuyeamon@gmail.com","address":"","notes":""},{"id":185,"status":"Active","paypal_name":"Getnet Worku","first":"Getnet","last":"Worku","full_name":"Getnet worku/Genet Fereja","home":"","mobile":"714-348-3047","email":"Getnetworku16@gmail.com","address":"","notes":""},{"id":186,"status":"Active","paypal_name":"Simegnew Bayu","first":"Simegnew","last":"Bayu","full_name":"Simegnew Zewdu Bayu/Abebu Nadew Lemma","home":"","mobile":"714-868-1975","email":"Samzewdu518@gmail.com/Abebulemma@gmail.com","address":"","notes":""},{"id":187,"status":"Active","paypal_name":"Alemayehu Kassa","first":"Alemayehu","last":"Kassa","full_name":"Alemayehu Kassa Tegegn/Seble Lulseged Asfaw","home":"213-709-4714","mobile":"213-709-4714","email":"Alexkassa@yahoo.com","address":"","notes":""},{"id":188,"status":"Active","paypal_name":"Kassahun Feyyisa","first":"Kassahun","last":"Feyyisa","full_name":"Kassahun Feyisa Senbeta/Meseret Tadesse Getachew","home":"","mobile":"213-359-0496","email":"Kasesh@yahoo.com","address":"","notes":""},{"id":189,"status":"Active","paypal_name":"Bekele Challa","first":"Bekele","last":"Challa","full_name":"Bekele Challa Wolebe/Senayit Habte Abe","home":"","mobile":"323-447-3310","email":"Bekele-wolebe@yahoo.com","address":"","notes":""},{"id":190,"status":"Active","paypal_name":"Getenet Aytenfisu","first":"Getenet","last":"Aytenfisu","full_name":"Getenet Aytenfish/Ehite Seyoum","home":"","mobile":"323-923-7597","email":"getenetaytenfizu62@gmail.com","address":"","notes":""},{"id":191,"status":"Active","paypal_name":"Messele Deboch","first":"Messele","last":"Deboch","full_name":"Messele Deboch Bezabih/Bizuhan Kebede Woldie","home":"","mobile":"703-400-7421","email":"Messeledeboch1979@gmail.com","address":"","notes":""},{"id":192,"status":"Active","paypal_name":"Berhanu Tegen","first":"Berhanu","last":"Tegen","full_name":"Berhanu Tegegn Teklie/Mahlet Eshetu Belay","home":"","mobile":"323-338-0970","email":"Berhanuteklie1979@gmail.com","address":"","notes":""},{"id":193,"status":"Active","paypal_name":"Kelkai Bitew","first":"Kelkai","last":"Bitew","full_name":"Kelkai Bitew/Tiruwork Degefu","home":"","mobile":"310-410-4000","email":"kelkaib2003@yahoo.com","address":"","notes":""},{"id":194,"status":"Active","paypal_name":"Maru Tadese","first":"Maru","last":"Tadese","full_name":"Maru Tadese/Selome Mekonnen","home":"","mobile":"323-354-2109","email":"marutadese@gmail.com","address":"","notes":""},{"id":195,"status":"Active","paypal_name":"Biruk Tesema","first":"Biruk","last":"Tesema","full_name":"Biruk Tesema Ilala/Etu Mamo Dadi","home":"","mobile":"323-459-9390","email":"atnafe888@gmail.com","address":"","notes":""},{"id":196,"status":"Active","paypal_name":"Work Teklemariam","first":"Work","last":"Teklemariam","full_name":"Worku Teklemariam/Andinet Atnafe","home":"","mobile":"310-728-5108","email":"atnafe888@gmail.com","address":"","notes":""},{"id":197,"status":"Active","paypal_name":"Yetnayet Atre","first":"Yetnayet","last":"Atre","full_name":"Yetnayet Atre/Derefe Tadesse","home":"","mobile":"310-800-7375","email":"derhirut@gmail.com","address":"","notes":""},{"id":198,"status":"Active","paypal_name":"Meseret Feleke","first":"Meseret","last":"Feleke","full_name":"Meseret Feleke Weldegiorgis/Yared Gebrekiros Tadesse","home":"","mobile":"310-462-1880","email":"meseretfeleke@gmail.com","address":"","notes":""},{"id":199,"status":"Active","paypal_name":"Menbere Markos","first":"Menbere","last":"Markos","full_name":"Menbere M Markos","home":"","mobile":"818-667-4143","email":"menberemarkos@gmail.com","address":"","notes":""},{"id":200,"status":"Active","paypal_name":"Nebyou Brook","first":"Nebyou","last":"Brook","full_name":"Nebyou Brook","home":"","mobile":"424-453-2568","email":"fuboola@yahoo.com","address":"","notes":""},{"id":201,"status":"Active","paypal_name":"Tiwres Awake","first":"Tiwres","last":"Awake","full_name":"Tiwres Awake","home":"","mobile":"213-884-0932","email":"tiwreskebede@gmail.com","address":"","notes":""},{"id":202,"status":"Active","paypal_name":"Yodit Alebel","first":"Yodit","last":"Alebel","full_name":"Yodit Alebel/Abiy Mulugeta","home":"","mobile":"323-313-7272","email":"ayodit1994@gmail.com","address":"","notes":""},{"id":203,"status":"Active","paypal_name":"Aynadis Asmamaw","first":"Aynadis","last":"Asmamaw","full_name":"Aynadis Asmamaw Abuni/Ayto Yimer Mekonen","home":"","mobile":"323-528-3487","email":"Aynadis90@gmail.com","address":"","notes":""},{"id":204,"status":"Active","paypal_name":"Mebratu Denekew","first":"Mebratu","last":"Denekew","full_name":"Mebratu Denekew Gesetse/Zemen Addisu Mekonnen","home":"","mobile":"323-972-6669","email":"Mebratu2019@yahoo.com","address":"","notes":""},{"id":206,"status":"Active","paypal_name":"Yemesrach Hailu","first":"Yemesrach","last":"Hailu","full_name":"Yemesrach Hailu","home":"","mobile":"323-620-5853","email":"hailugigi@yahoo.com","address":"","notes":""},{"id":207,"status":"Active","paypal_name":"Gizaw Tefera","first":"Gizaw","last":"Tefera","full_name":"Gizaw Tefera Tadele/Tsehay Tadele Getahun","home":"","mobile":"323-252-5239","email":"gtadele@social.rr.com","address":"","notes":""},{"id":208,"status":"Active","paypal_name":"Almar Reta","first":"Almar","last":"Reta","full_name":"Almaz Reta","home":"323-845-5343","mobile":"323-845-5343","email":"almazbeeall@gmail.com","address":"","notes":""},{"id":209,"status":"Active","paypal_name":"Yohannes Woldekiros","first":"Yohannes","last":"Woldekiros","full_name":"Yohannes Woldekiros","home":"","mobile":"310-254-5706","email":"yoha306@yahoo.com","address":"","notes":""},{"id":210,"status":"Active","paypal_name":"Mantegbosh Ejigu","first":"Mantegbosh","last":"Ejigu","full_name":"Mantegbosh Ejigu Negash","home":"","mobile":"323-540-9727","email":"mantegbushnegash@gmail.com","address":"","notes":""},{"id":211,"status":"Active","paypal_name":"Netsanet Gelagage","first":"Netsanet","last":"Gelagage","full_name":"Netsantet Gelagage Alem","home":"","mobile":"323-307-6099","email":"alemnetanet@yahoo.com","address":"","notes":""},{"id":212,"status":"Active","paypal_name":"Tiblets Girma","first":"Tiblets","last":"Girma","full_name":"Tiblets Girma","home":"","mobile":"213-281-1599","email":"girma-tiblets@yahoo.com","address":"","notes":""},{"id":213,"status":"Active","paypal_name":"Tiruwork Woldekidan","first":"Tiruwork","last":"Woldekidan","full_name":"Tiruwork Woldekidan","home":"","mobile":"323-401-6185","email":"gomzew@yahoo.com","address":"","notes":""},{"id":214,"status":"Active","paypal_name":"Yohannes Mersha","first":"Yohannes","last":"Mersha","full_name":"Yohannes Mersha","home":"","mobile":"323-632-1685","email":"ykmersha@gmail.com","address":"","notes":""},{"id":215,"status":"Active","paypal_name":"Adisu Denku Tesfahun","first":"Adisu Denku","last":"Tesfahun","full_name":"Adisu Denku Tesfahun","home":"323-788-0109","mobile":"323-788-0109","email":"adisudenku@gmail.com","address":"","notes":""},{"id":216,"status":"Active","paypal_name":"Yetsdaw Alemu","first":"Yetsdaw","last":"Alemu","full_name":"Yetsdaw Alemu","home":"","mobile":"323-747-2155","email":"yetsdaw@gmail.com","address":"","notes":""},{"id":217,"status":"Active","paypal_name":"Alemayhu Ourga","first":"Alemayhu","last":"Ourga","full_name":"Alemayhu Ourga","home":"310-430-9357","mobile":"310 430 9357","email":"Zemarialex@yahoo.com","address":"","notes":""},{"id":218,"status":"Active","paypal_name":"Zewdie Burka","first":"Zewdie","last":"Burka","full_name":"Zewdie Burka","home":"","mobile":"310-945-8268","email":"senb_zewdie@yahoo.com","address":"","notes":""},{"id":219,"status":"Active","paypal_name":"Kenubish Ayalneh","first":"Kenubish","last":"Ayalneh","full_name":"Kenubish Ayalneh","home":"","mobile":"323 304 7139","email":"kenubish@yahoo.com","address":"","notes":""},{"id":220,"status":"Active","paypal_name":"Awlachew Gebru","first":"Awlachew","last":"Gebru","full_name":"Awlachew Gebru/Misrak Gebremariam","home":"","mobile":"323-448-6053","email":"","address":"","notes":""},{"id":221,"status":"Active","paypal_name":"Meseret Habte","first":"Meseret","last":"Habte","full_name":"Meseret Habte","home":"","mobile":"310-923-2417","email":"Zoblem02@gmail.com","address":"","notes":""},{"id":222,"status":"Active","paypal_name":"Amahayes Dimiru","first":"Amahayes","last":"Dimiru","full_name":"Amahayes Dimiru","home":"","mobile":"310-702-4124","email":"adimiru@live.com","address":"","notes":""},{"id":223,"status":"Active","paypal_name":"Temersta Tekie","first":"Temersta","last":"Tekie","full_name":"Temersta Tekie","home":"","mobile":"310-910-4503","email":"temersta@gmail.com","address":"","notes":""},{"id":224,"status":"Active","paypal_name":"Etenat Shegaw","first":"Etenat","last":"Shegaw","full_name":"Etenat Shegaw","home":"","mobile":"310-462-9396","email":"dawitbedane1@yahoo.com","address":"","notes":""},{"id":225,"status":"Active","paypal_name":"Bizuayhu Dersha","first":"Bizuayhu","last":"Dersha","full_name":"Bizuayhu Dersha","home":"","mobile":"323-861-0102","email":"metisha65@gmail.com","address":"","notes":""},{"id":226,"status":"Active","paypal_name":"Lydia Shiferaw","first":"Lydia","last":"Shiferaw","full_name":"Lydia Shiferaw","home":"","mobile":"323-273-5940","email":"watchingthe-heavens@yahoo.com","address":"","notes":""},{"id":227,"status":"Active","paypal_name":"Martha Mekonnen","first":"Martha","last":"Mekonnen","full_name":"Martha Mekonnen","home":"","mobile":"714-420-1361","email":"mmadefrisew@yahoo.com","address":"","notes":""},{"id":228,"status":"Active","paypal_name":"Tsegamlak T Worku","first":"Tsegamlak","last":"T Worku","full_name":"Tsegamlak T Worku","home":"","mobile":"626-786-1019","email":"tworku@earthlink.com","address":"","notes":""},{"id":229,"status":"Active","paypal_name":"Tewodros Negash","first":"Tewodros","last":"Negash","full_name":"Tewodros Negash","home":"","mobile":"323-303-7485","email":"Betedyha303@yahoo.com","address":"","notes":""}]
+;
+const INVOICES = [{"name":"Zerfe Alemayehu","email":"zerfealemayhu@yahoo.com","invoice_num":2361,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-URF3-YJMG-2XWS-FJYP"},{"name":"Yohannes Mersha","email":"ykmersha@gmail.com","invoice_num":2355,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-6CV9-7Q78-M4UY-RUVM"},{"name":"Yigzaw Tiku","email":"yigzaw.tiku@gmail.com","invoice_num":2353,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-XH7T-SF54-R9KQ-VRZH"},{"name":"Yenensh Mengistu","email":"yeneneshmengistu321@gmail.com","invoice_num":2345,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-22JE-LZZY-7BBZ-P4A4"},{"name":"Wosinachew Gebregiorgis","email":"meklitb@sbcglobal.net","invoice_num":2342,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-PN4Y-UHLL-JR6H-4FUE"},{"name":"Wondwossen Gizaw","email":"wondwessen.gizaw@yahoo.com","invoice_num":2339,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-A3QW-GMPC-ZT8G-LXBB"},{"name":"Weinshet Kifle","email":"bteklu54@gmail.com","invoice_num":2335,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-WV6E-K8GK-AJDP-WH8V"},{"name":"Tsehai Mamo","email":"tsehaimamo@gmail.com","invoice_num":2330,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-FVFD-7NDA-CE6L-KWEQ"},{"name":"Tiwres Awake","email":"tiwreskebede@gmail.com","invoice_num":2327,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-Z4TH-XJXB-MGLT-CBMC"},{"name":"Tafesech Kemaw","email":"dtadesse834@gmail.com","invoice_num":2318,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-W8TF-HANZ-P3KB-GWCD"},{"name":"Shewaye Beyene","email":"NoEmailInFile@gmail.com","invoice_num":2310,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-VKKK-SKE9-N72Z-6QAZ"},{"name":"Shewaye Haile","email":"bekelehermela@yahoo.com","invoice_num":2311,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-3LCX-9DPF-E5ZF-Q9XG"},{"name":"Samuel Woldeyes","email":"woldeyes.samuel@yahoo.com","invoice_num":2304,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-XV24-DDNU-2CFE-AKAG"},{"name":"Sable Eshete","email":"sableeshete@sbcglobal.net","invoice_num":2300,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-DPS7-SWH8-NREW-RY6T"},{"name":"Netsanet Gelagaye","email":"alemnetanet@yahoo.com","invoice_num":2294,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-QJFG-T8JG-RUES-6XSD"},{"name":"Mik Dagmawi","email":"sableandergea@yahoo.com","invoice_num":2288,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-7H2B-AEMY-MQMU-7P9S"},{"name":"Mantegbosh Ejigu","email":"mantegbushnegash@gmail.com","invoice_num":2275,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-XHBT-H2G9-AEWX-M6P7"},{"name":"Mekdes Bekele","email":"ganmade@yahoo.cm","invoice_num":2278,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-BCV2-Z6K3-APY8-6N58"},{"name":"Mame Endeshaw","email":"NoEmailInFile@gmail.com","invoice_num":2274,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-RJ7Y-BYBH-C6BX-PVXZ"},{"name":"Kemaw Debaleke","email":"kemawd22@gmail.com","invoice_num":2269,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-U7D7-BQNF-W9EJ-LMLY"},{"name":"Hanna Terfa","email":"abera5538@gmail.com","invoice_num":2259,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-AVN3-RFBN-DDDD-YNYQ"},{"name":"Hana Aliye","email":"hannaexport@gmail.com","invoice_num":2258,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-22Q8-D3FQ-5BUX-DLDB"},{"name":"Girma Habtewold","email":"isaac.habtewolde@yahoo.com","invoice_num":2251,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-L59X-2A35-Z4J3-87WH"},{"name":"Getachew Mersha","email":"getmersha@gmail.com","invoice_num":2247,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-73D6-F32T-TYFE-CPNM"},{"name":"Genet Wondimu","email":"wondimug@gmail.com","invoice_num":2246,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-QT59-2A2B-36AW-ZGHR"},{"name":"Frehiwot Demise","email":"girmasitotaw23@gmail.com","invoice_num":2242,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-QKPW-VDD4-JZRQ-CMJG"},{"name":"Fantaye Koricha","email":"getatade1@msn.com","invoice_num":2238,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-3WP6-X4W7-72BY-6K2G"},{"name":"Emebet Yalew","email":"M2007masfin@yahoo.com","invoice_num":2233,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-NWQG-8G4J-H8L4-6CYC"},{"name":"Etaferahu Gebeyehu","email":"mimi_mulatu@yahoo.com","invoice_num":2236,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-9QN3-PT5L-YCLW-V8B7"},{"name":"Ephrem Duki","email":"egduki@aol.com","invoice_num":2235,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-U5WS-F54E-6Y9Q-EC7D"},{"name":"Desalegn Akalu","email":"workeakalu@gmail.com","invoice_num":2226,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-UZ4D-MBHV-WMZ8-CVNY"},{"name":"Biruk Tesema","email":"NoEmailInFile@gmail.com","invoice_num":2219,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-MJHG-LXUT-AUFK-ZM5V"},{"name":"Dagmawi Andarge Tensaye","email":"nd2719@outlook.com","invoice_num":2222,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-GCCS-KMF2-FZYJ-FAK5"},{"name":"Berkeneshe Ababa","email":"NoEmailInFile@gmail.com","invoice_num":2216,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-WRRW-6YJT-JTY3-WRZE"},{"name":"Betelhem Shiferaw","email":"betty8117@gmail.com","invoice_num":2218,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-XXSL-V4BV-XEC4-T3V2"},{"name":"Belay Adera","email":"aderabelay@yahoo.com","invoice_num":2211,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-ZN4H-LTZB-QCUR-Q45N"},{"name":"Ayelech Kebede Ledettie","email":"rzdemisse@gmail.com","invoice_num":2206,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-WB6D-4GL4-PQSX-DF39"},{"name":"Aznaketch Firdyiwek","email":"azni_yohannes@yahoo.com","invoice_num":2208,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-RV9X-S3FB-NS7H-4V3M"},{"name":"Asnakech Yigezu","email":"NoEmailInFile@gmail.com","invoice_num":2200,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-WWHF-QBF7-TN4R-JRQ4"},{"name":"Aster Bekele","email":"NoEmailInFile@gmail.com","invoice_num":2203,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-UR8Y-MD3C-L3M7-2X99"},{"name":"Assefa Woldearegay","email":"Netseab@gmail.com","invoice_num":2202,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-VPUV-DPKL-295Q-9XQN"},{"name":"Almaz Jotea","email":"sableandergea@yahoo.com","invoice_num":2191,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-TKZB-RYE8-9HM6-P2BH"},{"name":"Anwar Seid Mohamed","email":"anwarmseid@gmail.com","invoice_num":2198,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-XG2X-XRMD-MADS-APY8"},{"name":"Almaz Girma Kebede","email":"fitsumeth@gmail.com","invoice_num":2193,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-B56U-E6ZZ-CBUF-8FQ9"},{"name":"Almaz Tasisa Moti","email":"almazmoti@gmail.com","invoice_num":2192,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-37A9-XAK7-ALTR-XRF3"},{"name":"Adisu Denku Tesfahun","email":"adisdenku@gmail.com","invoice_num":2185,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-GVKV-2U4N-JHSB-RLLC"},{"name":"Alemayhu Ourga","email":"Zemarialex@yahoo.com","invoice_num":2189,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-TL4W-UYW5-YXW3-67P3"},{"name":"Abaynesh Belayneh","email":"Saronabb.212@gmail.com","invoice_num":2179,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2026-04-15 00:00:00","item":"#30 Ato Brook Zewdie","paypal_id":"INV2-9HRX-DCD3-G2DD-MJL3"},{"name":"Yigzaw Tiku","email":"yigzaw.tiku@gmail.com","invoice_num":2167,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-QW3F-EWA9-ZS3H-5BQH"},{"name":"Yenensh Mengistu","email":"yeneneshmengistu321@gmail.com","invoice_num":2159,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-3SQ8-UEJF-RHSD-7UYD"},{"name":"Yeshareg Mengesha","email":"myeshareg@gmail.com","invoice_num":2162,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-NN5E-YJQF-6FEN-5W7K"},{"name":"Wosinachew Gebregiorgis","email":"meklitb@sbcglobal.net","invoice_num":2156,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-RDGV-LJUR-VXFJ-WJJU"},{"name":"Weinshet Kifle","email":"bteklu54@gmail.com","invoice_num":2149,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-3V54-FJHM-PS9Y-Q4LF"},{"name":"Tsehai Mamo","email":"tsehaimamo@gmail.com","invoice_num":2144,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-TS6N-2DLC-VGB2-HG6V"},{"name":"Tiwres Awake","email":"tiwreskebede@gmail.com","invoice_num":2139,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-D989-MX43-YZ4K-N35M"},{"name":"Tafesech Kemaw","email":"dtadesse834@gmail.com","invoice_num":2127,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-YYTU-EEZ3-9ANX-U8CM"},{"name":"Shewaye Beyene","email":"NoEmailInFile@gmail.com","invoice_num":2120,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-MSNJ-4DGR-79PC-XGUP"},{"name":"Samuel Woldeyes","email":"woldeyes.samuel@yahoo.com","invoice_num":2115,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-BRFY-6R9L-YWFZ-BSAQ"},{"name":"Samuel Belhu","email":"samuelbelhu@yshoo.com","invoice_num":2113,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-PRZ3-DR7G-SAU8-CN89"},{"name":"Sable Eshete","email":"sableeshete@sbcglobal.net","invoice_num":2109,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-7ELA-DKFN-5JZP-8JYQ"},{"name":"Netsanet Gelagaye","email":"alemnetanet@yahoo.com","invoice_num":2104,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-VYVB-6RXT-FQG9-45YF"},{"name":"Mik Dagmawi","email":"sableandergea@yahoo.com","invoice_num":2098,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-VWD2-XL87-VZC7-343B"},{"name":"Mekdes Bekele","email":"ganmade@yahoo.cm","invoice_num":2087,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-QD2U-A5GH-5AML-YCMV"},{"name":"Hewan Mengistu","email":"akiye@hotmail.com","invoice_num":2069,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-PUVT-YY2M-P8TJ-56AG"},{"name":"Hana Aliye","email":"hannaexport@gmail.com","invoice_num":2065,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-6TRS-725B-XMGX-ZKMB"},{"name":"Hanna Terfa","email":"abera5538@gmail.com","invoice_num":2066,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-744Z-WCUK-26DA-TC4R"},{"name":"Getachew Mersha","email":"getmersha@gmail.com","invoice_num":2054,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-DKXX-8W6X-R86B-X3H9"},{"name":"Genet Mengesha","email":"yegenet4@yahoo.com","invoice_num":2053,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-9SRZ-H7XL-CCK3-BJS8"},{"name":"Getenet Aytenfisu","email":"getenetaytenfisu62@gmail.com","invoice_num":2055,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-WPKE-JKLM-XWP6-2CJR"},{"name":"Genet Wondimu","email":"wondimug@gmail.com","invoice_num":2052,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-ALA8-6G7M-Y3V8-DZ7K"},{"name":"Fantaye Koricha","email":"getatade1@msn.com","invoice_num":2045,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-YGZV-WESK-ES5Z-TYGL"},{"name":"Frehiwot Demise","email":"girmasitotaw23@gmail.com","invoice_num":2049,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-JK63-9SKJ-MHDB-YQY7"},{"name":"Etaferahu Gebeyehu","email":"mimi_mulatu@yahoo.com","invoice_num":2042,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-ELQP-5R7Q-A8EX-6GSL"},{"name":"Dagmawi Andarge Tensaye","email":"nd2719@outlook.com","invoice_num":2028,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-YPY4-J4NP-H4ZL-GWDC"},{"name":"Biruk Tesema","email":"NoEmailInFile@gmail.com","invoice_num":2024,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-FMH9-GBSG-XVGT-JH8R"},{"name":"Betelhem Shiferaw","email":"betty8117@gmail.com","invoice_num":2023,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-DF5J-SEBU-LY6Y-BP5E"},{"name":"Chalachew Belay","email":"cbelay01@gmail.com","invoice_num":2027,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-9R8D-QY9Q-QDR6-WCZV"},{"name":"Belay Adera","email":"aderabelay@yahoo.com","invoice_num":2016,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-789Q-WPKD-B52Y-XB2Q"},{"name":"Berkeneshe Ababa","email":"NoEmailInFile@gmail.com","invoice_num":2021,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-M5BC-NY4K-GWE8-HCGD"},{"name":"Asnakech Yigezu","email":"NoEmailInFile@gmail.com","invoice_num":2005,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-PCFJ-ENVT-3AT3-J46J"},{"name":"Almaz Jotea","email":"sableandergea@yahoo.com","invoice_num":1999,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-A8YP-JDFT-KCP9-XWYZ"},{"name":"Almaz Girma Kebede","email":"fitsumeth@gmail.com","invoice_num":1997,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-11-16 00:00:00","item":"#29 W/ro Nigist Yimer","paypal_id":"INV2-7ZN9-Q69A-UXNV-54M4"},{"name":"Wosinachew Gebregiorgis","email":"meklitb@sbcglobal.net","invoice_num":1950,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-09-28 00:00:00","item":"# 28 W/ro Abebech D. Mulugeta","paypal_id":"INV2-MXX7-DDRV-R35K-TX2G"},{"name":"Yenensh Mengistu","email":"yeneneshmengistu321@gmail.com","invoice_num":1953,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-09-28 00:00:00","item":"# 28 W/ro Abebech D. Mulugeta","paypal_id":"INV2-WEUR-ADEE-YV6K-8N8M"},{"name":"Weinshet Kifle","email":"bteklu54@gmail.com","invoice_num":1943,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-09-28 00:00:00","item":"# 28 W/ro Abebech D. Mulugeta","paypal_id":"INV2-TC9D-HFGU-L8TC-PULJ"},{"name":"Shewaye Beyene","email":"NoEmailInFile@gmail.com","invoice_num":1917,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-09-28 00:00:00","item":"# 28 W/ro Abebech D. Mulugeta","paypal_id":"INV2-MBRJ-SZ23-R64U-K7H6"},{"name":"Samuel Belhu","email":"samuelbelhu@yshoo.com","invoice_num":1912,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-09-28 00:00:00","item":"# 28 W/ro Abebech D. Mulugeta","paypal_id":"INV2-A9R7-L62P-PQYD-WSX7"},{"name":"Netsanet Gelagaye","email":"alemnetanet@yahoo.com","invoice_num":1901,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-09-28 00:00:00","item":"# 28 W/ro Abebech D. Mulugeta","paypal_id":"INV2-RQLY-6NH9-M3A9-XRQL"},{"name":"Mik Dagmawi","email":"sableandergea@yahoo.com","invoice_num":1895,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-09-28 00:00:00","item":"# 28 W/ro Abebech D. Mulugeta","paypal_id":"INV2-9ZUC-J5P2-XVRV-K487"},{"name":"Mantegbosh Ejigu","email":"mantegbushnegash@gmail.com","invoice_num":1882,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-09-28 00:00:00","item":"# 28 W/ro Abebech D. Mulugeta","paypal_id":"INV2-37KV-T3YT-7WMT-YV65"},{"name":"Hana Aliye","email":"hannaexport@gmail.com","invoice_num":1865,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-09-28 00:00:00","item":"# 28 W/ro Abebech D. Mulugeta","paypal_id":"INV2-PMN7-5TAH-EL7F-QKW6"},{"name":"Genet Wondimu","email":"wondimug@gmail.com","invoice_num":1853,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-09-28 00:00:00","item":"# 28 W/ro Abebech D. Mulugeta","paypal_id":"INV2-BQ9U-Q7LT-XSTR-N585"},{"name":"Fantaye Koricha","email":"getatade1@msn.com","invoice_num":1845,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-09-28 00:00:00","item":"# 28 W/ro Abebech D. Mulugeta","paypal_id":"INV2-B6ZE-FHYZ-6Y3F-9FG8"},{"name":"Dagmawi Andarge Tensaye","email":"nd2719@outlook.com","invoice_num":1829,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-09-28 00:00:00","item":"# 28 W/ro Abebech D. Mulugeta","paypal_id":"INV2-5LMS-DSAN-NT3S-CSCJ"},{"name":"Berkeneshe Ababa","email":"NoEmailInFile@gmail.com","invoice_num":1823,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-09-28 00:00:00","item":"# 28 W/ro Abebech D. Mulugeta","paypal_id":"INV2-547A-BKWZ-ETY2-8DKX"},{"name":"Almaz Jotea","email":"sableandergea@yahoo.com","invoice_num":1798,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-09-28 00:00:00","item":"# 28 W/ro Abebech D. Mulugeta","paypal_id":"INV2-2YWN-R8QG-4GK2-T484"},{"name":"Yenensh Mengistu","email":"yeneneshmengistu321@gmail.com","invoice_num":1764,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-04-05 00:00:00","item":"# 27 Ato Dessalegn Woldemariam","paypal_id":"INV2-YBST-WXAZ-SHY7-Z49Z"},{"name":"Wosinachew Gebregiorgis","email":"meklitb@sbcglobal.net","invoice_num":1761,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-04-05 00:00:00","item":"# 27 Ato Dessalegn Woldemariam","paypal_id":"INV2-KSN5-LJVD-6STC-9LFY"},{"name":"Tefera Taye","email":"teferataye@yahoo.com","invoice_num":1739,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-04-05 00:00:00","item":"# 27 Ato Dessalegn Woldemariam","paypal_id":"INV2-N3RW-ZS6Y-PVAA-DPTX"},{"name":"Netsanet Gelagage","email":"alemnetanet@yahoo.com","invoice_num":1710,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-04-05 00:00:00","item":"# 27 Ato Dessalegn Woldemariam","paypal_id":"INV2-SKWB-C5EF-ELJ8-WPKZ"},{"name":"Mik Dagmawi","email":"sableandergea@yahoo.com","invoice_num":1703,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-04-05 00:00:00","item":"# 27 Ato Dessalegn Woldemariam","paypal_id":"INV2-YBFD-9XTX-ZDX8-ZF4Z"},{"name":"Genet Wondimu","email":"wondimug@gmail.com","invoice_num":1661,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-04-05 00:00:00","item":"# 27 Ato Dessalegn Woldemariam","paypal_id":"INV2-D537-6NG7-VKJ5-EJJA"},{"name":"Dagmawi Andarge Tensaye","email":"nd2719@outlook.com","invoice_num":1638,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-04-05 00:00:00","item":"# 27 Ato Dessalegn Woldemariam","paypal_id":"INV2-JFCA-GWVF-U6NX-F76R"},{"name":"Chalachew Belay","email":"01cbela@gmail.com","invoice_num":1637,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-04-05 00:00:00","item":"# 27 Ato Dessalegn Woldemariam","paypal_id":"INV2-GAFP-45VZ-H637-LZBD"},{"name":"Betelhem Shiferaw","email":"betty8117@gmail.com","invoice_num":1634,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-04-05 00:00:00","item":"# 27 Ato Dessalegn Woldemariam","paypal_id":"INV2-ALLY-9VKF-VBXC-F3A2"},{"name":"Berkeneshe Ababa","email":"NoEmailInFile@gmail.com","invoice_num":1632,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-04-05 00:00:00","item":"# 27 Ato Dessalegn Woldemariam","paypal_id":"INV2-T95L-4USG-AM6K-V5BC"},{"name":"Almaz Girma Kebede","email":"fitsumeth@gmail.com","invoice_num":1608,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-04-05 00:00:00","item":"# 27 Ato Dessalegn Woldemariam","paypal_id":"INV2-X5UQ-SKCG-6WYV-L845"},{"name":"Almaz Jotea","email":"sableandergea@yahoo.com","invoice_num":1606,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-04-05 00:00:00","item":"# 27 Ato Dessalegn Woldemariam","paypal_id":"INV2-CP7C-9DBJ-9HPM-ECX9"},{"name":"Tsehai Mamo","email":"tsehaimamo@gmail.com","invoice_num":1553,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-01-29 00:00:00","item":"#26 Wzro Yeshe Kebede Amede","paypal_id":"INV2-SNTL-8ZUQ-GW5B-2ZXD"},{"name":"Samuel Belhu","email":"samuelbelhu@yshoo.com","invoice_num":1526,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-01-29 00:00:00","item":"#26 Wzro Yeshe Kebede Amede","paypal_id":"INV2-CQNZ-M5VD-ADM9-D4JA"},{"name":"Netsanet Gelagage","email":"alemnetanet@yahoo.com","invoice_num":1515,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-01-29 00:00:00","item":"#26 Wzro Yeshe Kebede Amede","paypal_id":"INV2-9AMG-67GH-96TU-SBDW"},{"name":"Elshadai Kiflu","email":"dawittensai@gmail.com","invoice_num":1451,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-01-29 00:00:00","item":"#26 Wzro Yeshe Kebede Amede","paypal_id":"INV2-ZHQN-EQJ5-RJRV-ZGDL"},{"name":"Chalachew Belay","email":"cbelay01@gmail.com","invoice_num":1441,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2025-01-29 00:00:00","item":"#26 Wzro Yeshe Kebede Amede","paypal_id":"INV2-NM95-V2YL-V7JU-ZT2V"},{"name":"Yenensh Mengistu","email":"yeneneshmengistu321@gmail.com","invoice_num":1374,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2024-12-02 00:00:00","item":"#25 Wzro Banchiyider Mengesha","paypal_id":"INV2-CXMQ-KEBS-LTC4-4FDU"},{"name":"Nassisie Gemeda","email":"nasi_ita@yahoo.com","invoice_num":1317,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2024-12-02 00:00:00","item":"#25 Wzro Banchiyider Mengesha","paypal_id":"INV2-8U4V-RARQ-H2QN-DQLQ"},{"name":"Kelkai Bitew","email":"kelkaib2003@yahoo.com","invoice_num":1293,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2024-12-02 00:00:00","item":"#25 Wzro Banchiyider Mengesha","paypal_id":"INV2-RFCD-SKAD-4BPQ-GK8C"},{"name":"Emebet Yalew","email":"M2007masfin@yahoo.com","invoice_num":1258,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2024-12-02 00:00:00","item":"#25 Wzro Banchiyider Mengesha","paypal_id":"INV2-N8FF-H4AW-H2ZV-9UEB"},{"name":"Elshadai Kiflu","email":"dawittensai@gmail.com","invoice_num":1256,"status":"Unpaid (Sent)","total":110.0,"amount_due":110.0,"date":"2024-12-02 00:00:00","item":"#25 Wzro Banchiyider Mengesha","paypal_id":"INV2-544X-X3GP-BFMB-7UAP"}]
+;
+
+// Runtime state
+let memberEdits = {};  // id -> {email, mobile, notes, ...}
+let paidInvoices = new Set();
+let currentView = 'members';
+let memberFilter = 'all';
+let invFilter = 'all';
+let memberSort = 'id_asc';
+let invSort = 'inv_desc';
+let memberSearch = '';
+let invSearch = '';
+let invEventFilter = '';
+
+// Build invoice lookup by member name (PayPal name -> invoices)
+function getMemberInvoices(member) {
+  const paypal = member.paypal_name.toLowerCase();
+  const first = member.first.toLowerCase();
+  const last = member.last.toLowerCase();
+  return INVOICES.filter(inv => {
+    const n = inv.name.toLowerCase();
+    return n === paypal || n.startsWith(first) && n.includes(last) || n === (first+' '+last);
+  });
+}
+
+function getMemberById(id) {
+  return MEMBERS.find(m => m.id === id);
+}
+
+function getMemberData(m) {
+  const edits = memberEdits[m.id] || {};
+  return Object.assign({}, m, edits);
+}
+
+// ===================== STATS =====================
+function updateSidebarBadges() {
+  const active = MEMBERS.filter(m => m.status==='Active').length;
+  document.getElementById('nb-members').textContent = active;
+  const unpaid = INVOICES.filter(i => !paidInvoices.has(i.invoice_num)).length;
+  document.getElementById('nb-invoices').textContent = unpaid;
+}
+
+// ===================== VIEWS =====================
+function switchView(v) {
+  currentView = v;
+  ['members','invoices','overview'].forEach(n => {
+    document.getElementById('nav-'+n).classList.toggle('active', n===v);
+  });
+  render();
+}
+
+function render() {
+  if (currentView==='members') renderMembers();
+  else if (currentView==='invoices') renderInvoices();
+  else renderOverview();
+  updateSidebarBadges();
+}
+
+// =================== MEMBERS VIEW ===================
+function getMemberFiltered() {
+  let filtered = MEMBERS.filter(m => {
+    if (memberFilter==='active' && m.status!=='Active') return false;
+    if (memberFilter==='inactive' && m.status==='Active') return false;
+    if (memberFilter==='no-email' && (getMemberData(m).email || m.status!=='Active')) return false;
+    const d = getMemberData(m);
+    const q = memberSearch.toLowerCase();
+    if (q) {
+      const hay = [m.id, d.first, d.last, d.full_name, d.email, d.mobile, d.home, d.address].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  filtered.sort((a,b) => {
+    const da=getMemberData(a), db=getMemberData(b);
+    if (memberSort==='id_asc') return a.id-b.id;
+    if (memberSort==='id_desc') return b.id-a.id;
+    if (memberSort==='name_asc') return da.last.localeCompare(db.last);
+    if (memberSort==='name_desc') return db.last.localeCompare(da.last);
+    return 0;
+  });
+  return filtered;
+}
+
+function renderMemberRows(filtered) {
+  const countEl = document.getElementById('memberResultCount');
+  if (countEl) countEl.textContent = filtered.length + ' member' + (filtered.length!==1?'s':'');
+  const tableArea = document.getElementById('memberTableArea');
+  if (!tableArea) return;
+  if (filtered.length === 0) {
+    tableArea.innerHTML = '<div class="empty">No members match your search</div>';
+    return;
+  }
+  if (!document.getElementById('memberTbody')) {
+    tableArea.innerHTML = `<table>
+      <thead><tr>
+        <th>#</th><th>Member</th><th>Contact</th><th>Email</th><th>Address</th><th>Status</th><th>Invoices</th><th>Actions</th>
+      </tr></thead>
+      <tbody id="memberTbody"></tbody>
+    </table>`;
+  }
+  const tbody = document.getElementById('memberTbody');
+  let html = '';
+  filtered.forEach((m, i) => {
+    const d = getMemberData(m);
+    const invs = getMemberInvoices(m);
+    const unpaidInvs = invs.filter(inv => !paidInvoices.has(inv.invoice_num));
+    const invClass = invs.length===0 ? 'none' : unpaidInvs.length>0 ? 'has-unpaid' : 'all-paid';
+    const invLabel = invs.length===0 ? '—' : `${unpaidInvs.length} unpaid / ${invs.length} total`;
+    html += `<tr style="animation-delay:${Math.min(i,30)*.015}s">
+      <td><span class="member-num">#${m.id}</span></td>
+      <td>
+        <div class="member-name">${d.first} ${d.last}</div>
+        <div class="member-full">${d.full_name}</div>
+      </td>
+      <td>
+        ${d.home ? `<div class="contact-line">🏠 ${d.home}</div>` : ''}
+        ${d.mobile ? `<div class="contact-line">📱 ${d.mobile}</div>` : ''}
+      </td>
+      <td>
+        ${d.email ? `<div class="contact-line email">${d.email}</div>` : '<div class="contact-line no-email">⚠ no email</div>'}
+      </td>
+      <td style="font-size:11px;color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${d.address || '—'}</td>
+      <td><span class="status-pill ${m.status==='Active'?'active':'not-active'}"><span class="status-dot"></span>${m.status}</span></td>
+      <td><span class="inv-count ${invClass}">${invLabel}</span></td>
+      <td>
+        <div class="action-btns">
+          <button class="icon-btn" onclick="openMemberDetail(${m.id})">View</button>
+          ${unpaidInvs.length>0 ? `<button class="icon-btn" onclick="switchView('invoices');invSearch='${d.first} ${d.last}'">Invoices</button>` : ''}
+        </div>
+      </td>
+    </tr>`;
+  });
+  tbody.innerHTML = html;
+}
+
+function renderMembers() {
+  const main = document.getElementById('mainArea');
+  const active = MEMBERS.filter(m=>m.status==='Active').length;
+  const inactive = MEMBERS.filter(m=>m.status!=='Active').length;
+  const noEmail = MEMBERS.filter(m=>m.status==='Active' && !getMemberData(m).email).length;
+
+  // If page already rendered, just refresh tabs + rows without touching the search input
+  if (document.getElementById('memberSearchBox')) {
+    ['all','active','inactive','no-email'].forEach(f => {
+      const el = document.getElementById('mftab-'+f);
+      if (el) el.classList.toggle('active', memberFilter===f);
+    });
+    renderMemberRows(getMemberFiltered());
+    updateSidebarBadges();
+    return;
+  }
+
+  // Full render only when switching to this view
+  main.innerHTML = `
+    <div class="topbar">
+      <div>
+        <div class="page-title">Members CRM</div>
+        <div class="page-sub">Hibret Edir · ${MEMBERS.length} total members</div>
+      </div>
+      <div class="topbar-right">
+        <div class="kpi-chip"><div class="kpi-val green">${active}</div><div class="kpi-label">Active</div></div>
+        <div class="kpi-chip"><div class="kpi-val red">${inactive}</div><div class="kpi-label">Inactive</div></div>
+        <div class="kpi-chip"><div class="kpi-val amber">${noEmail}</div><div class="kpi-label">No Email</div></div>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="search-wrap">
+        <span class="search-icon">⌕</span>
+        <input type="text" id="memberSearchBox" placeholder="Search name, email, phone, address..." value="${memberSearch}" oninput="memberSearch=this.value;renderMemberRows(getMemberFiltered())">
+      </div>
+      <select id="memberSortSel" onchange="memberSort=this.value;renderMemberRows(getMemberFiltered())">
+        <option value="id_asc" ${memberSort==='id_asc'?'selected':''}>Member # ↑</option>
+        <option value="id_desc" ${memberSort==='id_desc'?'selected':''}>Member # ↓</option>
+        <option value="name_asc" ${memberSort==='name_asc'?'selected':''}>Last Name A→Z</option>
+        <option value="name_desc" ${memberSort==='name_desc'?'selected':''}>Last Name Z→A</option>
+      </select>
+      <div class="result-count" id="memberResultCount"></div>
+    </div>
+    <div class="filter-tabs">
+      <div class="ftab ${memberFilter==='all'?'active':''}" id="mftab-all" onclick="memberFilter='all';renderMembers()">All <span class="ftab-badge">${MEMBERS.length}</span></div>
+      <div class="ftab ${memberFilter==='active'?'active':''}" id="mftab-active" onclick="memberFilter='active';renderMembers()">Active <span class="ftab-badge">${active}</span></div>
+      <div class="ftab ${memberFilter==='inactive'?'active':''}" id="mftab-inactive" onclick="memberFilter='inactive';renderMembers()">Inactive/Out <span class="ftab-badge">${inactive}</span></div>
+      <div class="ftab ${memberFilter==='no-email'?'active':''}" id="mftab-no-email" onclick="memberFilter='no-email';renderMembers()">Missing Email <span class="ftab-badge">${noEmail}</span></div>
+    </div>
+    <div class="table-area" id="memberTableArea"></div>
+  `;
+
+  renderMemberRows(getMemberFiltered());
+}
+
+// =================== MEMBER DETAIL MODAL ===================
+let editingMemberId = null;
+function openMemberDetail(id) {
+  editingMemberId = id;
+  const m = getMemberData(getMemberById(id));
+  const invs = getMemberInvoices(getMemberById(id));
+  const unpaid = invs.filter(i => !paidInvoices.has(i.invoice_num));
+
+  document.getElementById('modalMemberName').textContent = `${m.first} ${m.last}`;
+  document.getElementById('modalMemberSub').textContent = `Member #${m.id} · PayPal: ${m.paypal_name}`;
+
+  const invHtml = invs.length===0 ? '<div style="color:var(--muted);font-size:12px">No invoices on file yet</div>' :
+    invs.sort((a,b)=>b.invoice_num-a.invoice_num).map(inv => {
+      const p = paidInvoices.has(inv.invoice_num);
+      return `<div class="inv-row ${p?'paid':'unpaid'}">
+        <div>
+          <div class="inv-event">${inv.item}</div>
+          <div class="inv-date">#${inv.invoice_num} · ${inv.date.split(' ')[0]}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="inv-amt ${p?'green':'red'}">$${inv.total.toFixed(2)}</span>
+          ${p ? '<span style="color:var(--green);font-size:10px">✓ PAID</span>' :
+            `<button class="icon-btn" onclick="markPaid(${inv.invoice_num})">Mark Paid</button>`}
+        </div>
+      </div>`;
+    }).join('');
+
+  document.getElementById('modalMemberBody').innerHTML = `
+    <div class="detail-grid">
+      <div class="detail-field"><div class="field-label">First Name</div><input class="field-input" id="ef_first" value="${m.first}"></div>
+      <div class="detail-field"><div class="field-label">Last Name</div><input class="field-input" id="ef_last" value="${m.last}"></div>
+      <div class="detail-field full"><div class="field-label">Full Name / Spouse</div><input class="field-input" id="ef_full_name" value="${m.full_name}"></div>
+      <div class="detail-field"><div class="field-label">Home Phone</div><input class="field-input" id="ef_home" value="${m.home}"></div>
+      <div class="detail-field"><div class="field-label">Mobile Phone</div><input class="field-input" id="ef_mobile" value="${m.mobile}"></div>
+      <div class="detail-field full"><div class="field-label">Email Address</div><input class="field-input" id="ef_email" value="${m.email}"></div>
+      <div class="detail-field full"><div class="field-label">Address</div><input class="field-input" id="ef_address" value="${m.address}"></div>
+      <div class="detail-field full"><div class="field-label">PayPal Name</div><input class="field-input" id="ef_paypal_name" value="${m.paypal_name}"></div>
+      <div class="detail-field full"><div class="field-label">Notes</div><input class="field-input" id="ef_notes" value="${m.notes}"></div>
+
+      <div class="section-divider">
+        <div class="section-head">Invoice History (${invs.length} invoices · ${unpaid.length} unpaid)</div>
+        ${invHtml}
+      </div>
+    </div>
+  `;
+  document.getElementById('memberModal').classList.add('open');
+}
+
+function saveMemberEdit() {
+  if (!editingMemberId) return;
+  memberEdits[editingMemberId] = {
+    first: document.getElementById('ef_first').value,
+    last: document.getElementById('ef_last').value,
+    full_name: document.getElementById('ef_full_name').value,
+    home: document.getElementById('ef_home').value,
+    mobile: document.getElementById('ef_mobile').value,
+    email: document.getElementById('ef_email').value,
+    address: document.getElementById('ef_address').value,
+    paypal_name: document.getElementById('ef_paypal_name').value,
+    notes: document.getElementById('ef_notes').value,
+  };
+  closeModal('memberModal');
+  render();
+}
+
+function markPaid(invNum) {
+  paidInvoices.add(invNum);
+  if (editingMemberId) openMemberDetail(editingMemberId);  // refresh modal
+  render();
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+}
+
+// =================== INVOICES VIEW ===================
+const EVENTS = [...new Set(INVOICES.map(i=>i.item))].sort();
+
+function getInvFiltered() {
+  let filtered = INVOICES.filter(inv => {
+    if (invFilter==='unpaid' && paidInvoices.has(inv.invoice_num)) return false;
+    if (invFilter==='paid' && !paidInvoices.has(inv.invoice_num)) return false;
+    if (invEventFilter && inv.item!==invEventFilter) return false;
+    const q = invSearch.toLowerCase();
+    if (q) {
+      const hay = `${inv.name} ${inv.email} ${inv.invoice_num} ${inv.item}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  filtered.sort((a,b) => {
+    if (invSort==='inv_desc') return b.invoice_num-a.invoice_num;
+    if (invSort==='inv_asc') return a.invoice_num-b.invoice_num;
+    if (invSort==='name_asc') return a.name.localeCompare(b.name);
+    return b.date.localeCompare(a.date);
+  });
+  return filtered;
+}
+
+function renderInvRows(filtered) {
+  const countEl = document.getElementById('invResultCount');
+  if (countEl) countEl.textContent = filtered.length + ' invoice' + (filtered.length!==1?'s':'');
+  const tableArea = document.getElementById('invTableArea');
+  if (!tableArea) return;
+  if (filtered.length === 0) {
+    tableArea.innerHTML = '<div class="empty">No invoices match</div>';
+    return;
+  }
+  if (!document.getElementById('invTbody')) {
+    tableArea.innerHTML = `<table>
+      <thead><tr>
+        <th>Member</th><th>Invoice #</th><th>Event</th><th>Date</th><th>Amount</th><th>Status</th><th>Action</th>
+      </tr></thead>
+      <tbody id="invTbody"></tbody>
+    </table>`;
+  }
+  const tbody = document.getElementById('invTbody');
+  let html = '';
+  let lastEvent = null;
+  filtered.forEach((inv, i) => {
+    const isPaid = paidInvoices.has(inv.invoice_num);
+    const noEmail = inv.email==='NoEmailInFile@gmail.com';
+    if (inv.item!==lastEvent) {
+      html += `<tr><td colspan="7" style="padding:0">
+        <div style="background:var(--surface2);padding:8px 12px;border-left:3px solid var(--accent);font-family:'Syne',sans-serif;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);display:flex;justify-content:space-between">
+          <span>${inv.item}</span><span style="color:var(--muted);font-weight:400">${inv.date.split(' ')[0]}</span>
+        </div></td></tr>`;
+      lastEvent = inv.item;
+    }
+    html += `<tr style="animation-delay:${Math.min(i,30)*.015}s">
+      <td>
+        <div class="member-name" style="font-size:13px">${inv.name}</div>
+        <div style="font-size:10px;color:${noEmail?'var(--muted)':'var(--blue)'};font-style:${noEmail?'italic':'normal'}">${noEmail?'⚠ no email':inv.email}</div>
+      </td>
+      <td style="color:var(--accent2);font-weight:500">#${inv.invoice_num}</td>
+      <td><span style="background:var(--surface2);color:var(--accent2);font-size:10px;padding:3px 8px;border-left:2px solid var(--accent)">${inv.item}</span></td>
+      <td style="color:var(--muted);font-size:11px">${inv.date.split(' ')[0]}</td>
+      <td><span style="font-family:'Syne',sans-serif;font-weight:700;font-size:14px;color:${isPaid?'var(--green)':'var(--red)'}">${isPaid?'✓ ':''}$${inv.amount_due.toFixed(2)}</span></td>
+      <td><span class="status-pill ${isPaid?'active':'not-active'}"><span class="status-dot"></span>${isPaid?'Paid':'Unpaid'}</span></td>
+      <td>
+        ${isPaid
+          ? '<span style="color:var(--green);font-size:10px">✓ Marked Paid</span>'
+          : `<button class="icon-btn" onclick="markPaid(${inv.invoice_num});renderInvRows(getInvFiltered())">Mark Paid</button>`}
+      </td>
+    </tr>`;
+  });
+  tbody.innerHTML = html;
+}
+
+function renderInvoices() {
+  const main = document.getElementById('mainArea');
+  const unpaidCount = INVOICES.filter(i=>!paidInvoices.has(i.invoice_num)).length;
+  const paidCount = paidInvoices.size;
+  const totalOwed = INVOICES.filter(i=>!paidInvoices.has(i.invoice_num)).reduce((s,i)=>s+i.amount_due,0);
+
+  // If already rendered, just refresh dynamic parts without destroying the search input
+  if (document.getElementById('invSearchBox')) {
+    // Update KPI chips
+    const chips = document.querySelectorAll('#invKpiUnpaid,#invKpiPaid,#invKpiOwed');
+    const u = document.getElementById('invKpiUnpaid');
+    const p = document.getElementById('invKpiPaid');
+    const o = document.getElementById('invKpiOwed');
+    if (u) u.textContent = unpaidCount;
+    if (p) p.textContent = paidCount;
+    if (o) o.textContent = '$'+totalOwed.toLocaleString('en-US',{minimumFractionDigits:0});
+    // Update tab badges
+    ['all','unpaid','paid'].forEach(f => {
+      const el = document.getElementById('iftab-'+f);
+      if (el) el.classList.toggle('active', invFilter===f);
+    });
+    renderInvRows(getInvFiltered());
+    updateSidebarBadges();
+    return;
+  }
+
+  // Full render only on first load
+  const evOptions = EVENTS.map(e=>`<option value="${e}" ${invEventFilter===e?'selected':''}>${e}</option>`).join('');
+
+  main.innerHTML = `
+    <div class="topbar">
+      <div>
+        <div class="page-title">Invoice Dashboard</div>
+        <div class="page-sub">PayPal Invoices · ${INVOICES.length} total</div>
+      </div>
+      <div class="topbar-right">
+        <div class="kpi-chip"><div class="kpi-val red" id="invKpiUnpaid">${unpaidCount}</div><div class="kpi-label">Unpaid</div></div>
+        <div class="kpi-chip"><div class="kpi-val green" id="invKpiPaid">${paidCount}</div><div class="kpi-label">Marked Paid</div></div>
+        <div class="kpi-chip"><div class="kpi-val amber" id="invKpiOwed">$${totalOwed.toLocaleString('en-US',{minimumFractionDigits:0})}</div><div class="kpi-label">Outstanding</div></div>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="search-wrap">
+        <span class="search-icon">⌕</span>
+        <input type="text" id="invSearchBox" placeholder="Search name, email, invoice #..." value="${invSearch}" oninput="invSearch=this.value;renderInvRows(getInvFiltered())">
+      </div>
+      <select onchange="invEventFilter=this.value;renderInvRows(getInvFiltered())">
+        <option value="">All Events</option>
+        ${evOptions}
+      </select>
+      <select onchange="invSort=this.value;renderInvRows(getInvFiltered())">
+        <option value="inv_desc" ${invSort==='inv_desc'?'selected':''}>Invoice # ↓</option>
+        <option value="inv_asc" ${invSort==='inv_asc'?'selected':''}>Invoice # ↑</option>
+        <option value="name_asc" ${invSort==='name_asc'?'selected':''}>Name A→Z</option>
+        <option value="date_desc">Date ↓</option>
+      </select>
+      <div class="result-count" id="invResultCount"></div>
+    </div>
+    <div class="filter-tabs">
+      <div class="ftab ${invFilter==='all'?'active':''}" id="iftab-all" onclick="invFilter='all';renderInvoices()">All <span class="ftab-badge">${INVOICES.length}</span></div>
+      <div class="ftab ${invFilter==='unpaid'?'active':''}" id="iftab-unpaid" onclick="invFilter='unpaid';renderInvoices()">Unpaid <span class="ftab-badge">${unpaidCount}</span></div>
+      <div class="ftab ${invFilter==='paid'?'active':''}" id="iftab-paid" onclick="invFilter='paid';renderInvoices()">Marked Paid <span class="ftab-badge">${paidCount}</span></div>
+    </div>
+    <div class="table-area" id="invTableArea"></div>
+  `;
+
+  renderInvRows(getInvFiltered());
+}
+
+// =================== OVERVIEW ===================
+function renderOverview() {
+  const main = document.getElementById('mainArea');
+  const active = MEMBERS.filter(m=>m.status==='Active').length;
+  const inactive = MEMBERS.filter(m=>m.status!=='Active').length;
+  const withEmail = MEMBERS.filter(m=>getMemberData(m).email).length;
+  const noEmail = active - MEMBERS.filter(m=>m.status==='Active' && getMemberData(m).email).length;
+  const unpaid = INVOICES.filter(i=>!paidInvoices.has(i.invoice_num)).length;
+  const totalOwed = INVOICES.filter(i=>!paidInvoices.has(i.invoice_num)).reduce((s,i)=>s+i.amount_due,0);
+
+  // Events breakdown
+  const events = {};
+  INVOICES.forEach(inv => {
+    if (!events[inv.item]) events[inv.item] = {total:0, unpaid:0, date:inv.date};
+    events[inv.item].total++;
+    if (!paidInvoices.has(inv.invoice_num)) events[inv.item].unpaid++;
+  });
+
+  const eventCards = Object.entries(events).sort((a,b)=>b[1].date.localeCompare(a[1].date)).map(([ev, d]) => `
+    <div style="background:var(--surface);border:1px solid var(--border);padding:18px;cursor:pointer;transition:border-color .2s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'" onclick="switchView('invoices');invEventFilter='${ev.replace(/'/g, "\'")}';invFilter='all'">
+      <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;color:var(--accent2);margin-bottom:8px">${ev}</div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:12px">${d.date.split(' ')[0]}</div>
+      <div style="height:3px;background:var(--border);margin-bottom:12px"><div style="height:100%;background:var(--red);width:${Math.round(d.unpaid/d.total*100)}%"></div></div>
+      <div style="display:flex;gap:16px">
+        <div><div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">Unpaid</div><div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;color:var(--red)">${d.unpaid}</div></div>
+        <div><div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">Total</div><div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;color:var(--text)">${d.total}</div></div>
+        <div><div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)">Owed</div><div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:700;color:var(--accent)">$${(d.unpaid*110).toLocaleString()}</div></div>
+      </div>
+    </div>
+  `).join('');
+
+  // Members with most unpaid invoices
+  const memberDebt = {};
+  INVOICES.filter(i=>!paidInvoices.has(i.invoice_num)).forEach(inv => {
+    if (!memberDebt[inv.name]) memberDebt[inv.name] = {count:0, amount:0};
+    memberDebt[inv.name].count++;
+    memberDebt[inv.name].amount += inv.amount_due;
+  });
+  const topDebtors = Object.entries(memberDebt).sort((a,b)=>b[1].count-a[1].count).slice(0,8);
+
+  main.innerHTML = `
+    <div class="topbar">
+      <div>
+        <div class="page-title">Overview</div>
+        <div class="page-sub">Hibret Edir · Summary Dashboard</div>
+      </div>
+    </div>
+    <div style="padding:24px 28px;display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px">
+      <div style="background:var(--surface);border:1px solid var(--border);padding:18px">
+        <div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Total Members</div>
+        <div style="font-family:'Syne',sans-serif;font-size:32px;font-weight:800;color:var(--accent)">${MEMBERS.length}</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);padding:18px">
+        <div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Active Members</div>
+        <div style="font-family:'Syne',sans-serif;font-size:32px;font-weight:800;color:var(--green)">${active}</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);padding:18px">
+        <div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Inactive/Out</div>
+        <div style="font-family:'Syne',sans-serif;font-size:32px;font-weight:800;color:var(--red)">${inactive}</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);padding:18px">
+        <div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">With Email</div>
+        <div style="font-family:'Syne',sans-serif;font-size:32px;font-weight:800;color:var(--blue)">${withEmail}</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);padding:18px">
+        <div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Unpaid Invoices</div>
+        <div style="font-family:'Syne',sans-serif;font-size:32px;font-weight:800;color:var(--red)">${unpaid}</div>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);padding:18px">
+        <div style="font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)">Total Owed</div>
+        <div style="font-family:'Syne',sans-serif;font-size:32px;font-weight:800;color:var(--red)">$${totalOwed.toLocaleString()}</div>
+      </div>
+    </div>
+
+    <div style="padding:0 28px 24px">
+      <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:14px">Events with Outstanding Invoices</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px">
+        ${eventCards}
+      </div>
+    </div>
+
+    <div style="padding:0 28px 40px;display:grid;grid-template-columns:1fr 1fr;gap:24px">
+      <div>
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:12px">Members with Outstanding Invoices</div>
+        <div style="background:var(--surface);border:1px solid var(--border)">
+          ${topDebtors.map(([name,d])=>`
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border)">
+              <div style="font-size:12px">${name}</div>
+              <div style="display:flex;gap:12px;align-items:center">
+                <span style="font-size:10px;color:var(--muted)">${d.count} invoice${d.count>1?'s':''}</span>
+                <span style="font-family:'Syne',sans-serif;font-weight:700;color:var(--red)">$${d.amount.toFixed(0)}</span>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div>
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:13px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:12px">Missing Email Addresses</div>
+        <div style="background:var(--surface);border:1px solid var(--border);max-height:320px;overflow-y:auto">
+          ${MEMBERS.filter(m=>m.status==='Active'&&!getMemberData(m).email).map(m=>`
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 14px;border-bottom:1px solid var(--border)">
+              <div>
+                <div style="font-size:12px">${getMemberData(m).first} ${getMemberData(m).last}</div>
+                <div style="font-size:10px;color:var(--muted)">#${m.id} · ${m.mobile||'no phone'}</div>
+              </div>
+              <button class="icon-btn" onclick="openMemberDetail(${m.id})">Edit</button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// =================== INIT ===================
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+# Environment variables - NEVER commit these
+.env
+.env.local
+.env.production
+.env.development
+
+# Node modules (for future backend)
+node_modules/
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Build outputs
+dist/
+build/
+
+# Netlify
+.netlify/
