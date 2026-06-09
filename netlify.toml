@@ -23,6 +23,31 @@
   to = "/admin/index.html"
   status = 200
 
+[[redirects]]
+  from = "/application"
+  to = "/application/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/application/*"
+  to = "/application/index.html"
+  status = 200
+
+[[redirects]]
+  from = "/waiting-list-status"
+  to = "/#waitingliststatus"
+  status = 302
+
+[[redirects]]
+  from = "/waiting-list-status/"
+  to = "/#waitingliststatus"
+  status = 302
+
+[[redirects]]
+  from = "/waiting-list-status/*"
+  to = "/#waitingliststatus"
+  status = 302
+
 # Security headers
 [[headers]]
   for = "/*"

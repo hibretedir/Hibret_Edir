@@ -44,7 +44,19 @@ PAYPAL_CLIENT_ID=your_paypal_client_id
 PAYPAL_SECRET=your_paypal_secret
 DATABASE_URL=your_render_postgres_url
 JWT_SECRET=your_random_secret_key
+JWT_EXPIRES_IN=1d
 ```
+
+## 🧪 Local Development
+
+1. Copy `.env.example` to `.env`
+2. Install dependencies with `npm install`
+3. Start local Netlify dev with `npm run dev`
+4. Use `http://localhost:8888/.netlify/functions/auth/check-phone` and the other auth endpoints from your portal frontend
+
+## 📂 Database Schema
+
+The initial PostgreSQL schema is available in `db/schema.sql` for Render Postgres.
 
 ## 📱 Features
 

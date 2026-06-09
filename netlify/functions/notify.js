@@ -1,0 +1,277 @@
+/**
+ * Email (SendGrid) + SMS (Twilio) notifications with DB logging.
+ * Skips gracefully when credentials are not configured (local dev).
+ */
+
+const fetchFn = typeof fetch === 'function' ? fetch : require('node-fetch');
+
+function normalizeDigits(phone) {
+  if (!phone) return null;
+  const d = String(phone).replace(/\D/g, '');
+  if (d.length === 10) return d;
+  if (d.length === 11 && d.startsWith('1')) return d.slice(1);
+  return d.length >= 10 ? d.slice(-10) : null;
+}
+
+function toE164(phone) {
+  const d = normalizeDigits(phone);
+  return d ? `+1${d}` : null;
+}
+
+function boardEmails() {
+  const raw = process.env.BOARD_NOTIFY_EMAIL || process.env.SENDGRID_TO_BOARD || 'hibretedirtext@gmail.com';
+  return raw.split(/[,;]/).map((s) => s.trim()).filter(Boolean);
+}
+
+function boardPhones() {
+  const raw = process.env.BOARD_NOTIFY_PHONE || process.env.BOARD_NOTIFY_SMS || '4245475594';
+  return raw.split(/[,;]/).map((s) => toE164(s)).filter(Boolean);
+}
+
+function fromEmail() {
+  return process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || 'hibretedirautomation@gmail.com';
+}
+
+function fromSms() {
+  return process.env.TWILIO_FROM || process.env.TWILIO_PHONE || null;
+}
+
+async function sendEmail({ to, subject, text, html }) {
+  const key = process.env.SENDGRID_API_KEY;
+  if (!key) {
+    console.warn('[notify] SENDGRID_API_KEY not set — email skipped:', subject, '→', to);
+    return { ok: false, skipped: true, channel: 'Email' };
+  }
+  const body = {
+    personalizations: [{ to: [{ email: to }] }],
+    from: { email: fromEmail(), name: 'Hibret Edir' },
+    subject,
+    content: [{ type: 'text/plain', value: text || subject }],
+  };
+  if (html) {
+    body.content.push({ type: 'text/html', value: html });
+  }
+  const res = await fetchFn('https://api.sendgrid.com/v3/mail/send', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    console.error('[notify] SendGrid error', res.status, errText);
+    return { ok: false, channel: 'Email', error: errText || String(res.status) };
+  }
+  return { ok: true, channel: 'Email' };
+}
+
+async function sendSms({ to, body }) {
+  const sid = process.env.TWILIO_ACCOUNT_SID;
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  const from = fromSms();
+  const dest = toE164(to);
+  if (!sid || !token || !from) {
+    console.warn('[notify] Twilio not configured — SMS skipped:', body?.slice(0, 60));
+    return { ok: false, skipped: true, channel: 'SMS' };
+  }
+  if (!dest) {
+    return { ok: false, skipped: true, channel: 'SMS', error: 'invalid phone' };
+  }
+  const params = new URLSearchParams();
+  params.set('To', dest);
+  params.set('From', from);
+  params.set('Body', body);
+  const res = await fetchFn(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: params.toString(),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    console.error('[notify] Twilio error', data);
+    return { ok: false, channel: 'SMS', error: data.message || String(res.status) };
+  }
+  return { ok: true, channel: 'SMS', sid: data.sid };
+}
+
+async function logNotification(db, { memberId, type, message, status }) {
+  if (!db) return;
+  try {
+    await db.query(
+      `INSERT INTO notifications (member_id, type, message, status, sent_at)
+       VALUES ($1, $2, $3, $4, NOW())`,
+      [memberId || null, type, message, status || 'Sent']
+    );
+  } catch (err) {
+    console.warn('[notify] could not log notification:', err.message);
+  }
+}
+
+async function notifyMember({ db, memberId, email, phone, subject, text, smsText }) {
+  const results = [];
+  if (email) {
+    const r = await sendEmail({ to: email, subject, text });
+    results.push(r);
+    await logNotification(db, {
+      memberId,
+      type: 'Email',
+      message: `${subject} → ${email}`,
+      status: r.ok ? 'Sent' : (r.skipped ? 'Skipped' : 'Failed'),
+    });
+  }
+  const smsBody = smsText || text;
+  if (phone && smsBody) {
+    const r = await sendSms({ to: phone, body: smsBody });
+    results.push(r);
+    await logNotification(db, {
+      memberId,
+      type: 'SMS',
+      message: smsBody.slice(0, 500),
+      status: r.ok ? 'Sent' : (r.skipped ? 'Skipped' : 'Failed'),
+    });
+  }
+  return results;
+}
+
+async function notifyBoard({ db, subject, text, smsText }) {
+  const results = [];
+  for (const email of boardEmails()) {
+    const r = await sendEmail({ to: email, subject, text });
+    results.push(r);
+    await logNotification(db, {
+      memberId: null,
+      type: 'Email-Board',
+      message: `${subject} → ${email}`,
+      status: r.ok ? 'Sent' : (r.skipped ? 'Skipped' : 'Failed'),
+    });
+  }
+  const smsBody = smsText || text;
+  for (const phone of boardPhones()) {
+    const r = await sendSms({ to: phone, body: smsBody });
+    results.push(r);
+    await logNotification(db, {
+      memberId: null,
+      type: 'SMS-Board',
+      message: smsBody.slice(0, 500),
+      status: r.ok ? 'Sent' : (r.skipped ? 'Skipped' : 'Failed'),
+    });
+  }
+  return results;
+}
+
+function formatChanges(changes) {
+  return Object.entries(changes)
+    .map(([field, v]) => `- ${field}: ${v.from || '(empty)'} → ${v.to || '(empty)'}`)
+    .join('\n');
+}
+
+async function notifyProfileUpdate(db, member, changes) {
+  if (!changes || !Object.keys(changes).length) return;
+  const name = member.full_name || `${member.first_name || ''} ${member.last_name || ''}`.trim();
+  const detail = formatChanges(changes);
+  const subject = `Hibret Edir — profile updated: ${name}`;
+  const text = `Member ${name} (#${member.member_number || member.id}) updated their profile:\n\n${detail}\n\nIf this was not authorized, contact the board immediately.`;
+  const sms = `Hibret Edir: Your profile was updated (${Object.keys(changes).join(', ')}). Call (424) 547-5594 if this wasn't you.`;
+
+  await notifyMember({
+    db,
+    memberId: member.id,
+    email: member.email,
+    phone: member.mobile || member.home_phone,
+    subject: 'Hibret Edir — your profile was updated',
+    text: `Hello ${name},\n\nWe saved changes to your Hibret Edir member profile:\n\n${detail}\n\nIf you did not make this change, call (424) 547-5594 immediately.`,
+    smsText: sms,
+  });
+  await notifyBoard({
+    db,
+    subject,
+    text,
+    smsText: `Hibret Edir board: ${name} updated profile (${Object.keys(changes).join(', ')}). Review in admin CRM.`,
+  });
+}
+
+async function notifyBeneficiaryUpdate(db, member, beneficiary, isNew) {
+  const name = member.full_name || `${member.first_name || ''} ${member.last_name || ''}`.trim();
+  const action = isNew ? 'added' : 'updated';
+  const detail = `Beneficiary: ${beneficiary.name}\nRelationship: ${beneficiary.relationship || '—'}\nPhone: ${beneficiary.phone || '—'}`;
+  await notifyMember({
+    db,
+    memberId: member.id,
+    email: member.email,
+    phone: member.mobile || member.home_phone,
+    subject: `Hibret Edir — beneficiary ${action}`,
+    text: `Hello ${name},\n\nYour death beneficiary on file was ${action}:\n\n${detail}\n\nKeep this information current so your family is protected.`,
+    smsText: `Hibret Edir: Beneficiary ${action} — ${beneficiary.name}. Update anytime in the member portal.`,
+  });
+  await notifyBoard({
+    db,
+    subject: `Hibret Edir — beneficiary ${action}: ${name}`,
+    text: `Member ${name} (#${member.member_number || member.id}) ${action} beneficiary:\n\n${detail}`,
+    smsText: `Hibret Edir: ${name} ${action} beneficiary ${beneficiary.name}.`,
+  });
+}
+
+async function notifyApplicationSubmitted(db, app) {
+  const name = app.member_full_name || 'Applicant';
+  const adminUrl = process.env.ADMIN_SITE_URL || process.env.URL || '';
+  const reviewHint = adminUrl ? `\n\nReview in admin: ${adminUrl.replace(/\/$/, '')}/admin/` : '\n\nReview in Admin → Applications.';
+  await notifyMember({
+    db,
+    memberId: null,
+    email: app.email,
+    phone: app.cell_phone || app.home_phone,
+    subject: 'Hibret Edir — application received',
+    text: `Hello ${name},\n\nWe received your Hibret Edir membership application. The board will review:\n- Name match with waiting list\n- Full application details\n- California ID\n- $200 registration fee\n\nYou will be contacted when review is complete.`,
+    smsText: `Hibret Edir: Application received for ${name}. Board review in progress — we'll contact you.`,
+  });
+  await notifyBoard({
+    db,
+    subject: `New membership application — ${name}`,
+    text: `A new membership application was submitted.\n\nApplicant: ${name}\nEmail: ${app.email || '—'}\nPhone: ${app.cell_phone || app.home_phone || '—'}\nApplication #${app.id}${reviewHint}`,
+    smsText: `Hibret Edir: New application from ${name}. Review in Admin → Applications.`,
+  });
+}
+
+async function notifyApplicationApproved(db, app, member) {
+  const name = member.full_name || app.member_full_name;
+  await notifyMember({
+    db,
+    memberId: member.id,
+    email: member.email || app.email,
+    phone: member.mobile || app.cell_phone,
+    subject: 'Hibret Edir — membership approved',
+    text: `Congratulations ${name}!\n\nYour membership application was approved. You are now member #${member.member_number} in Hibret Edir.\n\nSign in to the member portal with your phone number to view invoices and update your profile.`,
+    smsText: `Hibret Edir: Welcome! Your membership was approved. Member #${member.member_number}. Portal: hibretedir.com/portal`,
+  });
+}
+
+async function notifyApplicationRejected(db, app, notes) {
+  const name = app.member_full_name || 'Applicant';
+  await notifyMember({
+    db,
+    memberId: null,
+    email: app.email,
+    phone: app.cell_phone || app.home_phone,
+    subject: 'Hibret Edir — application update',
+    text: `Hello ${name},\n\nThank you for your membership application. After board review, we are unable to approve it at this time.\n\n${notes ? `Note: ${notes}\n\n` : ''}Questions? Call (424) 547-5594.`,
+    smsText: `Hibret Edir: Your application was not approved at this time. Call (424) 547-5594 with questions.`,
+  });
+}
+
+module.exports = {
+  sendEmail,
+  sendSms,
+  logNotification,
+  notifyMember,
+  notifyBoard,
+  notifyProfileUpdate,
+  notifyBeneficiaryUpdate,
+  notifyApplicationSubmitted,
+  notifyApplicationApproved,
+  notifyApplicationRejected,
+};

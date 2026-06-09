@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Membership Application — Hibret Edir</title>
+<link rel="stylesheet" href="/css/hibret.css">
+<link rel="stylesheet" href="/css/compat.css">
+<link rel="stylesheet" href="/css/public-pages.css">
+</head>
+<body class="site-public">
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand">
+      <img src="/logo.png" alt="Hibret Edir">
+      <div>
+        <div class="nav-brand-name">Hibret Edir</div>
+        <div class="nav-brand-sub en">Membership Application</div>
+        <div class="nav-brand-sub am">የአባልነት ማመልከቻ</div>
+      </div>
+    </a>
+    <div class="nav-lang-row" style="margin-left:auto">
+      <button class="lang-btn on" id="lb-en" onclick="setLang('en')">EN</button>
+      <button class="lang-btn" id="lb-am" onclick="setLang('am')">አማ</button>
+    </div>
+  </div>
+</nav>
+
+<main class="app-page">
+  <div class="app-page-inner">
+
+    <div class="app-page-head">
+      <div class="sec-tag en">Members Only — By Invitation</div>
+      <div class="sec-tag am">ለአባላት — በግብዣ ብቻ</div>
+      <h1 class="sec-title en">Membership Application</h1>
+      <h1 class="sec-title am">የአባልነት ማመልከቻ</h1>
+      <div class="sec-line"></div>
+      <p class="sec-sub en">Complete this form when the board invites you to apply. It is separate from the short waiting list sign-up.</p>
+      <p class="sec-sub am">ከተጠባባቂ ዝርዝር የተለየ — በግብዣ ብቻ።</p>
+    </div>
+
+    <!-- Link to waiting list (required to submit) — no card -->
+    <div class="verify-strip" id="verifyPanel">
+      <h3 class="en">Link to Waiting List (required to submit)</h3>
+      <h3 class="am">ከተጠባባቂ ዝርዝር ጋር ያገናኙ</h3>
+      <p class="verify-strip-sub en">Enter the same email and phone you used on the waiting list so the board can verify your name.</p>
+      <p class="verify-strip-sub am">በተጠባባቂ ዝርዝር ላይ ያገለጹትን ኢሜይል እና ስልክ ያስገቡ — ቦርዱ ስምዎን ያረጋግጣል።</p>
+      <div class="form-msg" id="verifyMsg"></div>
+      <form id="verifyForm" class="verify-form" onsubmit="verifyApproval(event)">
+        <div class="fg-row">
+          <div class="fg">
+            <label class="en">Email *</label>
+            <label class="am">ኢሜይል *</label>
+            <input type="email" name="email">
+          </div>
+          <div class="fg">
+            <label class="en">Phone *</label>
+            <label class="am">ስልክ *</label>
+            <input type="tel" name="phone" id="verifyPhone" placeholder="(xxx) xxx-xxxx">
+          </div>
+        </div>
+        <button type="submit" class="btn-verify"><span class="en">Verify waiting list →</span><span class="am">ዝርዝር ያረጋግጡ →</span></button>
+      </form>
+      <p class="form-fine en">Not on the list yet? <a href="/#apply">Join the waiting list</a> first. <a href="/#waitingliststatus">View queue status</a>.</p>
+      <p class="form-fine am">እስካሁን ባልተመዘገቡ? መጀመሪያ <a href="/#apply">ተጠባባቂ ዝርዝር</a> ይመዝገቡ። <a href="/#waitingliststatus">ሁኔታ ይመልከቱ</a>።</p>
+    </div>
+
+    <!-- Full application (link waiting list above before submitting) -->
+    <div id="membershipPanel">
+      <div class="form-msg" id="wlLinkedBanner" style="display:none"></div>
+      <div class="form-msg" id="memberMsg"></div>
+
+      <form id="membershipForm" onsubmit="submitMembership(event)">
+        <input type="hidden" name="waiting_list_id" id="waitingListId">
+
+        <section class="app-form-section form-box">
+          <h3 class="en">Member Information</h3>
+          <h3 class="am">የአባል መረጃ</h3>
+          <div class="fg-row">
+            <div class="fg">
+              <label class="en">Member Full Name *</label>
+              <label class="am">የአባሉ ሙሉ ስም *</label>
+              <input type="text" name="member_full_name" id="memberFullName">
+              <div class="id-upload-actions">
+                <button type="button" class="id-upload-link" id="memberIdCamera"><span class="en">Take photo</span><span class="am">ፎቶ ይነሱ</span></button>
+                <button type="button" class="id-upload-link id-upload-secondary" id="memberIdFile"><span class="en">Upload CA ID</span><span class="am">መታወቂያ ይስቀሉ</span></button>
+              </div>
+              <input type="file" id="memberIdCameraInput" accept="image/*" capture="environment" hidden>
+              <input type="file" id="memberIdFileInput" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf" hidden>
+              <div class="id-preview id-preview-inline" id="memberIdPreview" hidden></div>
+            </div>
+            <div class="fg">
+              <label class="en">Spouse Full Name</label>
+              <label class="am">የትዳር ጋባን ሙሉ ስም</label>
+              <input type="text" name="spouse_full_name" id="spouseFullName">
+              <div class="id-upload-actions" id="spouseIdActions" hidden>
+                <button type="button" class="id-upload-link" id="spouseIdCamera"><span class="en">Take photo</span><span class="am">ፎቶ ይነሱ</span></button>
+                <button type="button" class="id-upload-link id-upload-secondary" id="spouseIdFile"><span class="en">Upload CA ID</span><span class="am">መታወቂያ ይስቀሉ</span></button>
+              </div>
+              <input type="file" id="spouseIdCameraInput" accept="image/*" capture="environment" hidden>
+              <input type="file" id="spouseIdFileInput" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf" hidden>
+              <div class="id-preview id-preview-inline" id="spouseIdPreview" hidden></div>
+            </div>
+          </div>
+          <p class="form-fine en">California ID required for each adult — take a photo with your phone or upload a scan (JPG, PNG, or PDF, max 5 MB).</p>
+          <p class="form-fine am">ለכל አዋቂ የካሊፎርኒያ መታወቂያ ያስፈልጋል — በስልክ ፎቶ ይነሱ ወይም ስካን ይስቀሉ (JPG, PNG, PDF · ከ5 MB በታች)።</p>
+          <div class="fg">
+            <label class="en">Permanent Address</label>
+            <label class="am">ዘላቂ አድራሻ</label>
+            <input type="text" name="address" id="memAddress">
+          </div>
+          <div class="fg-row">
+            <div class="fg"><label class="en">City</label><label class="am">ከተማ</label><input type="text" name="city" id="memCity"></div>
+            <div class="fg"><label class="en">State</label><label class="am">ክልል</label><input type="text" name="state" value="CA" id="memState"></div>
+            <div class="fg"><label class="en">Zip</label><label class="am">ዚፕ</label><input type="text" name="zip" id="memZip"></div>
+          </div>
+          <div class="fg-row">
+            <div class="fg"><label class="en">Home Phone</label><label class="am">የቤት ስልክ</label><input type="tel" name="home_phone"></div>
+            <div class="fg"><label class="en">Office Phone</label><label class="am">የቢሮ ስልክ</label><input type="tel" name="office_phone"></div>
+          </div>
+          <div class="fg-row">
+            <div class="fg"><label class="en">Cell</label><label class="am">ሞባይል</label><input type="tel" name="cell_phone" id="memCell"></div>
+            <div class="fg"><label class="en">Email</label><label class="am">ኢሜይል</label><input type="email" name="email" id="memEmail"></div>
+          </div>
+        </section>
+
+        <section class="app-form-section form-box">
+          <h3 class="en">Children Under 26</h3>
+          <h3 class="am">ከ26 ዓመት በታች ልጆች</h3>
+          <p class="form-fine en">Per <strong>Article 8</strong> of our by-laws: list each biological or legally adopted child covered under membership (under age 26). Include full name and date of birth.</p>
+          <p class="form-fine am">በደንብ አንቀጽ 8 — እስከ 26 ዓመት ያሉ ልጆች።</p>
+          <div class="repeat-rows" id="childrenRows"></div>
+          <button type="button" class="btn-add-row" id="addChildBtn" onclick="addChildRow()"><span class="en">+ Add another child</span><span class="am">+ ሌላ ልጅ ያክሉ</span></button>
+        </section>
+
+        <section class="app-form-section form-box">
+          <h3 class="en">Death Beneficiary</h3>
+          <h3 class="am">የሞት ተቀባይ</h3>
+          <p class="form-fine en">Person who receives Edir benefits on behalf of the member or spouse, as applicable.</p>
+          <p class="form-fine am">በአባል ወይም ትዳር ጋባን ስም የኢድር ጥቅም የሚቀበል ሰው።</p>
+
+          <h4 class="ben-subhead en">For Member</h4>
+          <h4 class="ben-subhead am">ለአባል</h4>
+          <div class="fg-row">
+            <div class="fg"><label class="en">Full Name</label><label class="am">ሙሉ ስም</label><input type="text" name="ben_m_name"></div>
+            <div class="fg"><label class="en">Relationship</label><label class="am">ግንኙነት</label><input type="text" name="ben_m_rel"></div>
+          </div>
+          <div class="fg-row">
+            <div class="fg"><label class="en">Phone</label><label class="am">ስልክ</label><input type="tel" name="ben_m_phone"></div>
+            <div class="fg"><label class="en">Email</label><label class="am">ኢሜይል</label><input type="email" name="ben_m_email"></div>
+          </div>
+          <div class="fg"><label class="en">Address</label><label class="am">አድራሻ</label><input type="text" name="ben_m_address"></div>
+
+          <h4 class="ben-subhead en">For Spouse</h4>
+          <h4 class="ben-subhead am">ለትዳር</h4>
+          <div class="fg-row">
+            <div class="fg"><label class="en">Full Name</label><label class="am">ሙሉ ስም</label><input type="text" name="ben_s_name"></div>
+            <div class="fg"><label class="en">Relationship</label><label class="am">ግንኙነት</label><input type="text" name="ben_s_rel"></div>
+          </div>
+          <div class="fg-row">
+            <div class="fg"><label class="en">Phone</label><label class="am">ስልክ</label><input type="tel" name="ben_s_phone"></div>
+            <div class="fg"><label class="en">Email</label><label class="am">ኢሜይል</label><input type="email" name="ben_s_email"></div>
+          </div>
+          <div class="fg"><label class="en">Address</label><label class="am">አድራሻ</label><input type="text" name="ben_s_address"></div>
+        </section>
+
+        <section class="app-form-section form-box">
+          <h3 class="en">Emergency Contacts</h3>
+          <h3 class="am">ድንገተኛ ተጠሪዎች</h3>
+          <div id="emergencyBlocks"></div>
+        </section>
+
+        <p class="form-fine en">It is the member's responsibility to keep beneficiary and contact information current.</p>
+        <p class="form-fine am">ተጠቃሚ እና ተጠሪ መረጃ ሁልጊዜ ወቅታዊ መሆን የአባሉ ኃላፊነት ነው።</p>
+        <button type="submit" class="form-submit"><span class="en">Submit Membership Application →</span><span class="am">ማመልከቻ ያስገቡ →</span></button>
+      </form>
+    </div>
+
+  </div>
+</main>
+
+<script>
+const APPLY_API = '/.netlify/functions/apply';
+let verifiedRecord = null;
+let childRowCount = 0;
+const MAX_CHILD_ROWS = 8;
+const MAX_ID_BYTES = 5 * 1024 * 1024;
+const idUploads = { member: null, spouse: null };
+
+function setLang(l) {
+  document.documentElement.lang = l;
+  document.body.classList.toggle('lang-am', l === 'am');
+  ['lb-en','lb-am'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('on', id.includes(l));
+  });
+  localStorage.setItem('hl', l);
+  updateFormPlaceholders(l);
+}
+
+const FORM_PLACEHOLDERS = {
+  verifyPhone: { en: '(xxx) xxx-xxxx', am: '(xxx) xxx-xxxx' },
+  child_name: { en: 'Full name', am: 'ሙሉ ስም' },
+  child_dob: { en: 'MM/DD/YYYY', am: 'MM/DD/YYYY' },
+};
+
+function updateFormPlaceholders(lang) {
+  const l = lang || document.documentElement.lang || 'en';
+  Object.entries(FORM_PLACEHOLDERS).forEach(([key, text]) => {
+    const el = document.getElementById(key);
+    if (el) el.placeholder = text[l] || text.en;
+  });
+  document.querySelectorAll('input[name^="child_name_"]').forEach(el => {
+    el.placeholder = FORM_PLACEHOLDERS.child_name[l] || FORM_PLACEHOLDERS.child_name.en;
+  });
+  document.querySelectorAll('input[name^="child_dob_"]').forEach(el => {
+    el.placeholder = FORM_PLACEHOLDERS.child_dob[l] || FORM_PLACEHOLDERS.child_dob.en;
+  });
+}
+const sl = localStorage.getItem('hl');
+if (sl) setLang(sl);
+
+function showMsg(id, text, ok) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'form-msg ' + (ok ? 'ok' : 'err');
+  el.style.display = text ? 'block' : 'none';
+}
+
+function buildRepeatRows(containerId, count, fields, namePrefix) {
+  const c = document.getElementById(containerId);
+  c.innerHTML = '';
+  for (let i = 0; i < count; i++) {
+    const row = document.createElement('div');
+    row.className = 'repeat-row fg-row';
+    row.dataset.rowIndex = String(i);
+    fields.forEach(f => {
+      const fg = document.createElement('div');
+      fg.className = 'fg';
+      const inputName = `${namePrefix || f.name}_${i}`;
+      const type = f.type || 'text';
+      const labelEn = f.labelEn || f.label;
+      const labelAm = f.labelAm || f.label;
+      fg.innerHTML = `<label class="en">${labelEn}</label><label class="am">${labelAm}</label><input type="${type}" name="${inputName}">`;
+      row.appendChild(fg);
+    });
+    c.appendChild(row);
+  }
+  if (containerId === 'childrenRows') childRowCount = count;
+}
+
+function addChildRow() {
+  if (childRowCount >= MAX_CHILD_ROWS) return;
+  const c = document.getElementById('childrenRows');
+  const i = childRowCount;
+  const row = document.createElement('div');
+  row.className = 'repeat-row fg-row';
+  row.innerHTML = `
+    <div class="fg"><label class="en">Child name</label><label class="am">የልጅ ስም</label><input type="text" name="child_name_${i}"></div>
+    <div class="fg"><label class="en">Date of birth</label><label class="am">የልደት ቀን</label><input type="text" name="child_dob_${i}"></div>`;
+  c.appendChild(row);
+  childRowCount += 1;
+  updateFormPlaceholders();
+}
+
+function buildEmergencyBlocks() {
+  const c = document.getElementById('emergencyBlocks');
+  c.innerHTML = '';
+  for (let i = 0; i < 2; i++) {
+    c.innerHTML += `
+      <div class="em-block">
+        <h4 class="en">Contact ${i + 1}</h4>
+        <h4 class="am">ተጠሪ ${i + 1}</h4>
+        <div class="fg-row">
+          <div class="fg"><label class="en">Full Name</label><label class="am">ሙሉ ስም</label><input type="text" name="ec_name_${i}"></div>
+          <div class="fg"><label class="en">Relationship</label><label class="am">ግንኙነት</label><input type="text" name="ec_rel_${i}"></div>
+        </div>
+        <div class="fg-row">
+          <div class="fg"><label class="en">Phone</label><label class="am">ስልክ</label><input type="tel" name="ec_phone_${i}"></div>
+          <div class="fg"><label class="en">Email</label><label class="am">ኢሜይል</label><input type="email" name="ec_email_${i}"></div>
+        </div>
+        <div class="fg"><label class="en">Address</label><label class="am">አድራሻ</label><input type="text" name="ec_address_${i}"></div>
+      </div>`;
+  }
+}
+
+buildRepeatRows('childrenRows', 3, [
+  { labelEn: 'Child name', labelAm: 'የልጅ ስም', name: 'child_name' },
+  { labelEn: 'Date of birth', labelAm: 'የልደት ቀን', name: 'child_dob' },
+]);
+buildEmergencyBlocks();
+updateFormPlaceholders(localStorage.getItem('hl') || 'en');
+
+function syncSpouseIdBlock() {
+  const spouseName = document.getElementById('spouseFullName')?.value?.trim();
+  const actions = document.getElementById('spouseIdActions');
+  if (actions) actions.hidden = !spouseName;
+  if (!spouseName) {
+    idUploads.spouse = null;
+    const preview = document.getElementById('spouseIdPreview');
+    if (preview) {
+      preview.hidden = true;
+      preview.innerHTML = '';
+    }
+    updateIdLinkLabels('spouse');
+  }
+}
+
+function setIdBtnLabels(btn, enText, amText) {
+  if (!btn) return;
+  const en = btn.querySelector('.en');
+  const am = btn.querySelector('.am');
+  if (en) en.textContent = enText;
+  if (am) am.textContent = amText;
+}
+
+function updateIdLinkLabels(which) {
+  const prefix = which === 'member' ? 'member' : 'spouse';
+  const camera = document.getElementById(prefix + 'IdCamera');
+  const file = document.getElementById(prefix + 'IdFile');
+  const uploaded = !!idUploads[which];
+  if (uploaded) {
+    setIdBtnLabels(camera, 'Retake photo', 'ፎቶ እንደገና ይነሱ');
+    setIdBtnLabels(file, 'Change file', 'ፋይል ይቀይሩ');
+  } else {
+    setIdBtnLabels(camera, 'Take photo', 'ፎቶ ይነሱ');
+    setIdBtnLabels(file, 'Upload CA ID', 'መታወቂያ ይስቀሉ');
+  }
+  camera?.classList.toggle('uploaded', uploaded);
+  file?.classList.toggle('uploaded', uploaded);
+}
+
+document.getElementById('spouseFullName')?.addEventListener('input', syncSpouseIdBlock);
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('Could not read file'));
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderIdPreview(which, file, dataUrl) {
+  const preview = document.getElementById(which === 'member' ? 'memberIdPreview' : 'spouseIdPreview');
+  if (!preview) return;
+  const sizeKb = (file.size / 1024).toFixed(1);
+  const isImage = file.type.startsWith('image/');
+  preview.hidden = false;
+  preview.innerHTML = `
+    <div class="id-preview-row">
+      ${isImage ? `<img src="${dataUrl}" alt="" class="id-preview-thumb">` : '<span class="id-preview-doc">📄 PDF</span>'}
+      <div class="id-preview-meta">
+        <strong>${file.name.replace(/</g, '&lt;')}</strong>
+        <span>${sizeKb} KB</span>
+      </div>
+      <button type="button" class="id-preview-remove" data-which="${which}" aria-label="Remove">✕</button>
+    </div>`;
+  preview.querySelector('.id-preview-remove')?.addEventListener('click', () => clearIdUpload(which));
+}
+
+async function handleIdFile(which, file) {
+  if (!file) return;
+  const okType = file.type === 'application/pdf' || file.type.startsWith('image/');
+  if (!okType) {
+    showMsg('memberMsg', 'ID must be a photo (JPG, PNG) or PDF.', false);
+    return;
+  }
+  if (file.size > MAX_ID_BYTES) {
+    showMsg('memberMsg', 'ID file is too large (maximum 5 MB).', false);
+    return;
+  }
+  const dataUrl = await readFileAsDataUrl(file);
+  const base64 = dataUrl.split(',')[1] || '';
+  idUploads[which] = {
+    filename: file.name,
+    mime_type: file.type,
+    size: file.size,
+    data: base64,
+  };
+  renderIdPreview(which, file, dataUrl);
+  updateIdLinkLabels(which);
+  showMsg('memberMsg', '', true);
+}
+
+function clearIdUpload(which) {
+  idUploads[which] = null;
+  const prefix = which === 'member' ? 'member' : 'spouse';
+  ['IdCameraInput', 'IdFileInput'].forEach(suffix => {
+    const input = document.getElementById(prefix + suffix);
+    if (input) input.value = '';
+  });
+  const preview = document.getElementById(prefix + 'IdPreview');
+  if (preview) {
+    preview.hidden = true;
+    preview.innerHTML = '';
+  }
+  updateIdLinkLabels(which);
+}
+
+function bindIdUpload(which) {
+  const prefix = which === 'member' ? 'member' : 'spouse';
+  const cameraInput = document.getElementById(prefix + 'IdCameraInput');
+  const fileInput = document.getElementById(prefix + 'IdFileInput');
+  const cameraBtn = document.getElementById(prefix + 'IdCamera');
+  const fileBtn = document.getElementById(prefix + 'IdFile');
+  cameraBtn?.addEventListener('click', () => cameraInput?.click());
+  fileBtn?.addEventListener('click', () => fileInput?.click());
+  cameraInput?.addEventListener('change', () => {
+    const file = cameraInput.files?.[0];
+    if (file) handleIdFile(which, file);
+    cameraInput.value = '';
+  });
+  fileInput?.addEventListener('change', () => {
+    const file = fileInput.files?.[0];
+    if (file) handleIdFile(which, file);
+    fileInput.value = '';
+  });
+}
+
+bindIdUpload('member');
+bindIdUpload('spouse');
+
+async function verifyApproval(e) {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const body = {
+    email: fd.get('email'),
+    phone: fd.get('phone'),
+  };
+  showMsg('verifyMsg', 'Verifying…', true);
+  try {
+    const res = await fetch(APPLY_API + '/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showMsg('verifyMsg', data.error || 'Verification failed.', false);
+      return;
+    }
+    verifiedRecord = data;
+    document.getElementById('verifyPanel').style.display = 'none';
+    document.getElementById('waitingListId').value = data.waiting_list_id;
+    document.getElementById('memberFullName').value = data.full_name || '';
+    document.getElementById('memAddress').value = data.address || '';
+    document.getElementById('memCell').value = data.phone || '';
+    document.getElementById('memEmail').value = data.email || '';
+    const banner = document.getElementById('wlLinkedBanner');
+    if (banner) {
+      banner.style.display = 'block';
+      banner.className = 'form-msg ok';
+      banner.textContent = 'Linked to waiting list: ' + (data.full_name || data.email || 'verified');
+    }
+    syncSpouseIdBlock();
+    window.scrollTo(0, 0);
+  } catch {
+    showMsg('verifyMsg', 'Network error. Please try again.', false);
+  }
+}
+
+function collectChildren() {
+  const rows = [];
+  for (let i = 0; i < childRowCount; i++) {
+    const name = document.querySelector(`[name="child_name_${i}"]`)?.value?.trim();
+    const dob = document.querySelector(`[name="child_dob_${i}"]`)?.value?.trim();
+    if (!name && !dob) continue;
+    rows.push({ name, dob });
+  }
+  return rows;
+}
+
+function collectEmergency() {
+  const rows = [];
+  for (let i = 0; i < 2; i++) {
+    const row = {
+      name: document.querySelector(`[name="ec_name_${i}"]`)?.value?.trim(),
+      relationship: document.querySelector(`[name="ec_rel_${i}"]`)?.value?.trim(),
+      phone: document.querySelector(`[name="ec_phone_${i}"]`)?.value?.trim(),
+      email: document.querySelector(`[name="ec_email_${i}"]`)?.value?.trim(),
+      address: document.querySelector(`[name="ec_address_${i}"]`)?.value?.trim(),
+    };
+    if (row.name || row.phone) rows.push(row);
+  }
+  return rows;
+}
+
+async function submitMembership(e) {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const waitingListId = parseInt(fd.get('waiting_list_id'), 10);
+  if (!waitingListId) {
+    showMsg('memberMsg', 'Please link your waiting list record above (email + phone) before submitting.', false);
+    document.getElementById('verifyPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  const spouseName = String(fd.get('spouse_full_name') || '').trim();
+  syncSpouseIdBlock();
+
+  const children = collectChildren();
+  const body = {
+    waiting_list_id: waitingListId,
+    member_full_name: fd.get('member_full_name'),
+    spouse_full_name: fd.get('spouse_full_name'),
+    address: fd.get('address'),
+    city: fd.get('city'),
+    state: fd.get('state'),
+    zip: fd.get('zip'),
+    home_phone: fd.get('home_phone'),
+    office_phone: fd.get('office_phone'),
+    cell_phone: fd.get('cell_phone'),
+    email: fd.get('email'),
+    children,
+    beneficiary_member: {
+      name: fd.get('ben_m_name'),
+      relationship: fd.get('ben_m_rel'),
+      phone: fd.get('ben_m_phone'),
+      email: fd.get('ben_m_email'),
+      address: fd.get('ben_m_address'),
+    },
+    beneficiary_spouse: {
+      name: fd.get('ben_s_name'),
+      relationship: fd.get('ben_s_rel'),
+      phone: fd.get('ben_s_phone'),
+      email: fd.get('ben_s_email'),
+      address: fd.get('ben_s_address'),
+    },
+    emergency_contacts: collectEmergency(),
+    additional_family: [],
+    id_documents: {
+      ...(idUploads.member ? { member: idUploads.member } : {}),
+      ...(spouseName && idUploads.spouse ? { spouse: idUploads.spouse } : {}),
+    },
+  };
+  showMsg('memberMsg', 'Submitting…', true);
+  try {
+    const res = await fetch(APPLY_API + '/membership', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      showMsg('memberMsg', data.error || 'Submission failed.', false);
+      return;
+    }
+    showMsg('memberMsg', data.message || 'Application submitted!', true);
+    e.target.querySelectorAll('button, input, textarea, select').forEach(el => { el.disabled = true; });
+  } catch {
+    showMsg('memberMsg', 'Network error. Please call (424) 547-5594.', false);
+  }
+}
+</script>
+</body>
+</html>

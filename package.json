@@ -1,0 +1,30 @@
+{
+  "name": "hibret-edir",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/start-dev.js",
+    "start": "node scripts/start-dev.js",
+    "dev:static": "python -m http.server 8888 --directory public",
+    "seed": "python scripts/seed_from_exports.py",
+    "seed:dry": "python scripts/seed_from_exports.py --dry-run",
+    "seed:stats": "python scripts/seed_from_exports.py --stats-only",
+    "import:waiting-list": "python scripts/import_waiting_list.py --merge-wix-status",
+    "import:waiting-list:seed": "python scripts/import_waiting_list.py --merge-wix-status --seed",
+    "import:waiting-list:dry": "python scripts/import_waiting_list.py --merge-wix-status --dry-run",
+    "build:invoice-snapshot": "python scripts/build_invoice_snapshot.py",
+    "build:members-snapshot": "python scripts/build_members_snapshot.py",
+    "db:migrate": "node scripts/run_schema.js",
+    "test": "echo \"No tests configured\" && exit 0"
+  },
+  "dependencies": {
+    "pg": "^8.10.0",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.0",
+    "dotenv": "^16.0.0",
+    "node-fetch": "^2.6.7"
+  },
+  "devDependencies": {
+    "netlify-cli": "^11.0.0"
+  }
+}

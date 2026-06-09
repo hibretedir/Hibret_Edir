@@ -1,0 +1,896 @@
+/* Hibret Edir — Portal & Admin flag theme (green → gold → red) */
+
+/* ── Shared accent utilities ── */
+.accent-green { --accent: var(--green); --accent-soft: var(--green-soft); --accent-text: var(--green-dark); }
+.accent-gold { --accent: var(--gold); --accent-soft: rgba(252, 221, 9, 0.18); --accent-text: #856404; }
+.accent-red { --accent: var(--red); --accent-soft: var(--red-soft); --accent-text: var(--red); }
+
+.kpi-val.gold { color: var(--gold-dark); }
+
+/* ══════════════════════════════════════
+   MEMBER PORTAL
+   ══════════════════════════════════════ */
+
+body.app-portal {
+  --bg: #071810;
+  --surface: rgba(255, 255, 255, 0.08);
+  --surface2: rgba(255, 255, 255, 0.04);
+  --surface3: rgba(255, 255, 255, 0.1);
+  --text: #eef4ee;
+  --text-muted: rgba(238, 244, 238, 0.65);
+  --border: rgba(252, 221, 9, 0.18);
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  --green-soft: rgba(7, 137, 48, 0.22);
+  --red-soft: rgba(218, 18, 26, 0.18);
+  background: #071810;
+  color: #eef4ee;
+}
+
+body.app-portal #portalApp {
+  background: linear-gradient(165deg, #061510 0%, #0a2218 50%, #071810 100%);
+  min-height: 100vh;
+}
+
+body.app-portal .auth-card,
+body.app-portal .confirm-wrap {
+  background: #fff;
+  color: #1a1a1a;
+  --text: #1a1a1a;
+  --text-muted: #5c5c5c;
+  --border: #e5e5e0;
+  --bg: #f7f7f5;
+  --surface: #fff;
+  --green-soft: #e8f5ec;
+  --red-soft: #fdeced;
+}
+
+body.app-portal .auth-card .form-input,
+body.app-portal .auth-card .phone-prefix,
+body.app-portal .auth-card .pin-input,
+body.app-portal .confirm-wrap .form-input,
+body.app-portal .confirm-wrap .pin-input {
+  background: #fff;
+  color: #1a1a1a;
+  border-color: #e5e5e0;
+}
+
+.app-portal .sec-hd h2,
+.app-portal .profile-nm,
+.app-portal .inv-for,
+.app-portal .he-inv-name,
+.app-portal .qa-title,
+.app-portal .upload-card label,
+.app-portal .prof-row span:last-child {
+  color: #eef4ee;
+}
+
+.app-portal .inv-card,
+.app-portal .he-inv,
+.app-portal .qa-btn,
+.app-portal .upload-card {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(252, 221, 9, 0.18);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+}
+
+.app-portal .portal-tabs {
+  background: rgba(4, 16, 10, 0.96);
+  border-bottom-color: rgba(252, 221, 9, 0.2);
+  backdrop-filter: blur(10px);
+}
+
+.app-portal .portal-tabs .bnav {
+  color: rgba(238, 244, 238, 0.55);
+}
+
+.app-portal .portal-tabs .bnav.active {
+  color: #eef4ee;
+  border-bottom-color: var(--gold);
+}
+
+.app-portal .portal-nav-brand:hover .portal-nav-name {
+  color: var(--gold);
+}
+
+.app-portal .form-input,
+.app-portal .form-select,
+.app-portal .pin-input {
+  background: rgba(0, 0, 0, 0.35);
+  border-color: rgba(252, 221, 9, 0.22);
+  color: #eef4ee;
+}
+
+.app-portal .form-input::placeholder {
+  color: rgba(238, 244, 238, 0.4);
+}
+
+.app-portal .auth-card .form-input::placeholder {
+  color: #999;
+}
+
+.app-portal .method-opt {
+  background: rgba(0, 0, 0, 0.25);
+  border-color: rgba(252, 221, 9, 0.2);
+  color: #eef4ee;
+}
+
+.app-portal .method-opt.sel {
+  background: rgba(7, 137, 48, 0.28);
+  border-color: var(--green);
+}
+
+.app-portal .drop-zone,
+.app-portal .he-drop {
+  background: rgba(0, 0, 0, 0.2);
+  border-color: rgba(252, 221, 9, 0.25);
+  color: rgba(238, 244, 238, 0.65);
+}
+
+.app-portal .drop-zone.over {
+  background: rgba(7, 137, 48, 0.2);
+}
+
+.app-portal .modal-sheet,
+.app-portal .he-modal {
+  background: #0a2218;
+  color: #eef4ee;
+}
+
+.app-portal .sheet-hd,
+.app-portal .he-modal-head {
+  border-bottom-color: rgba(252, 221, 9, 0.15);
+}
+
+.app-portal .prof-row {
+  border-bottom-color: rgba(252, 221, 9, 0.12);
+}
+
+.app-portal .ben-card h3,
+.app-portal .settings-card h3,
+.app-portal .profile-since {
+  color: rgba(238, 244, 238, 0.85);
+}
+
+.app-portal .ben-card p {
+  color: var(--text-muted);
+}
+
+.app-portal .setting-row,
+.app-portal .btn-outline {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(252, 221, 9, 0.18);
+  color: #eef4ee;
+}
+
+.app-portal .notif-item {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(252, 221, 9, 0.15);
+  color: #eef4ee;
+}
+
+.app-portal .empty-state {
+  color: var(--text-muted);
+}
+
+.app-portal .auth-wrap {
+  background: linear-gradient(145deg, #021a09 0%, #033d11 38%, #056b24 62%, #031a0e 100%);
+}
+
+.app-portal .auth-card,
+.app-portal .confirm-wrap {
+  max-width: 280px;
+  padding: 16px 14px 18px;
+}
+
+.app-portal .auth-logo {
+  margin-bottom: 8px;
+  gap: 8px;
+}
+
+.app-portal .auth-logo img {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  object-fit: contain;
+  border-radius: 50%;
+  border: 2px solid var(--gold);
+}
+
+.app-portal .auth-logo-text .name {
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.app-portal .auth-logo-text .sub {
+  font-size: 11px;
+  margin-bottom: 0;
+}
+
+.app-portal .auth-logo-text .amh {
+  font-size: 10px;
+}
+
+.app-portal .auth-title {
+  font-size: 16px;
+  margin: 8px 0 4px;
+}
+
+.app-portal .auth-sub {
+  font-size: 12px;
+  margin-bottom: 14px;
+}
+
+.app-portal .auth-card .form-input,
+.app-portal .auth-card .phone-prefix {
+  padding: 11px 12px;
+  font-size: 15px;
+}
+
+.app-portal .auth-card .pin-inputs {
+  margin: 4px 0 14px;
+  gap: 8px;
+}
+
+.app-portal .auth-card .pin-input {
+  width: 46px;
+  height: 50px;
+  font-size: 20px;
+}
+
+.app-portal .auth-card .btn-main {
+  min-height: 44px;
+  font-size: 14px;
+}
+
+.app-portal .auth-card .form-group {
+  margin-bottom: 12px;
+}
+
+.app-portal .auth-card,
+.app-portal .confirm-wrap {
+  border-top: 3px solid var(--gold);
+}
+
+.app-portal .portal-nav {
+  background: linear-gradient(90deg, #044d1a, #056b24, #044d1a);
+  border-bottom: 1px solid rgba(252, 221, 9, 0.25);
+}
+
+.app-portal .portal-nav-name { color: #fff; }
+
+.app-portal .portal-notif-btn {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(252, 221, 9, 0.35);
+  color: #fff;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.app-portal .portal-notif-btn .notif-bell {
+  pointer-events: none;
+}
+
+.app-portal .portal-avatar {
+  background: linear-gradient(135deg, var(--gold-dark), var(--gold));
+  color: #1a1a1a;
+}
+
+.app-portal .greeting {
+  background: linear-gradient(135deg, var(--green-dark), var(--green));
+  border-top: 3px solid var(--gold);
+  box-shadow: 0 8px 24px rgba(7, 137, 48, 0.25);
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+
+.app-portal .greeting-top {
+  align-items: flex-start;
+}
+
+.app-portal .greeting-logo {
+  width: 40px;
+  height: 40px;
+}
+
+.app-portal .greeting-name {
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.app-portal .greeting-status {
+  font-size: 11px;
+}
+
+.app-portal .greeting-stats {
+  margin-top: 12px;
+  padding-top: 10px;
+  gap: 6px;
+}
+
+.app-portal .greeting-stats .gs {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-sm);
+  padding: 8px 4px;
+  border-top: 3px solid transparent;
+}
+
+.app-portal .greeting-stats .gs-val {
+  font-size: 17px;
+}
+
+.app-portal .greeting-stats .gs-label {
+  font-size: 9px;
+}
+
+.app-portal .greeting-stats .gs:nth-child(1) {
+  border-top-color: #9ae6b0;
+}
+
+.app-portal .greeting-stats .gs:nth-child(1) .gs-val {
+  color: #b8f0c8;
+}
+
+.app-portal .greeting-stats .gs:nth-child(2) {
+  border-top-color: var(--gold);
+}
+
+.app-portal .greeting-stats .gs:nth-child(2) .gs-val {
+  color: var(--gold);
+}
+
+.app-portal .greeting-stats .gs:nth-child(3) {
+  border-top-color: #fca5a5;
+}
+
+.app-portal .greeting-stats .gs:nth-child(3) .gs-val {
+  color: #fecaca;
+}
+
+.app-portal .see-all { color: #9ae6b0; }
+
+/* Quick actions — full card tints */
+.app-portal .qa-btn {
+  border-top: 3px solid transparent;
+  transition: transform 0.15s, border-color 0.15s;
+}
+
+.app-portal .qa-accent-green {
+  background: rgba(7, 137, 48, 0.22);
+  border-color: rgba(7, 137, 48, 0.45);
+  border-top-color: var(--green);
+}
+
+.app-portal .qa-accent-green .qa-icon {
+  background: rgba(7, 137, 48, 0.35);
+  color: #9ae6b0;
+}
+
+.app-portal .qa-accent-gold {
+  background: rgba(252, 221, 9, 0.12);
+  border-color: rgba(252, 221, 9, 0.45);
+  border-top-color: var(--gold);
+}
+
+.app-portal .qa-accent-gold .qa-icon {
+  background: rgba(252, 221, 9, 0.22);
+  color: var(--gold);
+}
+
+.app-portal .qa-accent-red {
+  background: rgba(218, 18, 26, 0.16);
+  border-color: rgba(218, 18, 26, 0.35);
+  border-top-color: var(--red);
+}
+
+.app-portal .qa-accent-red .qa-icon {
+  background: rgba(218, 18, 26, 0.25);
+  color: #fca5a5;
+}
+
+/* Upload cards — green / gold / red cycle */
+.app-portal #tUpload .upload-card {
+  border-top: 3px solid transparent;
+}
+
+.app-portal #tUpload .upload-card:nth-of-type(1) {
+  background: rgba(7, 137, 48, 0.18);
+  border-color: rgba(7, 137, 48, 0.35);
+  border-top-color: var(--green);
+}
+
+.app-portal #tUpload .upload-card:nth-of-type(2) {
+  background: rgba(252, 221, 9, 0.1);
+  border-color: rgba(252, 221, 9, 0.35);
+  border-top-color: var(--gold);
+}
+
+.app-portal #tUpload .upload-card:nth-of-type(3) {
+  background: rgba(218, 18, 26, 0.12);
+  border-color: rgba(218, 18, 26, 0.3);
+  border-top-color: var(--red);
+}
+
+.app-portal #tUpload .upload-card:nth-of-type(4) {
+  background: rgba(7, 137, 48, 0.18);
+  border-color: rgba(7, 137, 48, 0.35);
+  border-top-color: var(--green);
+}
+
+.app-portal #tUpload .upload-card:nth-of-type(5) {
+  background: rgba(252, 221, 9, 0.1);
+  border-color: rgba(252, 221, 9, 0.35);
+  border-top-color: var(--gold);
+}
+
+.app-portal .profile-card,
+.app-portal .ben-card,
+.app-portal .settings-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+}
+
+.app-portal .profile-card {
+  border-top: 3px solid var(--green);
+  background: rgba(7, 137, 48, 0.18);
+  border-color: rgba(7, 137, 48, 0.35);
+}
+
+.app-portal .ben-card {
+  border-top: 3px solid var(--gold);
+  background: rgba(252, 221, 9, 0.1);
+  border-color: rgba(252, 221, 9, 0.35);
+}
+
+.app-portal .settings-card {
+  border-top: 3px solid var(--red);
+  background: rgba(218, 18, 26, 0.12);
+  border-color: rgba(218, 18, 26, 0.3);
+}
+
+.app-portal .inv-bar {
+  background: linear-gradient(90deg, var(--green-dark), var(--green));
+}
+
+/* Top tab bar — active tab accent colors */
+.app-portal .portal-tabs .bnav.active[data-accent="green"] { color: #9ae6b0; }
+.app-portal .portal-tabs .bnav.active[data-accent="gold"] { color: var(--gold); }
+.app-portal .portal-tabs .bnav.active[data-accent="red"] { color: #fca5a5; }
+
+.app-portal .portal-tabs .bnav.active[data-accent="green"] .bnav-ic {
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.app-portal .portal-tabs .bnav.active[data-accent="gold"] .bnav-ic {
+  background: rgba(252, 221, 9, 0.25);
+  color: #856404;
+}
+
+.app-portal .portal-tabs .bnav.active[data-accent="red"] .bnav-ic {
+  background: var(--red-soft);
+  color: var(--red);
+}
+
+.app-portal .bnav-ic {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.app-portal .btn-main {
+  background: linear-gradient(135deg, var(--green-dark), var(--green));
+  border: 1px solid rgba(252, 221, 9, 0.25);
+}
+
+/* ══════════════════════════════════════
+   ADMIN DASHBOARD
+   Darker than public site — same green / gold / red scheme
+   ══════════════════════════════════════ */
+
+body.app-admin {
+  --bg: #030806;
+  --surface: rgba(255, 255, 255, 0.07);
+  --surface2: rgba(255, 255, 255, 0.04);
+  --surface3: rgba(255, 255, 255, 0.1);
+  --text: #eef4ee;
+  --text2: rgba(238, 244, 238, 0.72);
+  --text-muted: rgba(238, 244, 238, 0.58);
+  --border: rgba(252, 221, 9, 0.16);
+  --shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  --green-soft: rgba(7, 137, 48, 0.2);
+  --red-soft: rgba(218, 18, 26, 0.16);
+  --accent: var(--gold);
+  --accent2: var(--gold);
+  --muted: rgba(238, 244, 238, 0.58);
+  --blue: #9ec5ff;
+  background: #030806;
+  color: var(--text);
+}
+
+.app-admin .app {
+  background: linear-gradient(165deg, #020504 0%, #051009 42%, #030806 100%);
+  min-height: 100vh;
+}
+
+.app-admin .sidebar {
+  background: linear-gradient(180deg, #020806 0%, #041208 55%, #030a06 100%);
+  border-right: 1px solid rgba(252, 221, 9, 0.14);
+}
+
+.app-admin .nav-label,
+.app-admin .sidebar-footer {
+  color: rgba(238, 244, 238, 0.42);
+}
+
+.app-admin .sidebar-footer {
+  border-top-color: rgba(252, 221, 9, 0.12);
+}
+
+.app-admin .nav-item {
+  color: rgba(238, 244, 238, 0.55);
+}
+
+.app-admin .nav-item .nav-badge {
+  background: rgba(0, 0, 0, 0.35);
+  color: rgba(238, 244, 238, 0.75);
+  border: 1px solid rgba(252, 221, 9, 0.12);
+}
+
+.app-admin .main {
+  background: transparent;
+}
+
+.app-admin .topbar,
+.app-admin .controls,
+.app-admin .filter-tabs {
+  background: rgba(4, 16, 10, 0.72);
+  border-color: rgba(252, 221, 9, 0.12);
+  backdrop-filter: blur(8px);
+}
+
+.app-admin .topbar {
+  border-top: 3px solid var(--green);
+  background: linear-gradient(180deg, rgba(5, 22, 12, 0.95) 0%, rgba(3, 8, 6, 0.88) 100%);
+}
+
+.app-admin .page-title {
+  color: #fff;
+}
+
+.app-admin .page-sub,
+.app-admin .result-count,
+.app-admin .kpi-label {
+  color: rgba(238, 244, 238, 0.55);
+}
+
+.app-admin .ftab {
+  color: rgba(238, 244, 238, 0.5);
+}
+
+.app-admin .ftab:hover {
+  color: rgba(238, 244, 238, 0.85);
+}
+
+.app-admin .controls input,
+.app-admin .controls select,
+.app-admin .field-input {
+  background: rgba(0, 0, 0, 0.35);
+  border-color: rgba(252, 221, 9, 0.2);
+  color: var(--text);
+}
+
+.app-admin .controls input::placeholder {
+  color: rgba(238, 244, 238, 0.35);
+}
+
+.app-admin .btn {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(252, 221, 9, 0.2);
+  color: var(--text);
+}
+
+.app-admin .btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(252, 221, 9, 0.35);
+}
+
+.app-admin .icon-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(252, 221, 9, 0.18);
+  color: var(--text);
+}
+
+.app-admin th {
+  color: rgba(238, 244, 238, 0.45);
+  border-bottom-color: rgba(252, 221, 9, 0.14);
+}
+
+.app-admin td {
+  border-bottom-color: rgba(252, 221, 9, 0.08);
+  color: var(--text);
+}
+
+.app-admin tbody tr:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.app-admin .member-full,
+.app-admin .member-num {
+  color: rgba(238, 244, 238, 0.55);
+}
+
+.app-admin .status-pill.active {
+  background: rgba(7, 137, 48, 0.28);
+  color: #b8f0c8;
+}
+
+.app-admin .status-pill.not-active {
+  background: rgba(218, 18, 26, 0.22);
+  color: #fecaca;
+}
+
+.app-admin .empty {
+  color: rgba(238, 244, 238, 0.45);
+}
+
+.app-admin .modal {
+  background: linear-gradient(165deg, #061510 0%, #0a2218 50%, #071810 100%);
+  border: 1px solid rgba(252, 221, 9, 0.22);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
+}
+
+.app-admin .modal-header,
+.app-admin .modal-footer {
+  border-color: rgba(252, 221, 9, 0.14);
+}
+
+.app-admin .modal-title {
+  color: #fff;
+}
+
+.app-admin .modal-close {
+  color: rgba(238, 244, 238, 0.7);
+}
+
+.app-admin .admin-mobile-nav {
+  background: linear-gradient(180deg, #041208 0%, #020806 100%);
+  border-top: 1px solid rgba(252, 221, 9, 0.18);
+}
+
+.app-admin .admin-mobile-nav button {
+  color: rgba(238, 244, 238, 0.5);
+}
+
+.app-admin .overview-stat-lbl {
+  color: rgba(238, 244, 238, 0.55);
+}
+
+.app-admin .overview-stat:nth-child(3n+1) .overview-stat-val { color: #9ae6b0; }
+.app-admin .overview-stat:nth-child(3n+2) .overview-stat-val { color: var(--gold); }
+.app-admin .overview-stat:nth-child(3n+3) .overview-stat-val { color: #fca5a5; }
+
+.app-admin .topbar-right .kpi-chip:nth-child(1) .kpi-val { color: #9ae6b0; }
+.app-admin .topbar-right .kpi-chip:nth-child(2) .kpi-val { color: var(--gold); }
+.app-admin .topbar-right .kpi-chip:nth-child(3) .kpi-val { color: #fca5a5; }
+
+.app-admin .sidebar-brand {
+  background: linear-gradient(135deg, var(--green-dark), var(--green));
+  color: #fff;
+  margin: 0;
+  border-bottom: none;
+}
+
+.app-admin .sidebar-brand .brand-name { color: #fff; }
+.app-admin .sidebar-brand .brand-sub { color: rgba(255, 255, 255, 0.75); }
+
+.app-admin .nav-item {
+  border-left: 4px solid transparent;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  margin-right: 8px;
+}
+
+.app-admin .nav-item.nav-accent-green.active,
+.app-admin .admin-mobile-nav button[data-accent="green"].active {
+  color: #b8f0c8;
+  background: rgba(7, 137, 48, 0.22);
+  border-left-color: var(--green);
+}
+
+.app-admin .nav-item.nav-accent-gold.active,
+.app-admin .admin-mobile-nav button[data-accent="gold"].active {
+  color: var(--gold);
+  background: rgba(252, 221, 9, 0.14);
+  border-left-color: var(--gold);
+}
+
+.app-admin .nav-item.nav-accent-red.active,
+.app-admin .admin-mobile-nav button[data-accent="red"].active {
+  color: #fecaca;
+  background: rgba(218, 18, 26, 0.18);
+  border-left-color: var(--red);
+}
+
+.app-admin .nav-item.nav-accent-green:not(.active):hover {
+  background: rgba(7, 137, 48, 0.12);
+  color: #b8f0c8;
+}
+
+.app-admin .nav-item.nav-accent-gold:not(.active):hover {
+  background: rgba(252, 221, 9, 0.1);
+  color: var(--gold);
+}
+
+.app-admin .nav-item.nav-accent-red:not(.active):hover {
+  background: rgba(218, 18, 26, 0.12);
+  color: #fecaca;
+}
+
+.app-admin .nav-item.nav-accent-green .nav-badge { border-left: 2px solid var(--green); }
+.app-admin .nav-item.nav-accent-gold .nav-badge { border-left: 2px solid var(--gold); }
+.app-admin .nav-item.nav-accent-red .nav-badge { border-left: 2px solid var(--red); }
+
+.app-admin .topbar {
+  border-top: 3px solid var(--green);
+}
+
+.app-admin .topbar-right .kpi-chip {
+  border-top: 3px solid transparent;
+}
+
+.app-admin .topbar-right .kpi-chip:nth-child(1) {
+  background: rgba(7, 137, 48, 0.18);
+  border-color: rgba(7, 137, 48, 0.45);
+  border-top-color: var(--green);
+}
+
+.app-admin .topbar-right .kpi-chip:nth-child(2) {
+  background: rgba(252, 221, 9, 0.1);
+  border-color: rgba(252, 221, 9, 0.35);
+  border-top-color: var(--gold);
+}
+
+.app-admin .topbar-right .kpi-chip:nth-child(3) {
+  background: rgba(218, 18, 26, 0.14);
+  border-color: rgba(218, 18, 26, 0.35);
+  border-top-color: var(--red);
+}
+
+.app-admin .filter-tabs .ftab:nth-child(1).active {
+  color: #b8f0c8;
+  border-bottom-color: var(--green);
+}
+
+.app-admin .filter-tabs .ftab:nth-child(2).active {
+  color: var(--gold);
+  border-bottom-color: var(--gold);
+}
+
+.app-admin .filter-tabs .ftab:nth-child(3).active {
+  color: #fecaca;
+  border-bottom-color: var(--red);
+}
+
+.app-admin .filter-tabs .ftab:nth-child(4).active {
+  color: #b8f0c8;
+  border-bottom-color: var(--green);
+}
+
+.app-admin .admin-mobile-nav button {
+  border-top: 3px solid transparent;
+  padding-top: 8px;
+}
+
+.app-admin .admin-mobile-nav button[data-accent="green"].active {
+  border-top-color: var(--green);
+}
+
+.app-admin .admin-mobile-nav button[data-accent="gold"].active {
+  border-top-color: var(--gold);
+}
+
+.app-admin .admin-mobile-nav button[data-accent="red"].active {
+  border-top-color: var(--red);
+}
+
+.app-admin .btn.primary {
+  background: linear-gradient(135deg, var(--green-dark), var(--green));
+  border-color: rgba(7, 137, 48, 0.5);
+  color: #fff;
+}
+
+.app-admin .modal-header {
+  border-top: 3px solid var(--green);
+}
+
+.app-admin .overview-stats {
+  padding: 24px 28px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.app-admin .overview-stat {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(252, 221, 9, 0.14);
+  border-top: 3px solid transparent;
+  padding: 18px;
+  border-radius: var(--radius-sm);
+}
+
+.app-admin .overview-stat:nth-child(3n+1) {
+  background: rgba(7, 137, 48, 0.16);
+  border-color: rgba(7, 137, 48, 0.4);
+  border-top-color: var(--green);
+}
+
+.app-admin .overview-stat:nth-child(3n+2) {
+  background: rgba(252, 221, 9, 0.08);
+  border-color: rgba(252, 221, 9, 0.32);
+  border-top-color: var(--gold);
+}
+
+.app-admin .overview-stat:nth-child(3n+3) {
+  background: rgba(218, 18, 26, 0.12);
+  border-color: rgba(218, 18, 26, 0.32);
+  border-top-color: var(--red);
+}
+
+.app-admin .overview-stat:nth-child(3n+1) .overview-stat-val { color: #9ae6b0; }
+.app-admin .overview-stat:nth-child(3n+2) .overview-stat-val { color: var(--gold); }
+.app-admin .overview-stat:nth-child(3n+3) .overview-stat-val { color: #fca5a5; }
+
+.app-admin .overview-stat-lbl {
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.app-admin .overview-stat-val {
+  font-size: 32px;
+  font-weight: 800;
+  margin-top: 4px;
+}
+
+.app-admin .tag {
+  background: rgba(7, 137, 48, 0.25);
+  color: #b8f0c8;
+}
+
+.app-admin .inv-count.all-paid { color: #9ae6b0; }
+.app-admin .inv-count.has-unpaid { color: #fca5a5; }
+
+.app-admin .admin-mobile-nav button[data-accent="green"].active { color: #b8f0c8; }
+.app-admin .admin-mobile-nav button[data-accent="gold"].active { color: var(--gold); }
+.app-admin .admin-mobile-nav button[data-accent="red"].active { color: #fecaca; }
+
+.app-admin .nav-item.active .nav-badge {
+  background: rgba(7, 137, 48, 0.45);
+  color: #fff;
+  border-color: rgba(7, 137, 48, 0.6);
+}
+
+.app-admin .modal-overlay {
+  background: rgba(2, 5, 4, 0.82);
+}
+
+.app-admin .admin-data-banner {
+  margin: 12px 20px 0;
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  background: rgba(252, 221, 9, 0.12);
+  border: 1px solid rgba(252, 221, 9, 0.35);
+  border-left: 4px solid var(--gold);
+  color: #fde68a;
+  font-size: 13px;
+  line-height: 1.45;
+}

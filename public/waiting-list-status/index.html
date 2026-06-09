@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>Waiting List Status — Hibret Edir</title>
+<link rel="stylesheet" href="/css/hibret.css">
+<link rel="stylesheet" href="/css/compat.css">
+<link rel="stylesheet" href="/css/public-pages.css">
+</head>
+<body class="site-public">
+
+<nav class="nav">
+  <div class="nav-inner">
+    <a href="/" class="nav-brand">
+      <img src="/logo.png" alt="Hibret Edir">
+      <div>
+        <div class="nav-brand-name">Hibret Edir</div>
+        <div class="nav-brand-sub en">Waiting List Status</div>
+        <div class="nav-brand-sub am">የተጠባባቂ ዝርዝር ሁኔታ</div>
+      </div>
+    </a>
+    <div class="nav-lang-row" style="margin-left:auto">
+      <button class="lang-btn on" id="lb-en" onclick="setLang('en')">EN</button>
+      <button class="lang-btn" id="lb-am" onclick="setLang('am')">አማ</button>
+    </div>
+  </div>
+</nav>
+
+<main class="app-page">
+  <div class="app-page-inner">
+    <div class="app-page-head">
+      <div class="sec-tag en">Public Queue</div>
+      <div class="sec-tag am">የህዝብ ተራ</div>
+      <h1 class="sec-title en">Waiting List Status</h1>
+      <h1 class="sec-title am">የተጠባባቂ ዝርዝር ሁኔታ</h1>
+      <div class="sec-line"></div>
+      <p class="sec-sub en">Current queue from Hibret Edir sign-ups (by date). The wait is over <strong>3 years</strong>. To join the list, use the <a href="/#apply">waiting list sign-up</a> on the home page.</p>
+      <p class="sec-sub am">አሁን ያለው ተራ — ለመመዝገብ <a href="/#apply">ተጠባባቂ ዝርዝር</a> ይጠቀሙ።</p>
+    </div>
+
+    <div class="form-box wl-status-box">
+      <div class="wl-status-toolbar">
+        <button type="button" class="btn-gold wl-refresh-btn en" id="refreshBtn" onclick="loadStatus()">Refresh list</button>
+        <button type="button" class="btn-gold wl-refresh-btn am" id="refreshBtnAm" onclick="loadStatus()">ዝርዝሩን አድስ</button>
+        <span class="wl-status-meta" id="statusMeta"></span>
+      </div>
+      <div class="form-msg" id="statusMsg"></div>
+      <div class="wl-table-wrap" id="tableWrap">
+        <p class="en">Loading…</p>
+      </div>
+    </div>
+
+    <p class="form-fine en" style="margin-top:1.5rem;text-align:center">
+      <a href="/">← Back to home</a>
+    </p>
+  </div>
+</main>
+
+<script>
+const STATUS_API = '/.netlify/functions/apply/waiting-list/status';
+
+function setLang(lang) {
+  document.documentElement.lang = lang;
+  document.body.classList.toggle('lang-am', lang === 'am');
+  document.getElementById('lb-en').classList.toggle('on', lang === 'en');
+  document.getElementById('lb-am').classList.toggle('on', lang === 'am');
+  localStorage.setItem('hl', lang);
+}
+const wlLang = localStorage.getItem('hl');
+if (wlLang) setLang(wlLang);
+
+function statusClass(label) {
+  const s = (label || '').toLowerCase();
+  if (s.includes('register')) return 'wl-badge wl-badge-reg';
+  if (s.includes('cancel')) return 'wl-badge wl-badge-cancel';
+  if (s.includes('approv')) return 'wl-badge wl-badge-approve';
+  return 'wl-badge';
+}
+
+function renderTable(data) {
+  const wrap = document.getElementById('tableWrap');
+  if (!data.entries?.length) {
+    wrap.innerHTML = '<p class="en">No entries yet.</p>';
+    return;
+  }
+
+  const rows = data.entries.map((e) => `
+    <tr>
+      <td data-label="#">${e.position}</td>
+      <td data-label="Name">${escapeHtml(e.display_name || '—')}</td>
+      <td data-label="Date">${escapeHtml(e.applied_date_text || '—')}</td>
+      <td data-label="Status"><span class="${statusClass(e.status_label)}">${escapeHtml(e.status_label || 'Pending')}</span></td>
+    </tr>
+  `).join('');
+
+  wrap.innerHTML = `
+    <table class="wl-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th><span class="en">Name</span><span class="am">ስም</span></th>
+          <th><span class="en">Date added</span><span class="am">ቀን</span></th>
+          <th><span class="en">Status</span><span class="am">ሁኔታ</span></th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+function escapeHtml(text) {
+  const d = document.createElement('div');
+  d.textContent = text;
+  return d.innerHTML;
+}
+
+async function loadStatus() {
+  const msg = document.getElementById('statusMsg');
+  const meta = document.getElementById('statusMeta');
+  const btn = document.getElementById('refreshBtn');
+  msg.textContent = '';
+  msg.className = 'form-msg';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch(STATUS_API);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Could not load list');
+
+    renderTable(data);
+    const src = data.source === 'database' ? 'Hibret Edir records' : data.source;
+    meta.textContent = `${data.count} on list · updated just now · ${src}`;
+  } catch (err) {
+    msg.textContent = err.message || 'Could not load waiting list.';
+    msg.classList.add('err');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+loadStatus();
+</script>
+</body>
+</html>

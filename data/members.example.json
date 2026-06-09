@@ -1,0 +1,16 @@
+[
+  {
+    "member_number": 1,
+    "status": "Active",
+    "first_name": "Example",
+    "last_name": "Member",
+    "full_name": "Example Member / Spouse Name",
+    "paypal_name": "Example Member",
+    "email": "example@email.com",
+    "mobile": "310-555-0100",
+    "home_phone": "818-555-0100",
+    "address": "123 Example St, Los Angeles, CA 90001",
+    "notes": "",
+    "joined_date": "2015-01-01"
+  }
+]
