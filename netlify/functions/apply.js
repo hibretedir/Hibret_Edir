@@ -6,6 +6,7 @@ const {
   notifyApplicationSubmitted,
   notifyApplicationApproved,
   notifyApplicationRejected,
+  notifyBoard,
 } = require('./notify');
 const {
   syncApplicationSubmitted,
@@ -429,9 +430,22 @@ async function listApplications(query) {
   }
   sql += ` ORDER BY ma.submitted_at DESC NULLS LAST, ma.id DESC`;
   const result = await db.query(sql, values);
-  return json(200, {
-    applications: result.rows.map((row) => buildApplicationSummary(row, false)),
+  let changeRows = [];
+  try {
+    changeRows = await listChangeRequests(db);
+  } catch (err) {
+    console.warn('Change requests unavailable:', err.message);
+  }
+  const membershipApps = result.rows.map((row) => buildApplicationSummary(row, false));
+  const changeApps = changeRows
+    .filter((row) => !status || row.status === status)
+    .map(buildChangeRequestSummary);
+  const combined = [...changeApps, ...membershipApps].sort((a, b) => {
+    const da = a.submitted_at ? new Date(a.submitted_at).getTime() : 0;
+    const db = b.submitted_at ? new Date(b.submitted_at).getTime() : 0;
+    return db - da;
   });
+  return json(200, { applications: combined });
 }
 
 async function getApplication(id) {
@@ -803,6 +817,153 @@ async function submitMembership(body) {
   });
 }
 
+async function listChangeRequests(db) {
+  const result = await db.query(
+    `SELECT mcr.*,
+      m.first_name, m.last_name, m.full_name, m.paypal_name, m.email, m.mobile, m.member_number
+     FROM member_change_requests mcr
+     JOIN members m ON m.id = mcr.member_id
+     ORDER BY mcr.submitted_at DESC NULLS LAST, mcr.id DESC`
+  );
+  return result.rows;
+}
+
+function buildChangeRequestSummary(row) {
+  const payload = parseJsonField(row.payload, {});
+  const previous = row.previous_payload ? parseJsonField(row.previous_payload, null) : null;
+  const name = row.full_name || `${row.first_name || ''} ${row.last_name || ''}`.trim() || row.paypal_name;
+  return {
+    id: row.id,
+    kind: 'beneficiary_change',
+    status: row.status,
+    submitted_at: row.submitted_at,
+    reviewed_at: row.reviewed_at,
+    member_id: row.member_id,
+    member_full_name: name,
+    email: row.email,
+    request_type: row.request_type,
+    beneficiary_member: payload,
+    previous_beneficiary: previous,
+    is_new_beneficiary: !previous?.name,
+    notes: row.notes,
+    review_checklist: { beneficiary_review: row.status === 'Approved' },
+  };
+}
+
+async function getChangeRequest(id) {
+  const db = getDb();
+  const result = await db.query(
+    `SELECT mcr.*,
+      m.first_name, m.last_name, m.full_name, m.paypal_name, m.email, m.mobile, m.member_number
+     FROM member_change_requests mcr
+     JOIN members m ON m.id = mcr.member_id
+     WHERE mcr.id = $1 LIMIT 1`,
+    [id]
+  );
+  if (!result.rows.length) return json(404, { error: 'Change request not found.' });
+  return json(200, { application: buildChangeRequestSummary(result.rows[0]) });
+}
+
+async function applyBeneficiaryPayload(db, memberId, payload) {
+  const name = payload.name?.trim();
+  const phone = payload.phone?.trim();
+  const relationship = payload.relationship?.trim();
+  if (!name || !phone || !relationship) {
+    throw new Error('Invalid beneficiary payload.');
+  }
+  const existing = await db.query(
+    `SELECT id FROM beneficiaries WHERE member_id = $1 AND is_primary = true LIMIT 1`,
+    [memberId]
+  );
+  if (existing.rows.length) {
+    await db.query(
+      `UPDATE beneficiaries SET name = $1, phone = $2, relationship = $3 WHERE id = $4`,
+      [name, phone, relationship, existing.rows[0].id]
+    );
+  } else {
+    await db.query(
+      `INSERT INTO beneficiaries (member_id, name, phone, relationship, is_primary)
+       VALUES ($1, $2, $3, $4, true)`,
+      [memberId, name, phone, relationship]
+    );
+  }
+}
+
+async function approveChangeRequest(id, body, actor) {
+  const db = getDb();
+  const existing = await db.query(
+    `SELECT * FROM member_change_requests WHERE id = $1 LIMIT 1`,
+    [id]
+  );
+  if (!existing.rows.length) return json(404, { error: 'Change request not found.' });
+  const row = existing.rows[0];
+  if (row.status === 'Approved') return json(409, { error: 'Already approved.' });
+  const payload = parseJsonField(row.payload, {});
+  await applyBeneficiaryPayload(db, row.member_id, payload);
+  await db.query(
+    `UPDATE member_change_requests SET status = 'Approved', reviewed_at = NOW(), reviewed_by = $1, notes = COALESCE($2, notes) WHERE id = $3`,
+    [actor?.actor_label || 'Board', body.notes || null, id]
+  );
+  try {
+    const { syncBeneficiaryUpdate } = require('./sync');
+    await syncBeneficiaryUpdate(db, row.member_id, payload, !row.previous_payload, actor, { pending: false });
+  } catch (err) {
+    console.error('Approve change sync failed:', err);
+  }
+  return getChangeRequest(id);
+}
+
+async function rejectChangeRequest(id, body, actor) {
+  const db = getDb();
+  const result = await db.query(
+    `UPDATE member_change_requests
+     SET status = 'Rejected', reviewed_at = NOW(), reviewed_by = $1, notes = COALESCE($2, notes)
+     WHERE id = $3
+     RETURNING id`,
+    [actor?.actor_label || 'Board', body.notes || null, id]
+  );
+  if (!result.rows.length) return json(404, { error: 'Change request not found.' });
+  return getChangeRequest(id);
+}
+
+async function submitContactForm(body) {
+  const name = String(body.name || '').trim();
+  const message = String(body.message || '').trim();
+  const email = String(body.email || '').trim();
+  const phone = String(body.phone || '').trim();
+  if (!name || !message) {
+    return json(400, { error: 'Name and message are required.' });
+  }
+  const text = [
+    'New message from the Hibret Edir website contact form:',
+    '',
+    `Name: ${name}`,
+    email ? `Email: ${email}` : null,
+    phone ? `Phone: ${phone}` : null,
+    '',
+    message,
+  ].filter(Boolean).join('\n');
+  try {
+    const db = getDb();
+    await notifyBoard({
+      db,
+      subject: `Hibret Edir contact form — ${name}`,
+      text,
+    });
+  } catch (err) {
+    console.error('Contact notify failed:', err);
+  }
+  return json(200, { ok: true, message: 'Message sent to the board.' });
+}
+
+function matchChangeRequestPath(path) {
+  const parts = path.replace(/\/$/, '').split('/').filter(Boolean);
+  if (parts[0] !== 'change-requests') return null;
+  const id = parts[1] ? Number(parts[1]) : null;
+  const action = parts[2] || null;
+  return { id, action };
+}
+
 function matchApplicationPath(path) {
   const parts = path.replace(/\/$/, '').split('/').filter(Boolean);
   if (parts[0] !== 'applications') return null;
@@ -819,6 +980,36 @@ exports.handler = async (event) => {
   const path = getPath(event);
   const appPath = matchApplicationPath(path);
 
+  const appPath = matchApplicationPath(path);
+  const changePath = matchChangeRequestPath(path);
+
+  if (changePath && ['GET', 'POST'].includes(event.httpMethod)) {
+    const admin = verifyAdminRequest(event);
+    if (!admin) {
+      return json(401, { error: 'Admin authorization required. Please sign in.' });
+    }
+    const actor = await resolveAdminActor(admin);
+    try {
+      if (event.httpMethod === 'GET' && changePath.id) {
+        return await getChangeRequest(changePath.id);
+      }
+      const body = parseBody(event);
+      if (event.httpMethod === 'POST' && changePath.id && changePath.action === 'approve') {
+        return await approveChangeRequest(changePath.id, body, actor);
+      }
+      if (event.httpMethod === 'POST' && changePath.id && changePath.action === 'reject') {
+        return await rejectChangeRequest(changePath.id, body, actor);
+      }
+      return json(404, { error: 'Not found' });
+    } catch (err) {
+      console.error('change request admin error:', err);
+      if (err.message?.includes('DATABASE_URL')) {
+        return json(503, { error: 'Database is not configured.' });
+      }
+      return json(500, { error: 'Could not process change request.' });
+    }
+  }
+
   if (appPath && ['GET', 'PATCH', 'POST'].includes(event.httpMethod)) {
     const admin = verifyAdminRequest(event);
     if (!admin) {
@@ -830,6 +1021,9 @@ exports.handler = async (event) => {
         return await listApplications(event.queryStringParameters || {});
       }
       if (event.httpMethod === 'GET' && appPath.id && !appPath.action) {
+        const db = getDb();
+        const crCheck = await db.query(`SELECT id FROM member_change_requests WHERE id = $1 LIMIT 1`, [appPath.id]);
+        if (crCheck.rows.length) return await getChangeRequest(appPath.id);
         return await getApplication(appPath.id);
       }
       const body = parseBody(event);
@@ -904,6 +1098,9 @@ exports.handler = async (event) => {
     }
     if (path === '/membership' || path === '/membership/') {
       return await submitMembership(body);
+    }
+    if (path === '/contact' || path === '/contact/') {
+      return await submitContactForm(body);
     }
     return json(404, { error: 'Not found' });
   } catch (err) {

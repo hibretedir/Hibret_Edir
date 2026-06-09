@@ -276,3 +276,25 @@ WHERE invoice_number IS NOT NULL
   );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_invoice_number_unique ON invoices(invoice_number) WHERE invoice_number IS NOT NULL;
+
+-- Member change requests (beneficiary updates, etc.) — board approval required
+CREATE TABLE IF NOT EXISTS member_change_requests (
+  id SERIAL PRIMARY KEY,
+  member_id INTEGER NOT NULL REFERENCES members(id) ON DELETE CASCADE,
+  request_type VARCHAR(50) NOT NULL DEFAULT 'beneficiary',
+  payload JSONB NOT NULL,
+  previous_payload JSONB,
+  status VARCHAR(50) NOT NULL DEFAULT 'Pending',
+  submitted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  reviewed_at TIMESTAMP WITH TIME ZONE,
+  reviewed_by VARCHAR(220),
+  notes TEXT,
+  CONSTRAINT member_change_requests_status_check
+    CHECK (status IN ('Pending', 'Under Review', 'Approved', 'Rejected'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_member_change_requests_member ON member_change_requests(member_id);
+CREATE INDEX IF NOT EXISTS idx_member_change_requests_status ON member_change_requests(status);
+
+-- Migration (existing databases):
+-- CREATE TABLE IF NOT EXISTS member_change_requests (...);  -- see full definition above

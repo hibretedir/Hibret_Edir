@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Hibret Edir — Member Portal</title>
+<title>Hibret Edir Association — Member Portal</title>
 <link rel="stylesheet" href="/css/hibret.css?v=portal3">
 <link rel="stylesheet" href="/css/compat.css?v=portal3">
-<link rel="stylesheet" href="/css/app-theme.css?v=portal4">
+<link rel="stylesheet" href="/css/app-theme.css?v=portal6">
 </head>
 <body class="app-portal">
 
@@ -17,7 +17,7 @@
     <div class="auth-logo">
       <img src="/logo.png" alt="Hibret Edir Logo">
       <div class="auth-logo-text">
-        <div class="name">Hibret Edir</div>
+        <div class="name">Hibret Edir Association</div>
         <div class="sub">Member Portal</div>
         <div class="amh">የአባል መግቢያ</div>
       </div>
@@ -49,7 +49,7 @@
   <div class="auth-card">
     <div class="auth-logo">
       <img src="/logo.png" alt="Hibret Edir Logo">
-      <div class="auth-logo-text"><div class="name">Hibret Edir</div><div class="sub">Member Portal</div></div>
+      <div class="auth-logo-text"><div class="name">Hibret Edir Association</div><div class="sub">Member Portal</div></div>
     </div>
     <h1 class="auth-title" id="pinTitle">Enter Your PIN</h1>
     <p class="auth-sub" id="pinSub">Enter your 4-digit PIN to continue</p>
@@ -72,7 +72,7 @@
   <div class="auth-card">
     <div class="auth-logo">
       <img src="/logo.png" alt="Hibret Edir Logo">
-      <div class="auth-logo-text"><div class="name">Hibret Edir</div><div class="sub">First Time Setup</div></div>
+      <div class="auth-logo-text"><div class="name">Hibret Edir Association</div><div class="sub">First Time Setup</div></div>
     </div>
     <h1 class="auth-title">Create Your PIN</h1>
     <p class="auth-sub">Choose a 4-digit PIN to secure your account<span class="amh">4-ዲጂት PIN ይምረጡ</span></p>
@@ -106,7 +106,7 @@
     <div class="portal-nav-inner">
       <button type="button" class="portal-nav-brand" onclick="tab('home')" aria-label="Go to Home">
         <img src="/logo.png" alt="" class="portal-nav-logo">
-        <span class="portal-nav-name">Hibret Edir</span>
+        <span class="portal-nav-name">Hibret Edir Association</span>
       </button>
       <div class="portal-nav-right">
         <button class="portal-notif-btn" onclick="tab('notifications')" aria-label="Notifications">
@@ -147,9 +147,9 @@
           <img src="/logo.png" alt="" class="greeting-logo">
         </div>
         <div class="greeting-stats">
-          <div class="gs"><div class="gs-val" id="gsPaid">0</div><div class="gs-label">Deaths Paid</div></div>
-          <div class="gs"><div class="gs-val" id="gsOwed">0</div><div class="gs-label">Outstanding</div></div>
-          <div class="gs"><div class="gs-val" id="gsAmt">$0</div><div class="gs-label">Amount Due</div></div>
+          <div class="gs gs-accent-green"><div class="gs-val" id="gsPaid">0</div><div class="gs-label">Deaths Paid</div></div>
+          <div class="gs gs-accent-gold"><div class="gs-val" id="gsOwed">0</div><div class="gs-label">Outstanding</div></div>
+          <div class="gs gs-accent-red"><div class="gs-val" id="gsAmt">$0</div><div class="gs-label">Amount Due</div></div>
         </div>
       </div>
       <div class="sec-hd"><h2>Outstanding Invoices</h2><button class="see-all" onclick="tab('invoices')">See All</button></div>
@@ -171,10 +171,10 @@
           <div class="qa-title">All Invoices</div>
           <div class="qa-sub">Full history</div>
         </button>
-        <a href="tel:4245475594" class="qa-btn qa-accent-green">
-          <div class="qa-icon">☎</div>
-          <div class="qa-title">Call Support</div>
-          <div class="qa-sub">(424) 547-5594</div>
+        <a href="mailto:hibretedirtext@gmail.com" class="qa-btn qa-accent-green">
+          <div class="qa-icon">✉</div>
+          <div class="qa-title">Email Support</div>
+          <div class="qa-sub">hibretedirtext@gmail.com</div>
         </a>
       </div>
     </div>
@@ -190,7 +190,7 @@
       <div class="sec-hd"><h2>Upload Receipt</h2></div>
       <div class="upload-card">
         <label>Which person are you paying for?</label>
-        <select class="form-select" id="evSel"><option value="">Select from your invoices…</option></select>
+        <select class="form-select" id="evSel"><option value="">Select person…</option></select>
       </div>
       <div class="upload-card">
         <label>Payment Method</label>
@@ -208,10 +208,8 @@
       <div class="upload-card">
         <label>Receipt photo</label>
         <div class="receipt-upload-actions">
-          <button type="button" class="receipt-upload-btn" id="receiptCameraBtn">Take photo</button>
-          <button type="button" class="receipt-upload-btn receipt-upload-secondary" id="receiptFileBtn">Upload file</button>
+          <button type="button" class="receipt-upload-btn" id="receiptFileBtn">Upload file</button>
         </div>
-        <input type="file" id="receiptCameraInput" accept="image/*" capture="environment" hidden>
         <input type="file" id="receiptFileInput" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf" hidden>
         <div class="drop-zone" id="dropZ"
           ondragover="event.preventDefault();this.classList.add('over')"
@@ -383,7 +381,7 @@ const TOKEN_KEY = 'hibret_portal_token';
 const PAYPAL_INVOICE_BASE = 'https://www.paypal.com/invoice/p/#';
 const MY_INVOICES = [];
 const MY_ACTIVITY = [];
-let me = null, myPhone = '', myBeneficiary = null, profEditKey = '', selMeth = 'Zelle', uploadedFile = null, curTab = 'home';
+let me = null, myPhone = '', myBeneficiary = null, pendingBeneficiaryChange = null, profEditKey = '', selMeth = 'Zelle', uploadedFile = null, curTab = 'home';
 const NOTIFS = [
   {id:1,type:'urgent',icon:'•',title:'Payment Due — #30',msg:'Your $110 per-death contribution for Ato Brook Zewdie is overdue by 49 days. Please pay immediately.',time:'49 days ago',read:false},
   {id:2,type:'info',icon:'📢',title:'New Memorial — #30',msg:'#30: Ato Brook Zewdie. PayPal invoice sent to your email.',time:'52 days ago',read:false},
@@ -485,6 +483,7 @@ async function fetchMemberProfile() {
       me = data.member;
     }
     myBeneficiary = data.beneficiary || null;
+    pendingBeneficiaryChange = data.pending_beneficiary_change || null;
     return data;
   } catch (error) {
     console.warn('Failed to fetch member profile:', error);
@@ -726,8 +725,6 @@ function renderPortal(){
     {ico:'🏠',lbl:'Home Phone',key:'home',val:m.home||'Not on file',editable:true},
     {ico:'✉️',lbl:'Email',key:'email',val:m.email||'Not on file',editable:true},
     {ico:'📍',lbl:'Address',key:'address',val:m.address||'Not on file',editable:true},
-    {ico:'💙',lbl:'PayPal Name',key:'paypal_name',val:m.paypal_name||m.first+' '+m.last,editable:false},
-    {ico:'👨‍👩‍👧',lbl:'Family',val:m.full_name||m.first+' '+m.last,editable:false},
   ];
   document.getElementById('profFields').innerHTML=fields.map(f=>`
     <div class="pf-row">
@@ -740,19 +737,20 @@ function renderPortal(){
 
   renderBeneficiary();
 
-  // Upload dropdown — one option per unpaid invoice (deceased / event name from invoice)
+  // Upload dropdown — event / deceased names (e.g. Ato Brook Zewdie)
   const sel=document.getElementById('evSel');
-  sel.innerHTML='<option value="">Select from your invoices…</option>';
-  unpaid.forEach(inv=>{
+  sel.innerHTML='<option value="">Select person…</option>';
+  const eventNames=[...new Set(myInvs.map(i=>eventPersonName(i.item)).filter(Boolean))];
+  eventNames.forEach(name=>{
     const o=document.createElement('option');
-    o.value=String(inv.invoice_num);
-    o.textContent=invoicePersonLabel(inv);
+    o.value=name;
+    o.textContent=name;
     sel.appendChild(o);
   });
-  if(unpaid.length===0){
+  if(eventNames.length===0){
     const o=document.createElement('option');
     o.value='';
-    o.textContent='No unpaid invoices';
+    o.textContent='No events on file';
     o.disabled=true;
     sel.appendChild(o);
   }
@@ -803,17 +801,13 @@ function renderInvs(list){
   }).join('');
 }
 
-function invoicePersonLabel(inv){
-  const item=(inv.item||'').trim();
-  const num=inv.invoice_num;
-  if(item&&num) return item+' · Invoice #'+num;
-  if(item) return item;
-  if(num) return 'Invoice #'+num;
-  return 'Unpaid invoice';
+function eventPersonName(item){
+  return (item||'').replace(/^#\d+\s*/,'').trim();
 }
 
 function prefill(invoiceNum){
-  document.getElementById('evSel').value=String(invoiceNum);
+  const inv=getMyInvs().find(i=>String(i.invoice_num)===String(invoiceNum));
+  if(inv) document.getElementById('evSel').value=eventPersonName(inv.item);
   tab('upload');
 }
 
@@ -862,17 +856,14 @@ function doDrop(e){
 function rmFile(){
   uploadedFile=null;
   document.getElementById('prevBox').style.display='none';
-  const cam=document.getElementById('receiptCameraInput');
   const file=document.getElementById('receiptFileInput');
-  if(cam) cam.value='';
   if(file) file.value='';
 }
 function doUpload(){
-  const invNum=document.getElementById('evSel').value;
-  if(!invNum){alert('Please select which person you are paying for.');return;}
+  const personName=document.getElementById('evSel').value;
+  if(!personName){alert('Please select which person you are paying for.');return;}
   if(!uploadedFile){alert('Please add a photo or PDF of your receipt.');return;}
-  const inv=getMyInvs().find(i=>String(i.invoice_num)===String(invNum));
-  const personLabel=inv?invoicePersonLabel(inv):('Invoice #'+invNum);
+  const personLabel=personName;
   document.getElementById('confMsg').innerHTML=
     'Your receipt for <strong>'+personLabel+'</strong> has been submitted.<br>The board will review and confirm your payment shortly.<br><br><small style="color:var(--gray)">ደረሰኝዎ ተልኳል። ቦርዱ ያረጋግጣል።</small>';
   document.getElementById('confDetail').innerHTML=`
@@ -927,7 +918,8 @@ function renderBeneficiary(){
       <div class="pf-left"><div class="pf-ico">🙏</div>
       <div><div class="pf-lbl">${myBeneficiary.relationship||'Beneficiary'}</div><div class="pf-val">${myBeneficiary.name}</div><div style="font-size:12px;color:var(--gray);margin-top:2px">${myBeneficiary.phone||''}</div></div></div>
       <button class="pf-edit-btn" onclick="openBenEdit()">Edit</button>
-    </div>`;
+    </div>
+    ${pendingBeneficiaryChange ? `<div class="ben-pending-banner">⏳ Beneficiary change pending board approval${pendingBeneficiaryChange.payload?.name ? `: <strong>${pendingBeneficiaryChange.payload.name}</strong>` : ''}</div>` : ''}`;
 }
 
 function openProfEdit(key, label){
@@ -986,12 +978,20 @@ async function saveBen(){
   if(!nm||!ph||!rl){alert('Please fill in all fields.');return;}
   try {
     const result = await apiPut('portal/beneficiary', { name: nm, phone: ph, relationship: rl });
+    if (result.pending) {
+      pendingBeneficiaryChange = { payload: { name: nm, phone: ph, relationship: rl }, status: 'Pending' };
+      closeModal('benModal');
+      renderBeneficiary();
+      alert(result.message || 'Beneficiary change submitted for board approval.');
+      return;
+    }
     myBeneficiary = result.beneficiary;
+    pendingBeneficiaryChange = null;
     renderBeneficiary();
     closeModal('benModal');
     await fetchMemberActivity();
     renderNotifs();
-    alert('Beneficiary saved. You and the board will receive email/text confirmation.');
+    alert('Beneficiary saved.');
   } catch (error) {
     alert(error.message || 'Unable to save beneficiary. Please try again.');
   }
@@ -1037,14 +1037,8 @@ function setLang(l){
   localStorage.setItem('hlang',l);
 }
 
-document.getElementById('receiptCameraBtn')?.addEventListener('click', ()=>{
-  document.getElementById('receiptCameraInput')?.click();
-});
 document.getElementById('receiptFileBtn')?.addEventListener('click', ()=>{
   document.getElementById('receiptFileInput')?.click();
-});
-document.getElementById('receiptCameraInput')?.addEventListener('change', function(){
-  if(this.files[0]) doFile(this.files[0]);
 });
 document.getElementById('receiptFileInput')?.addEventListener('change', function(){
   if(this.files[0]) doFile(this.files[0]);

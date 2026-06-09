@@ -128,20 +128,25 @@ async function syncMemberSelfUpdate(db, memberId, oldRow, newRow, actor, fieldCh
   });
 }
 
-async function syncBeneficiaryUpdate(db, memberId, beneficiary, isNew, actor) {
+async function syncBeneficiaryUpdate(db, memberId, beneficiary, isNew, actor, opts = {}) {
+  const pending = opts.pending === true;
+  const action = pending ? 'beneficiary.change_requested' : (isNew ? 'beneficiary.created' : 'beneficiary.updated');
+  const summary = pending
+    ? `${isNew ? 'Requested to add' : 'Requested to update'} beneficiary ${beneficiary.name} (pending board approval)`
+    : `${isNew ? 'Added' : 'Updated'} beneficiary ${beneficiary.name} (${beneficiary.relationship})`;
   await logActivity(db, {
     ...actor,
-    action: isNew ? 'beneficiary.created' : 'beneficiary.updated',
+    action,
     entity_type: 'beneficiaries',
-    table_name: 'beneficiaries',
-    record_id: memberId,
+    table_name: pending ? 'member_change_requests' : 'beneficiaries',
+    record_id: opts.requestId || memberId,
     new_value: beneficiary,
-    summary: `${isNew ? 'Added' : 'Updated'} beneficiary ${beneficiary.name} (${beneficiary.relationship})`,
+    summary,
   });
   await appendMemberNote(
     db,
     memberId,
-    `Beneficiary ${isNew ? 'added' : 'updated'}: ${beneficiary.name}`,
+    summary,
     actor.actor_label
   );
 }

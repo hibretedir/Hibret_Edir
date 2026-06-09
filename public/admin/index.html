@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Board Admin — Hibret Edir</title>
-<link rel="stylesheet" href="/css/admin-tracker.css">
+<link rel="stylesheet" href="/css/admin-tracker.css?v=admin3">
 </head>
 <body class="app-admin tracker">
 
@@ -77,6 +77,13 @@
   </aside>
 
   <div class="tracker-main">
+    <div class="tracker-page-top">
+      <img src="/logo.png" alt="Hibret Edir Association">
+      <div class="tracker-page-top-text">
+        <div class="tracker-page-top-name">Hibret Edir Association</div>
+        <div class="tracker-page-top-sub">Board Admin</div>
+      </div>
+    </div>
     <div class="tracker-app" id="trackerApp">
       <div id="mainArea"></div>
     </div>
@@ -249,6 +256,39 @@ function isPaid(inv) {
   return inv.status === 'Paid' || paidInvoices.has(inv.invoice_num);
 }
 
+const INVOICE_DUE_DAYS = 3;
+
+function invoiceDaysOverdue(inv) {
+  if (!inv?.date || isPaid(inv)) return Number(inv?.days_overdue || 0);
+  if (inv.days_overdue != null) return Number(inv.days_overdue);
+  const sent = new Date(String(inv.date).split(' ')[0]);
+  if (Number.isNaN(sent.getTime())) return 0;
+  const due = new Date(sent.getTime() + INVOICE_DUE_DAYS * 86400000);
+  return Math.max(0, Math.floor((Date.now() - due.getTime()) / 86400000));
+}
+
+function isInvoiceLate(inv) {
+  if (isPaid(inv)) return false;
+  if (inv.is_late != null) return !!inv.is_late;
+  return invoiceDaysOverdue(inv) > 0;
+}
+
+function memberLateKey(inv) {
+  return String(inv.member_id || inv.email || inv.name || inv.invoice_num || '').toLowerCase();
+}
+
+function countLateInvoicesForMember(member) {
+  const keyEmail = (member.email || '').toLowerCase();
+  const keyName = (member.paypal_name || member.full_name || `${member.first || ''} ${member.last || ''}`).trim().toLowerCase();
+  return INVOICES.filter(inv => {
+    if (!isInvoiceLate(inv)) return false;
+    if (member.id && inv.member_id && inv.member_id === member.id) return true;
+    const invEmail = (inv.email || '').toLowerCase();
+    const invName = (inv.name || '').toLowerCase();
+    return (keyEmail && invEmail === keyEmail) || (keyName && invName === keyName);
+  }).length;
+}
+
 function fmtMoney(n) {
   return '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -349,14 +389,16 @@ async function fetchAdminData() {
 function getStats() {
   const unpaidList = INVOICES.filter(i => !isPaid(i));
   const paidSession = INVOICES.filter(i => paidInvoices.has(i.invoice_num)).length;
-  const uniqueMembers = new Set(INVOICES.map(i => i.name)).size;
+  const lateInvoices = INVOICES.filter(i => isInvoiceLate(i));
+  const lateMembers = new Set(lateInvoices.map(memberLateKey).filter(Boolean));
   const events = new Set(INVOICES.map(i => i.item)).size;
   const totalOwed = unpaidList.reduce((s, i) => s + Number(i.amount_due || 0), 0);
   return {
     total: INVOICES.length,
     unpaid: unpaidList.length,
     paidSession,
-    uniqueMembers,
+    uniqueMembers: lateMembers.size,
+    lateInvoices: lateInvoices.length,
     events,
     totalOwed,
   };
@@ -371,6 +413,7 @@ function getInvFiltered() {
     const paid = isPaid(inv);
     if (invFilter === 'unpaid' && paid) return false;
     if (invFilter === 'paid' && !paid) return false;
+    if (invFilter === 'late' && !isInvoiceLate(inv)) return false;
     if (invEventFilter && inv.item !== invEventFilter) return false;
     const q = invSearch.toLowerCase().trim();
     if (q) {
@@ -398,7 +441,7 @@ function trackerHeaderHtml(stats) {
   const showOutstanding = currentView === 'invoices';
   const subtitle = currentView === 'members' ? `${MEMBERS.length} members on file`
     : currentView === 'applications' ? `${APPLICATIONS.filter(a => a.status === 'Submitted' || a.status === 'Under Review').length} pending review`
-    : currentView === 'events' ? `${stats.events} events · ${stats.total} invoices`
+    : currentView === 'events' ? `${stats.events} passed away · ${stats.total} invoices`
     : currentView === 'payouts' ? `${PAYOUTS.filter(p => p.status !== 'Paid Out').length} open · $15,000 per event`
     : currentView === 'activity' ? `${ACTIVITY.length} recent actions logged`
     : `${stats.total} invoices · ${stats.unpaid} unpaid`;
@@ -425,8 +468,9 @@ function trackerStatsHtml(stats) {
       <div class="tracker-stat"><div class="tracker-stat-lbl">Total Invoices</div><div class="tracker-stat-val">${stats.total}</div></div>
       <div class="tracker-stat"><div class="tracker-stat-lbl">Unpaid</div><div class="tracker-stat-val">${stats.unpaid}</div></div>
       <div class="tracker-stat"><div class="tracker-stat-lbl">Marked Paid (Session)</div><div class="tracker-stat-val green">${stats.paidSession}</div></div>
-      <div class="tracker-stat"><div class="tracker-stat-lbl">Unique Members</div><div class="tracker-stat-val">${stats.uniqueMembers}</div></div>
-      <div class="tracker-stat"><div class="tracker-stat-lbl">Events Covered</div><div class="tracker-stat-val">${stats.events}</div></div>
+      <div class="tracker-stat"><div class="tracker-stat-lbl">Late Fee Members</div><div class="tracker-stat-val orange">${stats.uniqueMembers}</div></div>
+      <div class="tracker-stat"><div class="tracker-stat-lbl">Passed Away</div><div class="tracker-stat-val">${stats.events}</div></div>
+      <div class="tracker-stat"><div class="tracker-stat-lbl">Late Invoices</div><div class="tracker-stat-val red">${stats.lateInvoices || 0}</div></div>
     </div>`;
 }
 
@@ -435,6 +479,7 @@ function trackerTabsHtml(stats) {
   const tabs = [
     { label: 'All Invoices', count: stats.total, filter: 'all' },
     { label: 'Unpaid', count: stats.unpaid, filter: 'unpaid' },
+    { label: 'Late', count: stats.lateInvoices || 0, filter: 'late' },
     { label: 'Marked Paid', count: stats.paidSession, filter: 'paid' },
   ];
   return `<nav class="tracker-tabs">${tabs.map(t => {
@@ -452,7 +497,7 @@ function updateSidebar() {
   if (unpaidEl) unpaidEl.textContent = stats.unpaid;
   if (membersEl) membersEl.textContent = MEMBERS.length ? activeMembers : '—';
   const appsEl = document.getElementById('sb-applications');
-  if (appsEl) appsEl.textContent = APPLICATIONS.filter(a => a.status === 'Submitted' || a.status === 'Under Review').length || '—';
+  if (appsEl) appsEl.textContent = APPLICATIONS.filter(a => ['Submitted', 'Under Review', 'Pending'].includes(a.status)).length || '—';
   const payoutsEl = document.getElementById('sb-payouts');
   if (payoutsEl) payoutsEl.textContent = PAYOUTS.filter(p => p.status !== 'Paid Out').length || '—';
   if (footerEl) footerEl.textContent = reportLabel.replace('Report as of ', 'Data as of ');
@@ -483,6 +528,8 @@ function renderInvTableRows(filtered) {
   filtered.forEach(inv => {
     const paid = isPaid(inv);
     const noEmail = !inv.email || inv.email === 'NoEmailInFile@gmail.com';
+    const late = isInvoiceLate(inv);
+    const overdue = invoiceDaysOverdue(inv);
     if (inv.item !== lastEvent) {
       html += `<tr class="tracker-event-row"><td colspan="7">
         <div class="tracker-event-header">
@@ -500,10 +547,10 @@ function renderInvTableRows(filtered) {
       <td><span class="tracker-event-badge" title="${esc(inv.item)}">${esc(inv.item)}</span></td>
       <td><span class="tracker-date">${esc(fmtDate(inv.date))}</span></td>
       <td><span class="tracker-amount${paid ? ' paid' : ''}">${fmtMoney(inv.amount_due)}</span></td>
-      <td><span class="tracker-status ${paid ? 'paid' : 'unpaid'}"><span class="tracker-status-dot"></span>${paid ? 'Paid' : 'Unpaid'}</span></td>
+      <td><span class="tracker-status ${paid ? 'paid' : late ? 'unpaid' : 'warn'}"><span class="tracker-status-dot"></span>${paid ? 'Paid' : late ? `Late (${overdue}d)` : 'Unpaid'}</span></td>
       <td>${paid
         ? '<span class="tracker-mark-done">✓ Marked Paid</span>'
-        : `<button type="button" class="tracker-mark-btn" onclick="markPaid(${inv.invoice_num})">Mark Paid</button>`}</td>
+        : `<button type="button" class="tracker-mark-btn" onclick="event.stopPropagation();markPaid(${inv.invoice_num})">Mark Paid</button>`}</td>
     </tr>`;
   });
   return html;
@@ -540,7 +587,8 @@ function renderInvoicesView() {
     ${trackerStatsHtml(stats)}
     ${trackerTabsHtml(stats)}
     <div class="tracker-toolbar">
-      <div class="tracker-search">
+      <div class="tracker-search tracker-search-prominent">
+        <label class="tracker-search-label" for="invSearchBox">Search</label>
         <span class="tracker-search-icon">⌕</span>
         <input type="search" id="invSearchBox" placeholder="Search by name, email, invoice #..." value="${esc(invSearch)}" oninput="invSearch=this.value; updateInvoicesList()">
       </div>
@@ -615,6 +663,7 @@ function getMemberFiltered() {
   return MEMBERS.filter(m => {
     if (memberFilter === 'active' && m.status !== 'Active') return false;
     if (memberFilter === 'inactive' && m.status === 'Active') return false;
+    if (memberFilter === 'late' && countLateInvoicesForMember(m) === 0) return false;
     const d = getMemberData(m);
     const q = memberSearch.toLowerCase();
     if (q) {
@@ -636,13 +685,14 @@ function renderMembersTableHtml(filtered) {
     const householdLine = names.household
       ? `<div class="tracker-member-email">${esc(names.household)}</div>`
       : '';
-    return `<tr class="data-row">
+    const lateCount = countLateInvoicesForMember(m);
+    return `<tr class="data-row data-row-clickable" onclick="openMemberDetail(${m.id})" role="button" tabindex="0" onkeydown="if(event.key==='Enter')openMemberDetail(${m.id})">
       <td><span class="tracker-inv-num">#${esc(m.member_number || m.id)}</span></td>
-      <td><div class="tracker-member-name">${esc(names.paypal)}</div>${householdLine}</td>
+      <td><div class="tracker-member-name">${esc(names.paypal)}</div>${householdLine}${lateCount ? `<div class="tracker-member-email" style="color:var(--tk-orange)">${lateCount} late invoice${lateCount !== 1 ? 's' : ''}</div>` : ''}</td>
       <td>${esc(d.email || '—')}</td>
       <td>${esc(d.mobile || d.home || '—')}</td>
       <td><span class="tracker-status ${m.status === 'Active' ? 'paid' : 'unpaid'}">${esc(m.status)}</span></td>
-      <td><button type="button" class="tracker-mark-btn" onclick="openMemberDetail(${m.id})">View / Edit</button></td>
+      <td><button type="button" class="tracker-mark-btn" onclick="event.stopPropagation();openMemberDetail(${m.id})">View / Edit</button></td>
     </tr>`;
   }).join('') : '';
   return filtered.length ? `<table class="tracker-table">
@@ -670,7 +720,8 @@ function renderMembersView() {
     ${trackerTabsHtml(stats)}
     ${!MEMBERS.length ? '<div class="tracker-banner">Member list loads from the database. Run npm run seed with DATABASE_URL to import members.</div>' : ''}
     <div class="tracker-toolbar">
-      <div class="tracker-search">
+      <div class="tracker-search tracker-search-prominent">
+        <label class="tracker-search-label" for="memberSearchBox">Search</label>
         <span class="tracker-search-icon">⌕</span>
         <input type="search" id="memberSearchBox" placeholder="Search PayPal name, household, email, #..." value="${esc(memberSearch)}" oninput="memberSearch=this.value; updateMembersList()">
       </div>
@@ -678,6 +729,7 @@ function renderMembersView() {
         <option value="all">All Members</option>
         <option value="active"${memberFilter === 'active' ? ' selected' : ''}>Active</option>
         <option value="inactive"${memberFilter === 'inactive' ? ' selected' : ''}>Inactive</option>
+        <option value="late"${memberFilter === 'late' ? ' selected' : ''}>Late payers</option>
       </select>
       <div class="tracker-results">${filtered.length} member${filtered.length !== 1 ? 's' : ''}</div>
     </div>
@@ -688,7 +740,7 @@ function renderMembersView() {
 
 function getApplicationsFiltered() {
   return APPLICATIONS.filter(a => {
-    if (appFilter === 'pending' && !['Submitted', 'Under Review'].includes(a.status)) return false;
+    if (appFilter === 'pending' && !['Submitted', 'Under Review', 'Pending'].includes(a.status)) return false;
     if (appFilter === 'approved' && a.status !== 'Approved') return false;
     if (appFilter === 'rejected' && a.status !== 'Rejected') return false;
     return true;
@@ -703,20 +755,26 @@ function checklistCount(c) {
 function renderApplicationsView() {
   const stats = getStats();
   const filtered = getApplicationsFiltered();
-  const pending = APPLICATIONS.filter(a => ['Submitted', 'Under Review'].includes(a.status)).length;
+  const pending = APPLICATIONS.filter(a => ['Submitted', 'Under Review', 'Pending'].includes(a.status)).length;
   const approved = APPLICATIONS.filter(a => a.status === 'Approved').length;
   const rejected = APPLICATIONS.filter(a => a.status === 'Rejected').length;
 
   const rows = filtered.length ? filtered.map(a => {
-    const done = checklistCount(a);
+    const isBen = a.kind === 'beneficiary_change';
+    const done = isBen ? (a.status === 'Approved' ? 1 : 0) : checklistCount(a);
     const statusClass = a.status === 'Approved' ? 'paid' : a.status === 'Rejected' ? 'unpaid' : 'warn';
-    return `<tr class="data-row">
+    const secondCol = isBen
+      ? `<div class="tracker-member-name">${esc(a.beneficiary_member?.name || '—')}</div><div class="tracker-member-email">${esc(a.beneficiary_member?.relationship || 'Beneficiary')}</div>`
+      : `<div class="tracker-member-name">${esc(a.waiting_list?.full_name || '—')}</div><div class="tracker-member-email">Waiting list</div>`;
+    const typeBadge = isBen ? '<span class="tracker-event-badge">Beneficiary</span>' : '<span class="tracker-event-badge">Membership</span>';
+    return `<tr class="data-row data-row-clickable" onclick="openApplicationReview(${a.id})" role="button" tabindex="0" onkeydown="if(event.key==='Enter')openApplicationReview(${a.id})">
       <td><div class="tracker-member-name">${esc(a.member_full_name)}</div><div class="tracker-member-email">${esc(a.email || a.waiting_list?.email || '—')}</div></td>
-      <td><div class="tracker-member-name">${esc(a.waiting_list?.full_name || '—')}</div><div class="tracker-member-email">Waiting list</div></td>
+      <td>${typeBadge}</td>
+      <td>${secondCol}</td>
       <td><span class="tracker-date">${esc(fmtDate(a.submitted_at))}</span></td>
       <td><span class="tracker-status ${statusClass}"><span class="tracker-status-dot"></span>${esc(a.status)}</span></td>
-      <td><span class="tracker-inv-num">${done}/4</span></td>
-      <td><button type="button" class="tracker-mark-btn" onclick="openApplicationReview(${a.id})">${a.status === 'Approved' ? 'View' : 'Review'}</button></td>
+      <td><span class="tracker-inv-num">${isBen ? (a.is_new_beneficiary ? 'New' : 'Update') : `${done}/4`}</span></td>
+      <td><button type="button" class="tracker-mark-btn" onclick="event.stopPropagation();openApplicationReview(${a.id})">${a.status === 'Approved' ? 'View' : 'Review'}</button></td>
     </tr>`;
   }).join('') : '';
 
@@ -734,10 +792,10 @@ function renderApplicationsView() {
       <button type="button" class="tracker-tab${appFilter === 'rejected' ? ' active' : ''}" onclick="appFilter='rejected';render()">Rejected</button>
       <button type="button" class="tracker-tab${appFilter === 'all' ? ' active' : ''}" onclick="appFilter='all';render()">All</button>
     </nav>
-    ${!APPLICATIONS.length ? '<div class="tracker-banner">Applications load from the database when members submit the form at /application. Connect DATABASE_URL to enable board review.</div>' : ''}
+    ${!APPLICATIONS.length ? '<div class="tracker-banner">Membership applications and beneficiary change requests appear here. Members submit beneficiary updates from the portal for board approval.</div>' : ''}
     <div class="tracker-table-wrap">
       ${filtered.length ? `<table class="tracker-table">
-        <thead><tr><th>Applicant</th><th>Waiting List Name</th><th>Submitted</th><th>Status</th><th>Checklist</th><th>Action</th></tr></thead>
+        <thead><tr><th>Member</th><th>Type</th><th>Details</th><th>Submitted</th><th>Status</th><th>Review</th><th>Action</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>` : '<div class="tracker-empty">No applications in this filter</div>'}
     </div>`;
@@ -755,6 +813,11 @@ function reviewCheckRow(id, label, hint, checked, autoOk) {
 function updateApproveButtonState() {
   const btn = document.getElementById('appApproveBtn');
   if (!btn) return;
+  const app = APPLICATIONS.find(a => a.id === reviewingApplicationId);
+  if (app?.kind === 'beneficiary_change') {
+    btn.disabled = app.status === 'Approved' || app.status === 'Rejected';
+    return;
+  }
   const all = ['chk_name_match', 'chk_fields_complete', 'chk_id_uploaded', 'chk_fee_paid'].every(id => document.getElementById(id)?.checked);
   btn.disabled = !all;
 }
@@ -775,6 +838,42 @@ async function openApplicationReview(id) {
     return;
   }
   if (!app) return;
+
+  const isBenChange = app.kind === 'beneficiary_change';
+  document.getElementById('appApproveBtn').style.display = isBenChange ? '' : '';
+  document.getElementById('appApproveBtn').textContent = isBenChange ? 'Approve Beneficiary' : 'Approve & Add to CRM';
+  document.querySelector('#applicationModal .btn.danger').textContent = isBenChange ? 'Reject Change' : 'Reject';
+
+  if (isBenChange) {
+    const req = app.beneficiary_member || {};
+    const prev = app.previous_beneficiary || {};
+    document.getElementById('appModalTitle').textContent = app.member_full_name || 'Beneficiary Change';
+    document.getElementById('appModalSub').textContent = `${app.is_new_beneficiary ? 'New beneficiary' : 'Update beneficiary'} · Submitted ${fmtDate(app.submitted_at)} · ${app.status}`;
+    document.getElementById('applicationModalBody').innerHTML = `
+      <div class="review-grid">
+        <div class="review-panel">
+          <h4>Requested Beneficiary</h4>
+          <div class="review-field"><span>Name</span><strong>${esc(req.name || '—')}</strong></div>
+          <div class="review-field"><span>Relationship</span><strong>${esc(req.relationship || '—')}</strong></div>
+          <div class="review-field"><span>Phone</span><strong>${esc(req.phone || '—')}</strong></div>
+        </div>
+        <div class="review-panel">
+          <h4>Current On File</h4>
+          ${prev.name
+            ? `<div class="review-field"><span>Name</span><strong>${esc(prev.name)}</strong></div>
+               <div class="review-field"><span>Relationship</span><strong>${esc(prev.relationship || '—')}</strong></div>
+               <div class="review-field"><span>Phone</span><strong>${esc(prev.phone || '—')}</strong></div>`
+            : '<p class="review-auto">No beneficiary on file — this will be a new designation.</p>'}
+        </div>
+      </div>
+      <div class="fg" style="margin-top:16px">
+        <label>Board notes (optional)</label>
+        <textarea class="field-input" id="appReviewNotes" rows="3" placeholder="Notes for the record…">${esc(app.notes || '')}</textarea>
+      </div>`;
+    updateApproveButtonState();
+    document.getElementById('applicationModal').classList.add('open');
+    return;
+  }
 
   const cl = app.review_checklist || {};
   const auto = cl.auto || {};
@@ -854,6 +953,20 @@ async function saveApplicationReview() {
 
 async function approveApplicationReview() {
   if (!reviewingApplicationId) return;
+  const app = APPLICATIONS.find(a => a.id === reviewingApplicationId);
+  if (app?.kind === 'beneficiary_change') {
+    if (!confirm('Approve this beneficiary change? It will update the member record immediately.')) return;
+    try {
+      const notes = document.getElementById('appReviewNotes')?.value?.trim() || '';
+      await apiPost('apply/change-requests/' + reviewingApplicationId + '/approve', { notes });
+      closeModal('applicationModal');
+      await fetchAdminData();
+      render();
+    } catch (e) {
+      alert('Could not approve beneficiary change.');
+    }
+    return;
+  }
   const checklist = getReviewChecklistFromModal();
   if (!['name_match', 'fields_complete', 'id_uploaded', 'fee_paid'].every(k => checklist[k])) {
     alert('Check all four review items before approving.');
@@ -878,7 +991,20 @@ async function approveApplicationReview() {
 
 async function rejectApplicationReview() {
   if (!reviewingApplicationId) return;
-  const notes = document.getElementById('appReviewNotes')?.value || 'Application rejected by board.';
+  const app = APPLICATIONS.find(a => a.id === reviewingApplicationId);
+  const notes = document.getElementById('appReviewNotes')?.value?.trim() || 'Application rejected by board.';
+  if (app?.kind === 'beneficiary_change') {
+    if (!confirm('Reject this beneficiary change?')) return;
+    try {
+      await apiPost('apply/change-requests/' + reviewingApplicationId + '/reject', { notes });
+      closeModal('applicationModal');
+      await fetchAdminData();
+      render();
+    } catch (e) {
+      alert('Could not reject beneficiary change.');
+    }
+    return;
+  }
   if (!confirm('Reject this application?')) return;
   try {
     await apiPost('apply/applications/' + reviewingApplicationId + '/reject', { notes });
@@ -935,13 +1061,13 @@ function renderPayoutsView() {
   const rows = filtered.length ? filtered.map(p => {
     const done = payoutChecklistCount(p);
     const approvals = p.board_approvals_count || 0;
-    return `<tr class="data-row">
+    return `<tr class="data-row data-row-clickable" onclick="openPayoutReview(${p.id})" role="button" tabindex="0" onkeydown="if(event.key==='Enter')openPayoutReview(${p.id})">
       <td><div class="tracker-member-name">${esc(p.deceased_name)}</div><div class="tracker-member-email">${esc(p.event_label || '—')}</div></td>
       <td><div class="tracker-member-name">${esc(p.beneficiary_name || '—')}</div><div class="tracker-member-email">${esc(p.member_name || '')}</div></td>
       <td><span class="tracker-inv-num">${done}/6</span></td>
       <td><span class="tracker-inv-num">${approvals}/${p.board_approvals_required || 2}</span></td>
       <td><span class="tracker-status ${payoutStatusClass(p.status)}"><span class="tracker-status-dot"></span>${esc(p.status)}</span></td>
-      <td><button type="button" class="tracker-mark-btn" onclick="openPayoutReview(${p.id})">${p.status === 'Paid Out' ? 'View' : 'Manage'}</button></td>
+      <td><button type="button" class="tracker-mark-btn" onclick="event.stopPropagation();openPayoutReview(${p.id})">${p.status === 'Paid Out' ? 'View' : 'Manage'}</button></td>
     </tr>`;
   }).join('') : '';
 
@@ -1313,7 +1439,12 @@ function openMemberDetail(id) {
       <div><label style="font-size:11px;color:var(--tk-muted)">Mobile</label><input class="field-input" id="ef_mobile" value="${esc(m.mobile)}"></div>
       <div><label style="font-size:11px;color:var(--tk-muted)">Home</label><input class="field-input" id="ef_home" value="${esc(m.home)}"></div>
       <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tk-muted)">Address</label><input class="field-input" id="ef_address" value="${esc(m.address)}"></div>
+      <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tk-muted)">Board notes (conversations, reminders)</label><textarea class="field-input" id="ef_notes" rows="4" placeholder="Call log, payment reminders, follow-ups…">${esc(m.notes || '')}</textarea></div>
     </div>
+    ${(() => {
+      const lateCount = countLateInvoicesForMember(m);
+      return lateCount ? `<div class="tracker-banner" style="margin-top:12px;background:var(--tk-red-bg);border-color:rgba(239,68,68,.35)">${lateCount} late invoice${lateCount !== 1 ? 's' : ''} on file${lateCount >= 2 ? ' — consistently late payer' : ''}</div>` : '';
+    })()}
     <div id="memberJourney" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--tk-border)">
       <div style="font-size:11px;color:var(--tk-muted);margin-bottom:8px">Member journey (waiting list → application → CRM → invoices)</div>
       <div class="tracker-empty" style="padding:12px">Loading timeline…</div>
@@ -1358,6 +1489,7 @@ async function saveMemberEdit() {
     mobile: document.getElementById('ef_mobile').value,
     home: document.getElementById('ef_home').value,
     address: document.getElementById('ef_address').value,
+    notes: document.getElementById('ef_notes')?.value || '',
   };
   try {
     const result = await apiPost('portal/member', updated);

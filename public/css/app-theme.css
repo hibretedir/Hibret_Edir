@@ -240,6 +240,7 @@ body.app-portal .confirm-wrap .pin-input {
 
 .app-portal .receipt-upload-btn {
   flex: 1;
+  width: 100%;
   min-width: 120px;
   padding: 12px 14px;
   border-radius: var(--radius-sm);
@@ -398,42 +399,118 @@ body.app-portal .confirm-wrap .pin-input {
 }
 
 .app-portal .greeting-stats .gs {
-  background: rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-sm);
   padding: 8px 4px;
+  border: 1px solid transparent;
   border-top: 3px solid transparent;
 }
 
 .app-portal .greeting-stats .gs-val {
   font-size: 17px;
+  font-weight: 700;
 }
 
 .app-portal .greeting-stats .gs-label {
   font-size: 9px;
+  opacity: 0.85;
 }
 
-.app-portal .greeting-stats .gs:nth-child(1) {
-  border-top-color: #9ae6b0;
+.app-portal .greeting-stats .gs-accent-green {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(255, 255, 255, 0.35);
+  border-top-color: var(--green);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
-.app-portal .greeting-stats .gs:nth-child(1) .gs-val {
-  color: #b8f0c8;
+.app-portal .greeting-stats .gs-accent-green .gs-val {
+  color: #056b24;
 }
 
-.app-portal .greeting-stats .gs:nth-child(2) {
+.app-portal .greeting-stats .gs-accent-green .gs-label {
+  color: rgba(5, 107, 36, 0.75);
+}
+
+.app-portal .greeting-stats .gs-accent-gold {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(255, 255, 255, 0.35);
   border-top-color: var(--gold);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
-.app-portal .greeting-stats .gs:nth-child(2) .gs-val {
+.app-portal .greeting-stats .gs-accent-gold .gs-val {
+  color: #8a6d00;
+}
+
+.app-portal .greeting-stats .gs-accent-gold .gs-label {
+  color: rgba(138, 109, 0, 0.75);
+}
+
+.app-portal .greeting-stats .gs-accent-red {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(255, 255, 255, 0.35);
+  border-top-color: var(--red);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.app-portal .greeting-stats .gs-accent-red .gs-val {
+  color: #b91c1c;
+}
+
+.app-portal .greeting-stats .gs-accent-red .gs-label {
+  color: rgba(185, 28, 28, 0.75);
+}
+
+/* Profile edit buttons */
+.app-portal .pf-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.app-portal .pf-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+
+.app-portal .pf-edit-btn {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(252, 221, 9, 0.55);
+  background: linear-gradient(135deg, rgba(252, 221, 9, 0.22) 0%, rgba(252, 221, 9, 0.08) 100%);
   color: var(--gold);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(252, 221, 9, 0.15);
+  transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
 }
 
-.app-portal .greeting-stats .gs:nth-child(3) {
-  border-top-color: #fca5a5;
+.app-portal .pf-edit-btn:active {
+  transform: scale(0.97);
 }
 
-.app-portal .greeting-stats .gs:nth-child(3) .gs-val {
-  color: #fecaca;
+.app-portal .pf-edit-btn:hover {
+  background: linear-gradient(135deg, rgba(252, 221, 9, 0.35) 0%, rgba(252, 221, 9, 0.15) 100%);
+  box-shadow: 0 4px 14px rgba(252, 221, 9, 0.22);
+}
+
+.app-portal .ben-pending-banner {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(252, 221, 9, 0.14);
+  border: 1px solid rgba(252, 221, 9, 0.4);
+  font-size: 12px;
+  color: var(--gold);
+  line-height: 1.45;
 }
 
 .app-portal .see-all { color: #9ae6b0; }

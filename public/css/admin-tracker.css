@@ -164,6 +164,47 @@ body.app-admin.tracker {
   flex: 1;
   min-width: 0;
   overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Top center brand (main content) ── */
+.tracker-page-top {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--tk-border);
+  background: linear-gradient(180deg, rgba(7, 137, 48, 0.12) 0%, transparent 100%);
+}
+
+.tracker-page-top img {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--tk-orange);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  margin-bottom: 8px;
+}
+
+.tracker-page-top-name {
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.tracker-page-top-sub {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--tk-muted);
+  margin-top: 3px;
 }
 
 .tracker-app {
@@ -378,6 +419,32 @@ body.app-admin.tracker {
 
 .tracker-search input:focus {
   border-color: var(--tk-orange);
+}
+
+.tracker-search-label {
+  display: none;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tk-orange);
+  margin-bottom: 6px;
+}
+
+.tracker-search-prominent input {
+  font-size: 14px;
+}
+
+.tracker-table tbody tr.data-row-clickable {
+  cursor: pointer;
+}
+
+.tracker-table tbody tr.data-row-clickable:hover {
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.tracker-table tbody tr.data-row-clickable:active {
+  background: rgba(245, 158, 11, 0.14);
 }
 
 .tracker-select {
@@ -919,6 +986,14 @@ body.tracker .btn.primary {
     display: none;
   }
 
+  .tracker-page-top {
+    padding-top: 14px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: linear-gradient(180deg, #0c1220 0%, #0c1220 88%, transparent 100%);
+  }
+
   .tracker-mobile-nav {
     display: flex;
     position: fixed;
@@ -950,6 +1025,50 @@ body.tracker .btn.primary {
 
   .tracker-app {
     padding-bottom: 72px;
+  }
+
+  .tracker-toolbar {
+    position: sticky;
+    top: 108px;
+    z-index: 40;
+    background: var(--tk-bg);
+    padding: 12px 0 14px;
+    margin: 0 -12px;
+    padding-left: 12px;
+    padding-right: 12px;
+    border-bottom: 1px solid var(--tk-border);
+  }
+
+  .tracker-search {
+    flex: 1 1 100%;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .tracker-search-label {
+    display: block;
+  }
+
+  .tracker-search-prominent input {
+    min-height: 48px;
+    padding: 14px 14px 14px 40px;
+    font-size: 16px;
+    border: 2px solid rgba(245, 158, 11, 0.55);
+    background: rgba(245, 158, 11, 0.08);
+    border-radius: 10px;
+    box-shadow: 0 2px 12px rgba(245, 158, 11, 0.12);
+  }
+
+  .tracker-search-prominent input:focus {
+    border-color: var(--tk-orange);
+    background: rgba(245, 158, 11, 0.12);
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+  }
+
+  .tracker-search-prominent .tracker-search-icon {
+    left: 14px;
+    font-size: 18px;
+    color: var(--tk-orange);
   }
 
   .tracker-stats {

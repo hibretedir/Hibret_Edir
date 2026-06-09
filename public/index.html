@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-<title>Hibret Edir — Ethiopian Mutual Assistance</title>
+<title>Hibret Edir Association — Ethiopian Mutual Assistance</title>
 <link rel="stylesheet" href="/css/hibret.css?v=nav1">
 <link rel="stylesheet" href="/css/compat.css?v=nav1">
-<link rel="stylesheet" href="/css/public-pages.css?v=pubfix1">
+<link rel="stylesheet" href="/css/public-pages.css?v=pubfix3">
 </head>
 <body class="site-public">
 
@@ -19,7 +19,7 @@
     <a href="#" class="nav-brand" onclick="goHome();return false">
       <img src="/logo.png" alt="Hibret Edir">
       <div>
-        <div class="nav-brand-name en">Hibret Edir</div>
+        <div class="nav-brand-name en">Hibret Edir Association</div>
         <div class="nav-brand-name am">ሕብረት እድር</div>
         <div class="nav-brand-sub en">Ethiopian Mutual Aid</div>
         <div class="nav-brand-sub am">የጋራ ድጋፍ መርህ</div>
@@ -29,7 +29,7 @@
       <a href="#" class="nav-home" onclick="return goSection('home')"><span class="en">Home</span><span class="am">መነሻ</span></a>
       <a href="/portal/" class="nav-login"><span class="en">Member Login</span><span class="am">አባል መግቢያ</span></a>
     </div>
-    <button class="nav-ham" id="hamBtn" onclick="openMenu()" type="button" aria-label="Open menu" aria-expanded="false"><span aria-hidden="true">☰</span></button>
+    <button class="nav-ham" id="hamBtn" onclick="toggleMenu()" type="button" aria-label="Open menu" aria-expanded="false"><span aria-hidden="true">☰</span></button>
     <div class="nav-lang-row">
       <button class="lang-btn on" id="lb-en" onclick="setLang('en')">EN</button>
       <button class="lang-btn" id="lb-am" onclick="setLang('am')">አማ</button>
@@ -195,8 +195,8 @@
         <div class="step-num">4</div>
         <h3 class="en">Family Receives $15,000</h3>
         <h3 class="am">ቤተሰብ $15,000 ይቀበላል</h3>
-        <p class="en">The family receives $15,000 to cover funeral and burial costs with dignity and speed.</p>
-        <p class="am">ቤተሰቡ $15,000 ለቀብር ወጪ ይቀበላል።</p>
+        <p class="en">The family receives $15,000, minus service charge, to cover funeral and burial costs with dignity and speed.</p>
+        <p class="am">ቤተሰቡ $15,000 (ከአገልግሎት ክፍያ በስተቀር) ለቀብር ወጪ በክብር እና በፍጥነት ይቀበላል።</p>
       </div>
     </div>
   </div>
@@ -293,8 +293,6 @@
         <p class="en">Direct deposit to Hibret Edir Bank of America account. Upload receipt after transfer.</p>
         <p class="am">ቀጥታ ወደ ባንክ ኦፍ አሜሪካ መለያ ያስተላልፉ። ከማስተላለፍ በኋላ ደረሰኝ ይስቀሉ።</p>
         <a href="/portal/" class="pay-cta"><span class="en">Upload Receipt →</span><span class="am">ደረሰኝ ይስቀሉ →</span></a>
-        <div class="pay-info en">Call (424) 547-5594 for account details</div>
-        <div class="pay-info am">(424) 547-5594 — የመለያ ዝርዝር</div>
       </div>
     </div>
   </div>
@@ -542,6 +540,9 @@
       <div class="contact-form-box fade-up" style="animation-delay:.15s">
         <h3 class="en">Send Us a Message</h3>
         <h3 class="am">መልዕክት ይላኩልን</h3>
+        <p class="form-fine en" style="margin-bottom:12px">Messages go to the board at <strong>hibretedirtext@gmail.com</strong>.</p>
+        <p class="form-fine am" style="margin-bottom:12px">መልዕክቶች ወደ <strong>hibretedirtext@gmail.com</strong> ይሄዳሉ።</p>
+        <div class="form-msg" id="contactMsg"></div>
         <form onsubmit="submitContact(event)">
           <div class="fg-row">
             <div class="fg">
@@ -655,6 +656,23 @@ function closeMenu(){
   document.getElementById('mmenuBackdrop').classList.remove('open');
   document.getElementById('hamBtn').setAttribute('aria-expanded', 'false');
 }
+function toggleMenu(){
+  const open=document.getElementById('mmenu').classList.contains('open');
+  if(open) closeMenu();
+  else openMenu();
+}
+
+document.addEventListener('pointerdown', (e) => {
+  const menu=document.getElementById('mmenu');
+  const ham=document.getElementById('hamBtn');
+  if(!menu?.classList.contains('open')) return;
+  if(menu.contains(e.target) || ham.contains(e.target)) return;
+  closeMenu();
+});
+
+window.addEventListener('scroll', () => {
+  if(document.getElementById('mmenu')?.classList.contains('open')) closeMenu();
+}, { passive: true });
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
@@ -691,6 +709,7 @@ function goSection(id){
   const anchor=document.getElementById(id);
 
   if(mob()){
+    document.body.classList.add('mobile-section-active');
     document.querySelectorAll('.section-page').forEach(s=>s.classList.remove('active'));
     const grid=document.getElementById('sectionGrid');
     if(grid) grid.style.display='none';
@@ -698,9 +717,7 @@ function goSection(id){
       page.classList.add('active');
       revealSection(page);
     }
-    const back=document.getElementById('backBtn');
-    if(back) back.style.display='flex';
-    window.scrollTo(0,0);
+    window.scrollTo(0, 0);
   } else if(anchor){
     const top=anchor.getBoundingClientRect().top+window.scrollY-(parseInt(getComputedStyle(document.documentElement).getPropertyValue('--nav-h'))||56)+8;
     window.scrollTo({top,behavior:'smooth'});
@@ -718,11 +735,10 @@ function goSection(id){
 function goHome(){
   closeMenu();
   if(mob()){
+    document.body.classList.remove('mobile-section-active');
     document.querySelectorAll('.section-page').forEach(s=>s.classList.remove('active'));
     const grid=document.getElementById('sectionGrid');
     if(grid) grid.style.display='block';
-    const back=document.getElementById('backBtn');
-    if(back) back.style.display='none';
   }
   window.scrollTo({top:0,behavior:'smooth'});
   history.replaceState(null,'',location.pathname+location.search);
@@ -733,10 +749,12 @@ function initNav(){
   const grid=document.getElementById('sectionGrid');
   const back=document.getElementById('backBtn');
   if(mob()){
+    document.body.classList.remove('mobile-section-active');
     if(grid) grid.style.display='block';
     if(back) back.style.display='none';
     document.querySelectorAll('.section-page').forEach(s=>s.classList.remove('active'));
   } else {
+    document.body.classList.remove('mobile-section-active');
     if(grid) grid.style.display='none';
     if(back) back.style.display='none';
     document.querySelectorAll('.section-page').forEach(s=>{s.classList.remove('active');s.style.display='';});
@@ -760,6 +778,7 @@ window.addEventListener('resize',()=>{
     const grid=document.getElementById('sectionGrid');
     if(grid) grid.style.display='block';
   }
+  if(wlStatusLoaded) filterWaitingList();
 });
 
 window.addEventListener('hashchange',()=>{
@@ -938,14 +957,37 @@ async function submitWaitlist(e) {
     showFormMsg('waitlistMsg', 'Network error. Please try again or call (424) 547-5594.', false);
   }
 }
-function submitContact(e){
+async function submitContact(e){
   e.preventDefault();
   const lang = document.documentElement.lang || 'en';
-  alert(lang === 'am'
-    ? 'መልዕክትዎ ተልኳል! በቅርቡ እንመለስልዎታለን።'
-    : 'Message sent! We will get back to you soon.');
-  e.target.reset();
-  updateIndexPlaceholders(lang);
+  const payload = {
+    name: document.getElementById('contactName').value.trim(),
+    phone: document.getElementById('contactPhone').value.trim(),
+    email: document.getElementById('contactEmail').value.trim(),
+    message: document.getElementById('contactMessage').value.trim(),
+  };
+  const btn = e.target.querySelector('button[type="submit"]');
+  if (btn) btn.disabled = true;
+  try {
+    const res = await fetch('/.netlify/functions/apply/contact', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Send failed');
+    showFormMsg('contactMsg', lang === 'am'
+      ? 'መልዕክትዎ ወደ hibretedirtext@gmail.com ተልኳል። በቅርቡ እንመለስልዎታለን።'
+      : 'Message sent to hibretedirtext@gmail.com. We will get back to you soon.', true);
+    e.target.reset();
+    updateIndexPlaceholders(lang);
+  } catch {
+    showFormMsg('contactMsg', lang === 'am'
+      ? 'መልዕክት አልተላከም። hibretedirtext@gmail.com ይጻፉ ወይም ይደውሉ።'
+      : 'Could not send right now. Email hibretedirtext@gmail.com or try again.', false);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
 }
 
 const WL_STATUS_PANELS = [
@@ -985,12 +1027,18 @@ function escapeWlHtml(text) {
   return d.innerHTML;
 }
 
+function waitingListDisplayEntries(entries) {
+  let list = entries;
+  if (mob()) list = list.filter((e) => !e.added);
+  return list;
+}
+
 function filterWaitingListPanel(searchId, wrapId) {
   const q = (document.getElementById(searchId)?.value || '').trim().toLowerCase();
-  const entries = !q
+  const filtered = !q
     ? wlStatusEntries
     : wlStatusEntries.filter((e) => (e.display_name || '').toLowerCase().includes(q));
-  renderWaitingListTable(entries, wrapId);
+  renderWaitingListTable(waitingListDisplayEntries(filtered), wrapId);
 }
 
 function filterWaitingList() {

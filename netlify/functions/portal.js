@@ -140,6 +140,7 @@ async function getInvoices({ memberId, email, status, limit = 500 }) {
       invoices.paypal_link,
       COALESCE(events.deceased_name, '') AS item,
       invoices.recipient_name,
+      invoices.member_id,
       members.paypal_name AS member_paypal_name,
       members.full_name AS member_full_name,
       members.email AS member_email
@@ -190,6 +191,8 @@ function buildInvoicePayload(row) {
     || row.member_paypal_name
     || row.member_full_name
     || '';
+  const dateStr = row.date ? row.date.toISOString().slice(0, 19).replace('T', ' ') : null;
+  const daysOverdue = computeDaysOverdue(dateStr, row.status);
   return {
     id: row.id,
     invoice_num: row.invoice_number,
@@ -197,17 +200,30 @@ function buildInvoicePayload(row) {
     status: row.status,
     total: Number(row.amount),
     amount_due: Number(row.amount_due),
-    date: row.date ? row.date.toISOString().slice(0, 19).replace('T', ' ') : null,
+    date: dateStr,
     item: row.item || '',
     payment_method: row.payment_method,
     paypal_link: row.paypal_link,
     member_email: row.member_email,
     member_full_name: row.member_full_name,
     member_paypal_name: row.member_paypal_name,
+    member_id: row.member_id,
     recipient_name: row.recipient_name,
     name: invoiceName,
-    email: row.member_email
+    email: row.member_email,
+    days_overdue: daysOverdue,
+    is_late: daysOverdue > 0 && String(row.status || '').toLowerCase() !== 'paid',
   };
+}
+
+const INVOICE_DUE_DAYS = 3;
+
+function computeDaysOverdue(dateStr, status) {
+  if (!dateStr || String(status || '').toLowerCase() === 'paid') return 0;
+  const sent = new Date(String(dateStr).split(' ')[0]);
+  if (Number.isNaN(sent.getTime())) return 0;
+  const due = new Date(sent.getTime() + INVOICE_DUE_DAYS * 86400000);
+  return Math.max(0, Math.floor((Date.now() - due.getTime()) / 86400000));
 }
 
 async function updateMember(data, actor) {
@@ -409,9 +425,30 @@ async function getMemberProfile(memberId) {
      ORDER BY id DESC LIMIT 1`,
     [memberId]
   );
+  let pendingBeneficiaryChange = null;
+  try {
+    const pending = await db.query(
+      `SELECT id, payload, previous_payload, submitted_at, status
+       FROM member_change_requests
+       WHERE member_id = $1 AND request_type = 'beneficiary' AND status IN ('Pending', 'Under Review')
+       ORDER BY submitted_at DESC LIMIT 1`,
+      [memberId]
+    );
+    if (pending.rows[0]) {
+      pendingBeneficiaryChange = {
+        id: pending.rows[0].id,
+        payload: pending.rows[0].payload,
+        submitted_at: pending.rows[0].submitted_at,
+        status: pending.rows[0].status,
+      };
+    }
+  } catch (err) {
+    console.warn('Pending beneficiary lookup skipped:', err.message);
+  }
   return {
     member: buildMemberPayload(member),
     beneficiary: ben.rows[0] || null,
+    pending_beneficiary_change: pendingBeneficiaryChange,
   };
 }
 
@@ -467,7 +504,7 @@ async function patchMemberProfile(memberId, body, actor) {
   return { member: buildMemberPayload(updated), changes };
 }
 
-async function upsertMemberBeneficiary(memberId, body, actor) {
+async function upsertMemberBeneficiary(memberId, body, actor, { requireApproval = true } = {}) {
   const name = body.name?.trim();
   const phone = body.phone?.trim();
   const relationship = body.relationship?.trim();
@@ -480,11 +517,52 @@ async function upsertMemberBeneficiary(memberId, body, actor) {
 
   const db = getDb();
   const existing = await db.query(
-    `SELECT id FROM beneficiaries WHERE member_id = $1 AND is_primary = true LIMIT 1`,
+    `SELECT id, name, phone, relationship FROM beneficiaries WHERE member_id = $1 AND is_primary = true LIMIT 1`,
     [memberId]
   );
   const beneficiary = { name, phone, relationship };
   const isNew = !existing.rows.length;
+  const previous = existing.rows[0]
+    ? { name: existing.rows[0].name, phone: existing.rows[0].phone, relationship: existing.rows[0].relationship }
+    : null;
+
+  if (requireApproval && actor?.actor_type === 'member') {
+    await db.query(
+      `UPDATE member_change_requests
+       SET status = 'Rejected', notes = COALESCE(notes, '') || ' Superseded.', reviewed_at = NOW()
+       WHERE member_id = $1 AND request_type = 'beneficiary' AND status IN ('Pending', 'Under Review')`,
+      [memberId]
+    );
+    const insert = await db.query(
+      `INSERT INTO member_change_requests (member_id, request_type, payload, previous_payload, status)
+       VALUES ($1, 'beneficiary', $2::jsonb, $3::jsonb, 'Pending')
+       RETURNING id, submitted_at`,
+      [memberId, JSON.stringify(beneficiary), JSON.stringify(previous)]
+    );
+    if (actor) {
+      try {
+        await syncBeneficiaryUpdate(db, memberId, beneficiary, isNew, actor, { pending: true, requestId: insert.rows[0].id });
+      } catch (err) {
+        console.error('Beneficiary change request sync failed:', err);
+      }
+    }
+    try {
+      const { notifyBoard } = require('./notify');
+      const memberName = member.full_name || `${member.first_name || ''} ${member.last_name || ''}`.trim();
+      await notifyBoard({
+        db,
+        subject: `Hibret Edir — beneficiary change pending approval: ${memberName}`,
+        text: `Member ${memberName} (#${member.member_number || member.id}) ${isNew ? 'requested to add' : 'requested to update'} a beneficiary:\n\nName: ${name}\nRelationship: ${relationship}\nPhone: ${phone}\n\nReview in Admin → Applications.`,
+      });
+    } catch (err) {
+      console.error('Beneficiary request board notify failed:', err);
+    }
+    return {
+      pending: true,
+      request_id: insert.rows[0].id,
+      message: 'Beneficiary change submitted for board approval.',
+    };
+  }
 
   if (isNew) {
     await db.query(
