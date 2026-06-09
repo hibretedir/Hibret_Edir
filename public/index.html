@@ -6,7 +6,7 @@
 <title>Hibret Edir — Ethiopian Mutual Assistance</title>
 <link rel="stylesheet" href="/css/hibret.css?v=nav1">
 <link rel="stylesheet" href="/css/compat.css?v=nav1">
-<link rel="stylesheet" href="/css/public-pages.css?v=wlapply1">
+<link rel="stylesheet" href="/css/public-pages.css?v=pubfix1">
 </head>
 <body class="site-public">
 
@@ -50,18 +50,14 @@
       <a href="#" onclick="return goSection('home')"><span class="en">Home</span><span class="am">መነሻ</span></a>
       <a href="#announcement" onclick="return goSection('announcement')"><span class="en">Announcement</span><span class="am">ማስታወቂያ</span></a>
       <a href="#about" onclick="return goSection('about')"><span class="en">About Us</span><span class="am">ስለ እኛ</span></a>
-      <a href="#howitworks" class="mmenu-accent mmenu-accent-red" onclick="return goSection('howitworks')"><span class="en">How It Works</span><span class="am">እንዴት ይሰራል</span></a>
+      <a href="#howitworks" onclick="return goSection('howitworks')"><span class="en">How It Works</span><span class="am">እንዴት ይሰራል</span></a>
       <a href="#payment" onclick="return goSection('payment')"><span class="en">Make a Payment</span><span class="am">ክፍያ ያድርጉ</span></a>
       <a href="#bylaws" onclick="return goSection('bylaws')"><span class="en">By-Laws</span><span class="am">ደንብ</span></a>
-      <a href="#apply" class="mmenu-accent mmenu-accent-green" onclick="return goSection('apply')"><span class="en">Join / Waiting List</span><span class="am">ተጠባባቂ ዝርዝር</span></a>
-      <a href="#waitingliststatus" class="mmenu-accent mmenu-accent-gold" onclick="return goSection('waitingliststatus')"><span class="en">Waiting List Status</span><span class="am">የተራ ሁኔታ</span></a>
+      <a href="#apply" onclick="return goSection('apply')"><span class="en">Join / Waiting List</span><span class="am">ተጠባባቂ ዝርዝር</span></a>
+      <a href="#waitingliststatus" onclick="return goSection('waitingliststatus')"><span class="en">Waiting List Status</span><span class="am">የተራ ሁኔታ</span></a>
       <a href="#contact" onclick="return goSection('contact')"><span class="en">Contact Us</span><span class="am">ያግኙን</span></a>
     </div>
     <a href="/portal/" class="mmenu-login mmenu-login-mobile"><span class="en">Member Login</span><span class="am">አባል መግቢያ</span></a>
-    <div class="mmenu-lang">
-      <button type="button" class="mmenu-lb on" id="mlb-en" onclick="setLang('en')">English</button>
-      <button type="button" class="mmenu-lb" id="mlb-am" onclick="setLang('am')">አማርኛ</button>
-    </div>
   </div>
 </div>
 
@@ -237,8 +233,8 @@
             <div class="val-icon">🔍</div>
             <h4 class="en">Transparency</h4>
             <h4 class="am">ግልጽነት</h4>
-            <p class="en">Reports shared every 6 months</p>
-            <p class="am">የ6 ወር ሪፖርት</p>
+            <p class="en">Reports shared every year</p>
+            <p class="am">የዓመት ሪፖርት</p>
           </div>
           <div class="val-card">
             <div class="val-icon">⚡</div>
@@ -328,15 +324,15 @@
         <div class="bylaw-art"><span class="en">Article 6</span><span class="am">አንቀጽ 6</span></div>
         <h3 class="en">Financial Contributions</h3>
         <h3 class="am">የገንዘብ አስተዋፅኦ</h3>
-        <p class="en">$200 initial fee. $110 per death due within 3 days. Members may maintain a credit balance.</p>
+        <p class="en">$200 initial fee. $110 per death due within 3 days.</p>
         <p class="am">$200 የመጀመሪያ ክፍያ። በሞት $110 በ3 ቀናት ውስጥ።</p>
       </div>
       <div class="bylaw-card fade-up" style="animation-delay:.2s">
         <div class="bylaw-art"><span class="en">Article 7</span><span class="am">አንቀጽ 7</span></div>
         <h3 class="en">Edir Payout</h3>
         <h3 class="am">የእድር ክፍያ</h3>
-        <p class="en">$15,000 paid to member's family or designated beneficiary.</p>
-        <p class="am">$15,000 ለቤተሰቡ ወይም ለተወካዩ ይከፈላል።</p>
+        <p class="en">$15,000 paid to member's designated beneficiary.</p>
+        <p class="am">$15,000 ለአባሉ የተሰየመ ተቀባይ ይከፈላል።</p>
       </div>
       <div class="bylaw-card fade-up" style="animation-delay:.3s">
         <div class="bylaw-art"><span class="en">Article 8</span><span class="am">አንቀጽ 8</span></div>
@@ -412,32 +408,10 @@
           </div>
         </div>
 
-        <div class="wl-apply-status fade-up">
-          <div class="wl-apply-status-head">
-            <div class="req-ico">#</div>
-            <div>
-              <strong class="en">Waiting List Status</strong>
-              <strong class="am">የተራ ሁኔታ</strong>
-              <span class="en">Check your place in line before you apply</span>
-              <span class="am">ከመመዝገብዎ በፊት ቦታዎን ይመልከቱ</span>
-            </div>
-          </div>
-          <p class="wl-apply-note en">Places <strong>1–11</strong> have been added as members. Everyone else is listed in order. <strong>#12 is next in line.</strong></p>
-          <p class="wl-apply-note am">ቦታ <strong>1–11</strong> አባል ሆነዋል። ሌሎች በተራ ተዘርዝረዋል። <strong>#12 ቀጣይ ነው።</strong></p>
-          <div class="wl-apply-toolbar">
-            <div class="fg wl-search-wrap">
-              <label class="en">Search your name</label>
-              <label class="am">ስምዎን ፈልጉ</label>
-              <input type="search" id="wlApplySearch" placeholder="Type your name…" oninput="filterWaitingList()">
-            </div>
-            <button type="button" class="btn-gold wl-refresh-btn" onclick="loadWaitingListStatus()"><span class="en">Refresh</span><span class="am">አድስ</span></button>
-          </div>
-          <div class="form-msg" id="wlApplyStatusMsg"></div>
-          <div class="wl-table-wrap wl-table-wrap-compact" id="wlApplyTableWrap">
-            <p class="en">Loading waiting list…</p>
-            <p class="am">ዝርዝር በመጫን ላይ…</p>
-          </div>
-          <button type="button" class="wl-apply-full-link" onclick="goSection('waitingliststatus')"><span class="en">View full waiting list →</span><span class="am">ሙሉ ዝርዝር ይመልከቱ →</span></button>
+        <div class="wl-apply-link-card fade-up">
+          <p class="en">Check your place in line on the full waiting list status page.</p>
+          <p class="am">ቦታዎን በሙሉ የተራ ሁኔታ ገጽ ላይ ይመልከቱ።</p>
+          <button type="button" class="btn-gold wl-apply-status-link" onclick="goSection('waitingliststatus')"><span class="en">Waiting List Status →</span><span class="am">የተራ ሁኔታ →</span></button>
         </div>
       </div>
       <div class="fade-up" style="animation-delay:.15s">
@@ -649,13 +623,12 @@
         <h4 class="am">ያግኙን</h4>
         <a href="tel:4245475594">(424) 547-5594</a>
         <a href="mailto:hibretedirtext@gmail.com">hibretedirtext@gmail.com</a>
-        <a href="mailto:hibretedirautomation@gmail.com">hibretedirautomation@gmail.com</a>
         <a href="https://maps.google.com/?q=Los+Angeles,+CA" target="_blank">Los Angeles, CA</a>
       </div>
     </div>
     <div class="footer-bottom">
-      <div class="en">© 2024 Hibret Edir Association. All rights reserved.</div>
-      <div class="am">© 2024 ሕብረት እድር ማህበር። ሁሉም መብቶች የተጠበቁ ናቸው።</div>
+      <div class="en">© 2026 Hibret Edir Association. All rights reserved.</div>
+      <div class="am">© 2026 ሕብረት እድር ማህበር። ሁሉም መብቶች የተጠበቁ ናቸው።</div>
       <div class="footer-flag">
         <span style="background:#078930"></span>
         <span style="background:#FCDD09"></span>
@@ -736,7 +709,7 @@ function goSection(id){
   if(NAV_SECTIONS.has(id)){
     history.replaceState(null,'','#'+id);
   }
-  if((id==='waitingliststatus' || id==='apply') && !wlStatusLoaded){
+  if(id==='waitingliststatus' && !wlStatusLoaded){
     loadWaitingListStatus();
   }
   return false;
@@ -801,7 +774,7 @@ initNav();
 function setLang(l){
   document.documentElement.lang=l;
   document.body.classList.toggle('lang-am', l === 'am');
-  ['lb-en','lb-am','mlb-en','mlb-am'].forEach(id=>{
+  ['lb-en','lb-am'].forEach(id=>{
     const el=document.getElementById(id);
     if(el) el.classList.toggle('on',id.includes(l));
   });
@@ -811,7 +784,6 @@ function setLang(l){
 
 const INDEX_PLACEHOLDERS = {
   wlSearch: { en: 'Type your name…', am: 'ስምዎን ይፃፉ…' },
-  wlApplySearch: { en: 'Type your name…', am: 'ስምዎን ይፃፉ…' },
   waitlistName: { en: 'First and last name', am: 'ሙሉ ስም' },
   waitlistEmail: { en: 'your@email.com', am: 'your@email.com' },
   waitlistPhone: { en: '(xxx) xxx-xxxx', am: '(xxx) xxx-xxxx' },
@@ -828,7 +800,6 @@ function updateIndexPlaceholders(lang) {
   const l = lang || document.documentElement.lang || 'en';
   const map = {
     wlSearch: document.getElementById('wlSearch'),
-    wlApplySearch: document.getElementById('wlApplySearch'),
     waitlistName: document.querySelector('#waitlistForm input[name="name"]'),
     waitlistEmail: document.querySelector('#waitlistForm input[name="email"]'),
     waitlistPhone: document.querySelector('#waitlistForm input[name="phone"]'),
@@ -979,7 +950,6 @@ function submitContact(e){
 
 const WL_STATUS_PANELS = [
   { searchId: 'wlSearch', wrapId: 'wlTableWrap', msgId: 'wlStatusMsg' },
-  { searchId: 'wlApplySearch', wrapId: 'wlApplyTableWrap', msgId: 'wlApplyStatusMsg' },
 ];
 
 function renderWaitingListTable(entries, wrapId) {
@@ -1083,7 +1053,7 @@ async function loadWaitingListStatus() {
   }
 }
 
-if ((location.hash || '').replace(/^#/, '') === 'waitingliststatus' || (location.hash || '').replace(/^#/, '') === 'apply') {
+if ((location.hash || '').replace(/^#/, '') === 'waitingliststatus') {
   loadWaitingListStatus();
 }
 

@@ -100,6 +100,11 @@ body.app-portal .confirm-wrap .pin-input {
   color: #eef4ee;
 }
 
+.app-portal .form-select option {
+  background: #0a2218;
+  color: #eef4ee;
+}
+
 .app-portal .form-input::placeholder {
   color: rgba(238, 244, 238, 0.4);
 }
@@ -170,6 +175,91 @@ body.app-portal .confirm-wrap .pin-input {
 
 .app-portal .empty-state {
   color: var(--text-muted);
+}
+
+.app-portal .empty-state-paid {
+  text-align: center;
+  padding: 28px 20px 32px;
+  margin: 8px 0 4px;
+  border-radius: var(--radius);
+  background: linear-gradient(160deg, rgba(7, 137, 48, 0.35) 0%, rgba(7, 137, 48, 0.12) 100%);
+  border: 1px solid rgba(7, 137, 48, 0.45);
+}
+
+.app-portal .empty-state-paid .empty-state-logo {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 3px solid var(--gold);
+  object-fit: cover;
+  margin: 0 auto 12px;
+  display: block;
+}
+
+.app-portal .empty-state-paid .empty-state-badge {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  background: var(--green);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 44px;
+}
+
+.app-portal .empty-state-paid h3 {
+  color: #fff;
+  font-size: 20px;
+  margin: 0 0 10px;
+}
+
+.app-portal .empty-state-paid p {
+  color: rgba(238, 244, 238, 0.88);
+  font-size: 14px;
+  line-height: 1.55;
+  margin: 0;
+  max-width: 320px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.app-portal .empty-state-paid .empty-state-am {
+  margin-top: 10px;
+  font-size: 13px;
+  color: rgba(238, 244, 238, 0.65);
+  font-family: var(--font-am);
+}
+
+.app-portal .receipt-upload-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.app-portal .receipt-upload-btn {
+  flex: 1;
+  min-width: 120px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(7, 137, 48, 0.55);
+  background: rgba(7, 137, 48, 0.28);
+  color: #e8fff0;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: var(--font);
+}
+
+.app-portal .receipt-upload-btn.receipt-upload-secondary {
+  border-color: rgba(252, 221, 9, 0.45);
+  background: rgba(252, 221, 9, 0.12);
+  color: var(--gold);
+}
+
+.app-portal .receipt-upload-btn:active {
+  transform: scale(0.98);
 }
 
 .app-portal .auth-wrap {

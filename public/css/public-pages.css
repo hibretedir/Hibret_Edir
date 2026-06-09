@@ -225,9 +225,7 @@
 }
 
 .site-public .mmenu-lang {
-  display: flex;
-  gap: 8px;
-  padding: 10px 12px 12px;
+  display: none;
 }
 
 .site-public .mmenu-lb {
@@ -879,6 +877,27 @@
 
 .site-public .wl-apply-full-link:hover { color: #fff; }
 
+.site-public .wl-apply-link-card {
+  margin-top: 28px;
+  padding: 18px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--pub-card-border);
+  background: var(--pub-card);
+  border-top: 3px solid var(--gold);
+}
+
+.site-public .wl-apply-link-card p {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--pub-text-muted);
+  margin-bottom: 14px;
+}
+
+.site-public .wl-apply-status-link {
+  width: 100%;
+  text-align: center;
+}
+
 .site-public .mmenu-list a { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .site-public .mmenu-list a .en,
 .site-public .mmenu-list a .am { flex: 1; }
@@ -961,11 +980,34 @@
   color: #1a1a1a;
 }
 
+/* Mobile grid — override compat.css light #sectionGrid / .sg-card */
+body.site-public #sectionGrid,
+body.site-public .section-grid {
+  background: var(--pub-section) !important;
+  border-bottom-color: var(--pub-divider) !important;
+}
+
+body.site-public .sg-title {
+  color: var(--gold) !important;
+}
+
+body.site-public .sg-card {
+  background: rgba(10, 34, 24, 0.92) !important;
+  border: 1px solid var(--pub-card-border) !important;
+  color: var(--pub-text) !important;
+}
+
+body.site-public .sg-icon {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: var(--gold) !important;
+  border-color: var(--pub-card-border) !important;
+}
+
 /* Mobile grid */
 .site-public .section-grid { padding: calc(var(--nav-h) + 16px) 16px 24px; max-width: 600px; margin: 0 auto; }
 .site-public .sg-title { font-size: 13px; font-weight: 600; color: var(--gold); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
 .site-public .sg-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.site-public .sg-card { border-radius: var(--radius); padding: 18px 14px; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 600; color: #fff; transition: border-color 0.2s, transform 0.15s; }
+.site-public .sg-card { border-radius: var(--radius); padding: 18px 14px; text-align: left; cursor: pointer; display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 600; color: var(--pub-text); transition: border-color 0.2s, transform 0.15s; }
 .site-public .sg-card:active { transform: scale(0.98); border-color: rgba(252, 221, 9, 0.5); }
 
 .site-public .sg-card-accent-green {

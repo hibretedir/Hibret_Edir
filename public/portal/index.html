@@ -6,7 +6,7 @@
 <title>Hibret Edir — Member Portal</title>
 <link rel="stylesheet" href="/css/hibret.css?v=portal3">
 <link rel="stylesheet" href="/css/compat.css?v=portal3">
-<link rel="stylesheet" href="/css/app-theme.css?v=portal3">
+<link rel="stylesheet" href="/css/app-theme.css?v=portal4">
 </head>
 <body class="app-portal">
 
@@ -189,8 +189,8 @@
     <div class="screen" id="tUpload">
       <div class="sec-hd"><h2>Upload Receipt</h2></div>
       <div class="upload-card">
-        <label>Which death are you paying for?</label>
-        <select class="form-select" id="evSel"><option value="">Select memorial...</option></select>
+        <label>Which person are you paying for?</label>
+        <select class="form-select" id="evSel"><option value="">Select from your invoices…</option></select>
       </div>
       <div class="upload-card">
         <label>Payment Method</label>
@@ -206,21 +206,21 @@
         </div>
       </div>
       <div class="upload-card">
-        <label>Amount Paid ($)</label>
-        <input type="number" class="form-input" id="payAmt" value="110" placeholder="110.00" style="margin-bottom:0">
-      </div>
-      <div class="upload-card">
-        <label>Receipt Photo</label>
-        <div class="drop-zone" id="dropZ" onclick="document.getElementById('fInp').click()"
+        <label>Receipt photo</label>
+        <div class="receipt-upload-actions">
+          <button type="button" class="receipt-upload-btn" id="receiptCameraBtn">Take photo</button>
+          <button type="button" class="receipt-upload-btn receipt-upload-secondary" id="receiptFileBtn">Upload file</button>
+        </div>
+        <input type="file" id="receiptCameraInput" accept="image/*" capture="environment" hidden>
+        <input type="file" id="receiptFileInput" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf" hidden>
+        <div class="drop-zone" id="dropZ"
           ondragover="event.preventDefault();this.classList.add('over')"
           ondragleave="this.classList.remove('over')"
           ondrop="doDrop(event)">
           <div class="drop-icon">+</div>
-          <div class="drop-title">Tap to take or upload photo</div>
-          <div class="drop-sub">JPG, PNG, or PDF accepted</div>
-          <span class="drop-cta">Choose File</span>
+          <div class="drop-title">Or drag a receipt here</div>
+          <div class="drop-sub">JPG, PNG, or PDF · max 5 MB</div>
         </div>
-        <input type="file" id="fInp" accept="image/*,application/pdf" capture="environment" style="display:none" onchange="doFile(this.files[0])">
         <div class="preview-box" id="prevBox">
           <img id="prevImg" class="preview-img-el">
           <div class="preview-file-box" id="prevFile">
@@ -701,7 +701,13 @@ function renderPortal(){
   // Home: first 3 unpaid
   const homeEl=document.getElementById('homeInvs');
   if(unpaid.length===0){
-    homeEl.innerHTML='<div class="empty-state"><div class="empty-icon">🎉</div><h3>All Paid Up!</h3><p>No outstanding invoices. Thank you for your timely contributions.</p></div>';
+    homeEl.innerHTML=`<div class="empty-state empty-state-paid">
+      <img src="/logo.png" alt="" class="empty-state-logo">
+      <div class="empty-state-badge">✓</div>
+      <h3>You're all caught up!</h3>
+      <p>No outstanding invoices right now. Thank you for staying current with your Edir contributions — your support means everything to grieving families.</p>
+      <p class="empty-state-am">ምንም ክፍያ የለም። ለጋራ ድጋፍዎ እናመሰግናለን።</p>
+    </div>`;
   } else {
     homeEl.innerHTML=renderInvs(unpaid.slice(0,3));
   }
@@ -720,7 +726,7 @@ function renderPortal(){
     {ico:'🏠',lbl:'Home Phone',key:'home',val:m.home||'Not on file',editable:true},
     {ico:'✉️',lbl:'Email',key:'email',val:m.email||'Not on file',editable:true},
     {ico:'📍',lbl:'Address',key:'address',val:m.address||'Not on file',editable:true},
-    {ico:'💙',lbl:'PayPal Name',key:'paypal_name',val:m.paypal_name||m.first+' '+m.last,editable:true},
+    {ico:'💙',lbl:'PayPal Name',key:'paypal_name',val:m.paypal_name||m.first+' '+m.last,editable:false},
     {ico:'👨‍👩‍👧',lbl:'Family',val:m.full_name||m.first+' '+m.last,editable:false},
   ];
   document.getElementById('profFields').innerHTML=fields.map(f=>`
@@ -734,16 +740,21 @@ function renderPortal(){
 
   renderBeneficiary();
 
-  // Upload event dropdown — unpaid events only
+  // Upload dropdown — one option per unpaid invoice (deceased / event name from invoice)
   const sel=document.getElementById('evSel');
-  sel.innerHTML='<option value="">Select memorial...</option>';
-  [...new Set(unpaid.map(i=>i.item))].forEach(ev=>{
+  sel.innerHTML='<option value="">Select from your invoices…</option>';
+  unpaid.forEach(inv=>{
     const o=document.createElement('option');
-    o.value=ev;o.textContent=ev;sel.appendChild(o);
+    o.value=String(inv.invoice_num);
+    o.textContent=invoicePersonLabel(inv);
+    sel.appendChild(o);
   });
   if(unpaid.length===0){
     const o=document.createElement('option');
-    o.value='other';o.textContent='General Payment';sel.appendChild(o);
+    o.value='';
+    o.textContent='No unpaid invoices';
+    o.disabled=true;
+    sel.appendChild(o);
   }
 
   renderNotifs();
@@ -783,7 +794,7 @@ function renderInvs(list){
             ${paid
               ? '<span class="btn-paid-badge">✓ Paid</span>'
               : `<a href="${inv.paypal_link || (inv.paypal_id ? PAYPAL_INVOICE_BASE + inv.paypal_id : '#')}" target="_blank" rel="noopener" class="btn-pay">💳 Pay via PayPal</a>
-                 <button class="btn-receipt" onclick="prefill('${inv.item.replace(/'/g,"\'")}')">📤</button>`
+                 <button class="btn-receipt" onclick="prefill(${inv.invoice_num})">📤</button>`
             }
           </div>
         </div>
@@ -792,7 +803,19 @@ function renderInvs(list){
   }).join('');
 }
 
-function prefill(ev){document.getElementById('evSel').value=ev;tab('upload');}
+function invoicePersonLabel(inv){
+  const item=(inv.item||'').trim();
+  const num=inv.invoice_num;
+  if(item&&num) return item+' · Invoice #'+num;
+  if(item) return item;
+  if(num) return 'Invoice #'+num;
+  return 'Unpaid invoice';
+}
+
+function prefill(invoiceNum){
+  document.getElementById('evSel').value=String(invoiceNum);
+  tab('upload');
+}
 
 // TABS
 function tab(t){
@@ -839,20 +862,22 @@ function doDrop(e){
 function rmFile(){
   uploadedFile=null;
   document.getElementById('prevBox').style.display='none';
-  document.getElementById('fInp').value='';
+  const cam=document.getElementById('receiptCameraInput');
+  const file=document.getElementById('receiptFileInput');
+  if(cam) cam.value='';
+  if(file) file.value='';
 }
 function doUpload(){
-  const ev=document.getElementById('evSel').value;
-  const amt=document.getElementById('payAmt').value;
-  if(!ev){alert('Please select which death you are paying for.');return;}
-  if(!amt){alert('Please enter the amount paid.');return;}
-  if(!uploadedFile){alert('Please upload your receipt photo.');return;}
+  const invNum=document.getElementById('evSel').value;
+  if(!invNum){alert('Please select which person you are paying for.');return;}
+  if(!uploadedFile){alert('Please add a photo or PDF of your receipt.');return;}
+  const inv=getMyInvs().find(i=>String(i.invoice_num)===String(invNum));
+  const personLabel=inv?invoicePersonLabel(inv):('Invoice #'+invNum);
   document.getElementById('confMsg').innerHTML=
-    'Your receipt for <strong>'+ev+'</strong> has been submitted.<br>The board will review and confirm your payment shortly.<br><br><small style="color:var(--gray)">ደረሰኝዎ ተልኳል። ቦርዱ ያረጋግጣል።</small>';
+    'Your receipt for <strong>'+personLabel+'</strong> has been submitted.<br>The board will review and confirm your payment shortly.<br><br><small style="color:var(--gray)">ደረሰኝዎ ተልኳል። ቦርዱ ያረጋግጣል።</small>';
   document.getElementById('confDetail').innerHTML=`
     <div class="cd-row"><span class="cd-lbl">Member</span><span class="cd-val">${me.first} ${me.last}</span></div>
-    <div class="cd-row"><span class="cd-lbl">Memorial</span><span class="cd-val">${ev}</span></div>
-    <div class="cd-row"><span class="cd-lbl">Amount</span><span class="cd-val">$${parseFloat(amt).toFixed(2)}</span></div>
+    <div class="cd-row"><span class="cd-lbl">Paying for</span><span class="cd-val">${personLabel}</span></div>
     <div class="cd-row"><span class="cd-lbl">Method</span><span class="cd-val">${selMeth}</span></div>
     <div class="cd-row"><span class="cd-lbl">Submitted</span><span class="cd-val">${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span></div>`;
   document.getElementById('portalApp').style.display='none';
@@ -1011,6 +1036,19 @@ function setLang(l){
   document.getElementById('lb-am').classList.toggle('active',l==='am');
   localStorage.setItem('hlang',l);
 }
+
+document.getElementById('receiptCameraBtn')?.addEventListener('click', ()=>{
+  document.getElementById('receiptCameraInput')?.click();
+});
+document.getElementById('receiptFileBtn')?.addEventListener('click', ()=>{
+  document.getElementById('receiptFileInput')?.click();
+});
+document.getElementById('receiptCameraInput')?.addEventListener('change', function(){
+  if(this.files[0]) doFile(this.files[0]);
+});
+document.getElementById('receiptFileInput')?.addEventListener('change', function(){
+  if(this.files[0]) doFile(this.files[0]);
+});
 
 loadStoredSession();
 </script>

@@ -379,7 +379,6 @@ const MEMBER_EDIT_FIELDS = {
   home: 'home_phone',
   email: 'email',
   address: 'address',
-  paypal_name: 'paypal_name',
 };
 
 const FIELD_LABELS = {
@@ -387,7 +386,6 @@ const FIELD_LABELS = {
   home: 'Home Phone',
   email: 'Email',
   address: 'Address',
-  paypal_name: 'PayPal Name',
 };
 
 async function fetchMemberRow(id) {
