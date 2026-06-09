@@ -6,7 +6,7 @@
 <title>Hibret Edir Association — Member Portal</title>
 <link rel="stylesheet" href="/css/hibret.css?v=portal3">
 <link rel="stylesheet" href="/css/compat.css?v=portal3">
-<link rel="stylesheet" href="/css/app-theme.css?v=portal7">
+<link rel="stylesheet" href="/css/app-theme.css?v=portal9">
 </head>
 <body class="app-portal">
 
@@ -104,10 +104,13 @@
 <div id="portalApp">
   <nav class="portal-nav">
     <div class="portal-nav-inner">
-      <button type="button" class="portal-nav-brand" onclick="tab('home')" aria-label="Go to Home">
+      <a href="/" class="portal-nav-brand" aria-label="Visit Hibret Edir main website">
         <img src="/logo.png" alt="" class="portal-nav-logo">
-        <span class="portal-nav-name">Hibret Edir Association</span>
-      </button>
+        <span class="portal-nav-brand-text">
+          <span class="portal-nav-name">Hibret Edir Association</span>
+          <span class="portal-nav-site-link">Visit main site →</span>
+        </span>
+      </a>
       <div class="portal-nav-right">
         <button class="portal-notif-btn" onclick="tab('notifications')" aria-label="Notifications">
           <span class="notif-bell">🔔</span>
@@ -148,8 +151,8 @@
         </div>
         <div class="greeting-stats">
           <div class="gs gs-accent-green"><div class="gs-val" id="gsPaid">0</div><div class="gs-label">Deaths Paid</div></div>
-          <div class="gs gs-accent-gold"><div class="gs-val" id="gsOwed">0</div><div class="gs-label">Outstanding</div></div>
-          <div class="gs gs-accent-red"><div class="gs-val" id="gsAmt">$0</div><div class="gs-label">Amount Due</div></div>
+          <div class="gs gs-accent-gold" id="gsOwedCard" role="button" tabindex="0" aria-label="View outstanding invoices" onclick="goOutstandingInvoices()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goOutstandingInvoices()}"><div class="gs-val" id="gsOwed">0</div><div class="gs-label">Outstanding</div></div>
+          <div class="gs gs-accent-red" id="gsAmtCard" role="button" tabindex="0" aria-label="View amount due" onclick="goOutstandingInvoices()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goOutstandingInvoices()}"><div class="gs-val" id="gsAmt">$0</div><div class="gs-label">Amount Due</div></div>
         </div>
       </div>
       <div class="sec-hd"><h2>Outstanding Invoices</h2><button class="see-all" onclick="tab('invoices')">See All</button></div>
@@ -189,8 +192,8 @@
     <div class="screen" id="tUpload">
       <div class="sec-hd"><h2>Upload Receipt</h2></div>
       <div class="upload-card">
-        <label>Which person are you paying for?</label>
-        <select class="form-select" id="evSel"><option value="">Select person…</option></select>
+        <label>Which person are you paying for? <span class="req">*</span></label>
+        <select class="form-select" id="evSel" required><option value="">Select person…</option></select>
       </div>
       <div class="upload-card">
         <label>Payment Method</label>
@@ -219,12 +222,18 @@
           <div class="drop-title">Or drag a receipt here</div>
           <div class="drop-sub">JPG, PNG, or PDF · max 5 MB</div>
         </div>
-        <div class="preview-box" id="prevBox">
-          <img id="prevImg" class="preview-img-el">
+        <div class="preview-box" id="prevBox" style="display:none">
+          <div class="preview-toolbar">
+            <div class="preview-file-meta">
+              <span class="preview-file-label">Selected file</span>
+              <span class="preview-filename" id="previewFileName"></span>
+            </div>
+            <button type="button" class="receipt-remove-btn" onclick="rmFile()">Remove file</button>
+          </div>
+          <img id="prevImg" class="preview-img-el" alt="Receipt preview">
           <div class="preview-file-box" id="prevFile">
             <span style="font-size:28px">📄</span>
             <div><div class="pf-name" id="pfName"></div><div class="pf-size" id="pfSize"></div></div>
-            <button class="rm-file" onclick="rmFile()">✕</button>
           </div>
         </div>
       </div>
@@ -704,6 +713,16 @@ function renderPortal(){
   const due=unpaid.reduce((s,i)=>s+i.amount_due,0);
   document.getElementById('gsAmt').textContent=due>0?'$'+due:'$0';
 
+  const owedCard=document.getElementById('gsOwedCard');
+  const amtCard=document.getElementById('gsAmtCard');
+  const hasUnpaid=unpaid.length>0;
+  [owedCard,amtCard].forEach(el=>{
+    if(!el) return;
+    el.classList.toggle('gs-clickable',hasUnpaid);
+    el.setAttribute('aria-disabled',hasUnpaid?'false':'true');
+    el.tabIndex=hasUnpaid?0:-1;
+  });
+
   const badge=document.getElementById('invBadge');
   if(unpaid.length>0){badge.textContent=unpaid.length;badge.style.display='flex';}
   else badge.style.display='none';
@@ -830,6 +849,12 @@ function prefill(invoiceNum){
   tab('upload');
 }
 
+function goOutstandingInvoices(){
+  const unpaid=getMyInvs().filter(i=>i.status!=='Paid');
+  if(!unpaid.length) return;
+  tab('invoices');
+}
+
 // TABS
 function tab(t){
   curTab=t;
@@ -852,6 +877,8 @@ function doFile(f){
   if(!f) return;
   uploadedFile=f;
   document.getElementById('prevBox').style.display='block';
+  document.getElementById('dropZ').style.display='none';
+  document.getElementById('previewFileName').textContent=f.name;
   if(f.type.startsWith('image/')){
     const r=new FileReader();
     r.onload=e=>{
@@ -875,6 +902,11 @@ function doDrop(e){
 function rmFile(){
   uploadedFile=null;
   document.getElementById('prevBox').style.display='none';
+  document.getElementById('dropZ').style.display='';
+  document.getElementById('prevImg').src='';
+  document.getElementById('prevImg').style.display='none';
+  document.getElementById('prevFile').style.display='none';
+  document.getElementById('previewFileName').textContent='';
   const file=document.getElementById('receiptFileInput');
   if(file) file.value='';
 }

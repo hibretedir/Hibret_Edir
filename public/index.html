@@ -6,7 +6,7 @@
 <title>Hibret Edir Association — Ethiopian Mutual Assistance</title>
 <link rel="stylesheet" href="/css/hibret.css?v=nav1">
 <link rel="stylesheet" href="/css/compat.css?v=nav1">
-<link rel="stylesheet" href="/css/public-pages.css?v=pubfix4">
+<link rel="stylesheet" href="/css/public-pages.css?v=pubfix6">
 </head>
 <body class="site-public">
 
@@ -67,12 +67,12 @@
   <div class="hero-dots"></div>
   <div class="hero-content">
     <img src="/logo.png" alt="Hibret Edir" class="hero-logo">
+    <h1 class="hero-title fade-up en">Hibret Edir Association</h1>
+    <span class="hero-title-amh fade-up am">ሕብረት እድር ማህበር</span>
     <div class="hero-badge">
       <span class="en">Greater Los Angeles Ethiopian Community</span>
       <span class="am">የሎስ አንጀለስ ኢትዮጵያዊ ማህበረሰብ</span>
     </div>
-    <h1 class="hero-title fade-up en">Hibret Edir Association</h1>
-    <span class="hero-title-amh fade-up am">ሕብረት እድር ማህበር</span>
     <p class="hero-desc fade-up en">Bringing together the Ethiopian community of Greater Los Angeles to support and comfort families during their most difficult moment — the loss of a loved one.</p>
     <p class="hero-desc fade-up am">የሎስ አንጀለስ ኢትዮጵያዊ ማህበረሰብን አንድ ላይ አምጥቶ ቤተሰቦችን ድጋፍ ለማድረግ።</p>
     <div class="hero-stats fade-up">
@@ -142,6 +142,48 @@
     <h2 class="sec-title en fade-up">Current Announcement</h2>
     <h2 class="sec-title am fade-up">የቅርብ ጊዜ ማስታወቂያ</h2>
     <div class="sec-line"></div>
+
+    <!-- Memorial announcement template — automation fills data-ann-* fields per event -->
+    <article class="ann-letter fade-up" id="annMemorial" data-announcement-template="memorial-v1"
+      data-ann-deceased-name="Ato Brook Zewdie"
+      data-ann-event-number="30">
+      <div class="ann-letter-icon" aria-hidden="true">🕊️</div>
+      <div class="ann-letter-body">
+        <p class="ann-letter-opening">
+          It is with deep sorrow that we share the passing of our beloved Hibret Edir member,
+          <strong data-ann-field="deceased_name">Ato Brook Zewdie</strong>.
+        </p>
+
+        <div class="ann-service-block">
+          <p class="ann-service-label">A prayer service will be held at:</p>
+          <p class="ann-service-venue" data-ann-field="prayer_venue">St. Mary’s Ethiopian Orthodox Tewahedo Church</p>
+          <p class="ann-service-address" data-ann-field="prayer_address">5505 West Slauson Ave, Los Angeles, CA 90056</p>
+          <p class="ann-service-datetime" data-ann-field="prayer_datetime">Thursday, April 23 at 10:00 AM</p>
+        </div>
+
+        <div class="ann-service-block">
+          <p class="ann-service-label">A burial service will follow at:</p>
+          <p class="ann-service-venue" data-ann-field="burial_venue">Holy Cross Cemetery</p>
+          <p class="ann-service-address" data-ann-field="burial_address">5835 W Slauson Ave, Culver City, CA 90230</p>
+        </div>
+
+        <div class="ann-dues-block">
+          <p class="ann-dues-note">* Please note that we will be collecting membership dues. Payments may be made through:</p>
+          <ul class="ann-pay-list">
+            <li>PayPal: <a href="https://www.hibretedir.com/invoice" target="_blank" rel="noopener">https://www.hibretedir.com/invoice</a></li>
+            <li>Zelle: Hibret Edir (Business Account) – <a href="tel:4245475594">(424) 547-5594</a></li>
+            <li>Bank Deposit: Bank of America – Account #002174902906</li>
+          </ul>
+          <p class="ann-receipt-note">Kindly send your payment receipt with your name to <a href="tel:4245475594">(424) 547-5594</a>.</p>
+        </div>
+
+        <p class="ann-letter-signoff">
+          With heartfelt condolences,<br>
+          <strong>Hibret Edir</strong>
+        </p>
+      </div>
+    </article>
+
     <div class="ann-box fade-up">
       <div class="ann-icon">🕊️</div>
       <div style="flex:1">

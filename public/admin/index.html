@@ -93,8 +93,8 @@
 <nav class="tracker-mobile-nav" id="adminMobileNav" aria-label="Admin sections">
   <button type="button" data-view="invoices" onclick="switchView('invoices')">Invoices</button>
   <button type="button" data-view="members" onclick="switchView('members')">Members</button>
-  <button type="button" data-view="applications" onclick="switchView('applications')">Apps</button>
-  <button type="button" data-view="events" onclick="switchView('events')">Events</button>
+  <button type="button" data-view="applications" onclick="switchView('applications')">Approval</button>
+  <button type="button" data-view="events" onclick="switchView('events')">Summary</button>
   <button type="button" data-view="payouts" onclick="switchView('payouts')">Payouts</button>
   <button type="button" data-view="activity" onclick="switchView('activity')">Log</button>
 </nav>
@@ -380,8 +380,27 @@ async function fetchAdminData() {
   try {
     const appsRes = await apiGet('apply/applications');
     APPLICATIONS.splice(0, APPLICATIONS.length, ...(appsRes?.applications || []));
+    if (!APPLICATIONS.some(a => a.kind === 'beneficiary_change')) {
+      try {
+        const crRes = await apiGet('apply/change-requests');
+        const extra = (crRes?.change_requests || []).filter(
+          cr => !APPLICATIONS.some(a => a.change_request_id === cr.change_request_id)
+        );
+        APPLICATIONS.push(...extra);
+      } catch { /* change-requests list optional */ }
+    }
+    APPLICATIONS.sort((a, b) => {
+      const da = a.submitted_at ? new Date(a.submitted_at).getTime() : 0;
+      const db = b.submitted_at ? new Date(b.submitted_at).getTime() : 0;
+      return db - da;
+    });
   } catch {
-    APPLICATIONS.splice(0, APPLICATIONS.length);
+    try {
+      const crRes = await apiGet('apply/change-requests');
+      APPLICATIONS.splice(0, APPLICATIONS.length, ...(crRes?.change_requests || []));
+    } catch {
+      APPLICATIONS.splice(0, APPLICATIONS.length);
+    }
   }
   try {
     const actRes = await apiGet('portal/activity?limit=150');
@@ -783,14 +802,14 @@ function renderApplicationsView() {
       ? `<div class="tracker-member-name">${esc(a.beneficiary_member?.name || '—')}</div><div class="tracker-member-email">${esc(a.beneficiary_member?.relationship || 'Beneficiary')}</div>`
       : `<div class="tracker-member-name">${esc(a.waiting_list?.full_name || '—')}</div><div class="tracker-member-email">Waiting list</div>`;
     const typeBadge = isBen ? '<span class="tracker-event-badge">Beneficiary</span>' : '<span class="tracker-event-badge">Membership</span>';
-    return `<tr class="data-row data-row-clickable" onclick="openApplicationReview(${a.id})" role="button" tabindex="0" onkeydown="if(event.key==='Enter')openApplicationReview(${a.id})">
+    return `<tr class="data-row data-row-clickable" onclick="openApplicationReview(${JSON.stringify(a.id)})" role="button" tabindex="0" onkeydown="if(event.key==='Enter')openApplicationReview(${JSON.stringify(a.id)})">
       <td><div class="tracker-member-name">${esc(a.member_full_name)}</div><div class="tracker-member-email">${esc(a.email || a.waiting_list?.email || '—')}</div></td>
       <td>${typeBadge}</td>
       <td>${secondCol}</td>
       <td><span class="tracker-date">${esc(fmtDate(a.submitted_at))}</span></td>
       <td><span class="tracker-status ${statusClass}"><span class="tracker-status-dot"></span>${esc(a.status)}</span></td>
       <td><span class="tracker-inv-num">${isBen ? (a.is_new_beneficiary ? 'New' : 'Update') : `${done}/4`}</span></td>
-      <td><button type="button" class="tracker-mark-btn" onclick="event.stopPropagation();openApplicationReview(${a.id})">${a.status === 'Approved' ? 'View' : 'Review'}</button></td>
+      <td><button type="button" class="tracker-mark-btn" onclick="event.stopPropagation();openApplicationReview(${JSON.stringify(a.id)})">${a.status === 'Approved' ? 'View' : 'Review'}</button></td>
     </tr>`;
   }).join('') : '';
 
@@ -838,11 +857,20 @@ function updateApproveButtonState() {
   btn.disabled = !all;
 }
 
+function changeRequestApiId(appOrId) {
+  if (appOrId && typeof appOrId === 'object') {
+    return appOrId.change_request_id || String(appOrId.id).replace(/^cr-/, '');
+  }
+  return String(appOrId).replace(/^cr-/, '');
+}
+
 async function openApplicationReview(id) {
   reviewingApplicationId = id;
   let app = APPLICATIONS.find(a => a.id === id);
   try {
-    const res = await apiGet('apply/applications/' + id);
+    const res = String(id).startsWith('cr-')
+      ? await apiGet('apply/change-requests/' + changeRequestApiId(id))
+      : await apiGet('apply/applications/' + id);
     if (res.application) {
       app = res.application;
       const idx = APPLICATIONS.findIndex(a => a.id === id);
@@ -974,7 +1002,7 @@ async function approveApplicationReview() {
     if (!confirm('Approve this beneficiary change? It will update the member record immediately.')) return;
     try {
       const notes = document.getElementById('appReviewNotes')?.value?.trim() || '';
-      await apiPost('apply/change-requests/' + reviewingApplicationId + '/approve', { notes });
+      await apiPost('apply/change-requests/' + changeRequestApiId(app || reviewingApplicationId) + '/approve', { notes });
       closeModal('applicationModal');
       await fetchAdminData();
       render();
@@ -1012,7 +1040,7 @@ async function rejectApplicationReview() {
   if (app?.kind === 'beneficiary_change') {
     if (!confirm('Reject this beneficiary change?')) return;
     try {
-      await apiPost('apply/change-requests/' + reviewingApplicationId + '/reject', { notes });
+      await apiPost('apply/change-requests/' + changeRequestApiId(app || reviewingApplicationId) + '/reject', { notes });
       closeModal('applicationModal');
       await fetchAdminData();
       render();

@@ -833,7 +833,8 @@ function buildChangeRequestSummary(row) {
   const previous = row.previous_payload ? parseJsonField(row.previous_payload, null) : null;
   const name = row.full_name || `${row.first_name || ''} ${row.last_name || ''}`.trim() || row.paypal_name;
   return {
-    id: row.id,
+    id: `cr-${row.id}`,
+    change_request_id: row.id,
     kind: 'beneficiary_change',
     status: row.status,
     submitted_at: row.submitted_at,
@@ -979,8 +980,6 @@ exports.handler = async (event) => {
 
   const path = getPath(event);
   const appPath = matchApplicationPath(path);
-
-  const appPath = matchApplicationPath(path);
   const changePath = matchChangeRequestPath(path);
 
   if (changePath && ['GET', 'POST'].includes(event.httpMethod)) {
@@ -990,6 +989,10 @@ exports.handler = async (event) => {
     }
     const actor = await resolveAdminActor(admin);
     try {
+      if (event.httpMethod === 'GET' && !changePath.id) {
+        const rows = await listChangeRequests(getDb());
+        return json(200, { change_requests: rows.map(buildChangeRequestSummary) });
+      }
       if (event.httpMethod === 'GET' && changePath.id) {
         return await getChangeRequest(changePath.id);
       }

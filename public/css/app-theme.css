@@ -88,6 +88,37 @@ body.app-portal .confirm-wrap .pin-input {
   border-bottom-color: var(--gold);
 }
 
+.app-portal .portal-nav-brand {
+  text-decoration: none;
+  color: inherit;
+  border: 1px solid rgba(252, 221, 9, 0.28);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px 4px 4px;
+  background: rgba(252, 221, 9, 0.08);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.app-portal .portal-nav-brand:hover,
+.app-portal .portal-nav-brand:focus-visible {
+  border-color: rgba(252, 221, 9, 0.55);
+  background: rgba(252, 221, 9, 0.14);
+  outline: none;
+}
+
+.app-portal .portal-nav-brand-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.app-portal .portal-nav-site-link {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--gold);
+  letter-spacing: 0.02em;
+}
+
 .app-portal .portal-nav-brand:hover .portal-nav-name {
   color: var(--gold);
 }
@@ -105,8 +136,8 @@ body.app-portal .confirm-wrap .pin-input {
   color: #eef4ee;
 }
 
-.app-portal .form-input::placeholder {
-  color: rgba(238, 244, 238, 0.4);
+.app-portal .upload-card label .req {
+  color: #fca5a5;
 }
 
 .app-portal .auth-card .form-input::placeholder {
@@ -286,6 +317,82 @@ body.app-portal .confirm-wrap .pin-input {
   transform: scale(0.98);
 }
 
+.app-portal .preview-box {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(252, 221, 9, 0.25);
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.app-portal .preview-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.app-portal .preview-file-meta {
+  min-width: 0;
+  flex: 1;
+}
+
+.app-portal .preview-file-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgba(238, 244, 238, 0.55);
+  margin-bottom: 2px;
+}
+
+.app-portal .preview-filename {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #eef4ee;
+  word-break: break-all;
+}
+
+.app-portal .receipt-remove-btn {
+  flex-shrink: 0;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(218, 18, 26, 0.45);
+  background: rgba(218, 18, 26, 0.18);
+  color: #fca5a5;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.app-portal .receipt-remove-btn:hover,
+.app-portal .receipt-remove-btn:focus-visible {
+  background: rgba(218, 18, 26, 0.28);
+  outline: none;
+}
+
+.app-portal .preview-img-el {
+  display: block;
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.app-portal .preview-file-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .app-portal .auth-wrap {
   background: linear-gradient(145deg, #021a09 0%, #033d11 38%, #056b24 62%, #031a0e 100%);
 }
@@ -449,12 +556,16 @@ body.app-portal:not(.lang-am) .auth-wrap .amh {
   border-top-color: #9ae6b0;
 }
 
-.app-portal .greeting-stats .gs-accent-green .gs-val {
+.app-portal .greeting-stats .gs-accent-green .gs-val,
+.app-portal .greeting-stats .gs-accent-gold .gs-val,
+.app-portal .greeting-stats .gs-accent-red .gs-val {
   color: #ffffff;
 }
 
-.app-portal .greeting-stats .gs-accent-green .gs-label {
-  color: rgba(255, 255, 255, 0.82);
+.app-portal .greeting-stats .gs-accent-green .gs-label,
+.app-portal .greeting-stats .gs-accent-gold .gs-label,
+.app-portal .greeting-stats .gs-accent-red .gs-label {
+  color: rgba(255, 255, 255, 0.88);
 }
 
 .app-portal .greeting-stats .gs-accent-gold {
@@ -463,26 +574,22 @@ body.app-portal:not(.lang-am) .auth-wrap .amh {
   border-top-color: var(--gold);
 }
 
-.app-portal .greeting-stats .gs-accent-gold .gs-val {
-  color: var(--gold);
-}
-
-.app-portal .greeting-stats .gs-accent-gold .gs-label {
-  color: rgba(252, 221, 9, 0.75);
-}
-
 .app-portal .greeting-stats .gs-accent-red {
   background: rgba(218, 18, 26, 0.16);
   border-color: rgba(218, 18, 26, 0.35);
   border-top-color: var(--red);
 }
 
-.app-portal .greeting-stats .gs-accent-red .gs-val {
-  color: #fca5a5;
+.app-portal .greeting-stats .gs-clickable {
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
 }
 
-.app-portal .greeting-stats .gs-accent-red .gs-label {
-  color: rgba(252, 165, 165, 0.8);
+.app-portal .greeting-stats .gs-clickable:hover,
+.app-portal .greeting-stats .gs-clickable:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  outline: none;
 }
 
 /* Profile edit buttons */

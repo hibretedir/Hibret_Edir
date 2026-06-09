@@ -466,7 +466,7 @@
   text-transform: uppercase;
   color: var(--gold);
   font-weight: 600;
-  margin-bottom: 16px;
+  margin: 4px auto 16px;
 }
 
 .site-public .hero-title {
@@ -596,7 +596,131 @@
   margin: 16px 0 24px;
 }
 
-/* Announcement */
+/* Announcement — memorial letter (automation template) */
+.site-public .ann-letter {
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-top: 8px;
+  margin-bottom: 20px;
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  background: rgba(10, 34, 24, 0.92);
+  border: 1px solid var(--pub-card-border);
+  border-top: 3px solid var(--green);
+}
+
+.site-public .ann-letter-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  background: rgba(7, 137, 48, 0.25);
+  border: 1px solid rgba(7, 137, 48, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.site-public .ann-letter-body {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  color: var(--pub-text);
+  line-height: 1.7;
+}
+
+.site-public .ann-letter-opening {
+  margin: 0 0 20px;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.site-public .ann-letter-opening strong {
+  color: #fff;
+}
+
+.site-public .ann-service-block {
+  margin-bottom: 18px;
+  padding-left: 14px;
+  border-left: 3px solid rgba(252, 221, 9, 0.45);
+}
+
+.site-public .ann-service-label {
+  margin: 0 0 6px;
+  font-weight: 600;
+  color: var(--gold);
+  font-size: 14px;
+}
+
+.site-public .ann-service-venue {
+  margin: 0 0 2px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.site-public .ann-service-address,
+.site-public .ann-service-datetime {
+  margin: 0;
+  color: var(--pub-text-muted);
+  font-size: 14px;
+}
+
+.site-public .ann-service-datetime {
+  margin-top: 4px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.site-public .ann-dues-block {
+  margin: 22px 0 20px;
+  padding: 16px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(252, 221, 9, 0.2);
+}
+
+.site-public .ann-dues-note {
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.site-public .ann-pay-list {
+  margin: 0 0 12px;
+  padding-left: 20px;
+  color: var(--pub-text-muted);
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.site-public .ann-pay-list a {
+  color: var(--gold);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.site-public .ann-receipt-note {
+  margin: 0;
+  font-size: 14px;
+  color: var(--pub-text-muted);
+}
+
+.site-public .ann-receipt-note a {
+  color: var(--gold);
+}
+
+.site-public .ann-letter-signoff {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 15px;
+}
+
+.site-public .ann-letter-signoff strong {
+  color: var(--gold);
+}
+
+/* Announcement — payment summary card */
 .site-public .ann-box {
   border-radius: var(--radius);
   padding: 24px;
@@ -1245,6 +1369,7 @@ body.site-public .sg-icon {
   .site-public .apply-grid,
   .site-public .contact-grid { grid-template-columns: 1fr; gap: 28px; }
   .site-public .footer-top { grid-template-columns: 1fr; }
+  .site-public .ann-letter { flex-direction: column; }
   .site-public .ann-box { flex-direction: column; }
   .site-public .fg-row { grid-template-columns: 1fr; }
 }
