@@ -167,6 +167,29 @@ body.app-portal .confirm-wrap .pin-input {
   color: #eef4ee;
 }
 
+.app-portal .setting-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.app-portal .setting-row:last-child {
+  margin-bottom: 0;
+}
+
+.app-portal .setting-row .arrow {
+  margin-left: auto;
+  opacity: 0.65;
+}
+
 .app-portal .notif-item {
   background: rgba(255, 255, 255, 0.07);
   border: 1px solid rgba(252, 221, 9, 0.15);
@@ -301,6 +324,11 @@ body.app-portal .confirm-wrap .pin-input {
   font-size: 10px;
 }
 
+html[lang="en"] .app-portal .auth-wrap .amh,
+body.app-portal:not(.lang-am) .auth-wrap .amh {
+  display: none !important;
+}
+
 .app-portal .auth-title {
   font-size: 16px;
   margin: 8px 0 4px;
@@ -416,48 +444,45 @@ body.app-portal .confirm-wrap .pin-input {
 }
 
 .app-portal .greeting-stats .gs-accent-green {
-  background: rgba(255, 255, 255, 0.94);
-  border-color: rgba(255, 255, 255, 0.35);
-  border-top-color: var(--green);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  background: rgba(0, 0, 0, 0.22);
+  border-color: rgba(255, 255, 255, 0.28);
+  border-top-color: #9ae6b0;
 }
 
 .app-portal .greeting-stats .gs-accent-green .gs-val {
-  color: #056b24;
+  color: #ffffff;
 }
 
 .app-portal .greeting-stats .gs-accent-green .gs-label {
-  color: rgba(5, 107, 36, 0.75);
+  color: rgba(255, 255, 255, 0.82);
 }
 
 .app-portal .greeting-stats .gs-accent-gold {
-  background: rgba(255, 255, 255, 0.94);
-  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(252, 221, 9, 0.12);
+  border-color: rgba(252, 221, 9, 0.45);
   border-top-color: var(--gold);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
 .app-portal .greeting-stats .gs-accent-gold .gs-val {
-  color: #8a6d00;
+  color: var(--gold);
 }
 
 .app-portal .greeting-stats .gs-accent-gold .gs-label {
-  color: rgba(138, 109, 0, 0.75);
+  color: rgba(252, 221, 9, 0.75);
 }
 
 .app-portal .greeting-stats .gs-accent-red {
-  background: rgba(255, 255, 255, 0.94);
-  border-color: rgba(255, 255, 255, 0.35);
+  background: rgba(218, 18, 26, 0.16);
+  border-color: rgba(218, 18, 26, 0.35);
   border-top-color: var(--red);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
 .app-portal .greeting-stats .gs-accent-red .gs-val {
-  color: #b91c1c;
+  color: #fca5a5;
 }
 
 .app-portal .greeting-stats .gs-accent-red .gs-label {
-  color: rgba(185, 28, 28, 0.75);
+  color: rgba(252, 165, 165, 0.8);
 }
 
 /* Profile edit buttons */

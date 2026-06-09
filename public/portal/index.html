@@ -6,7 +6,7 @@
 <title>Hibret Edir Association — Member Portal</title>
 <link rel="stylesheet" href="/css/hibret.css?v=portal3">
 <link rel="stylesheet" href="/css/compat.css?v=portal3">
-<link rel="stylesheet" href="/css/app-theme.css?v=portal6">
+<link rel="stylesheet" href="/css/app-theme.css?v=portal7">
 </head>
 <body class="app-portal">
 
@@ -230,7 +230,7 @@
       </div>
       <div class="upload-card">
         <label>Notes (optional)</label>
-        <input type="text" class="form-input" id="upNotes" placeholder="e.g. Sent via Zelle on June 3rd" style="margin-bottom:0">
+        <textarea class="form-input" id="upNotes" rows="3" placeholder="e.g. Sent via Zelle on June 3rd" style="margin-bottom:0;resize:vertical;min-height:72px"></textarea>
       </div>
       <button class="btn-main" onclick="doUpload()" style="margin-top:4px">📤 Submit Receipt</button>
     </div>
@@ -381,6 +381,7 @@ const TOKEN_KEY = 'hibret_portal_token';
 const PAYPAL_INVOICE_BASE = 'https://www.paypal.com/invoice/p/#';
 const MY_INVOICES = [];
 const MY_ACTIVITY = [];
+let EDAR_EVENTS = [];
 let me = null, myPhone = '', myBeneficiary = null, pendingBeneficiaryChange = null, profEditKey = '', selMeth = 'Zelle', uploadedFile = null, curTab = 'home';
 const NOTIFS = [
   {id:1,type:'urgent',icon:'•',title:'Payment Due — #30',msg:'Your $110 per-death contribution for Ato Brook Zewdie is overdue by 49 days. Please pay immediately.',time:'49 days ago',read:false},
@@ -513,6 +514,18 @@ async function loadStoredSession() {
   if (current) {
     await loginOK();
   }
+}
+
+async function fetchEdirEvents() {
+  if (!getStoredToken()) return [];
+  try {
+    const data = await apiGet('portal/events');
+    EDAR_EVENTS = Array.isArray(data.events) ? data.events : [];
+  } catch (error) {
+    console.warn('Failed to fetch Edir events:', error);
+    EDAR_EVENTS = [];
+  }
+  return EDAR_EVENTS;
 }
 
 async function fetchMemberInvoices() {
@@ -668,6 +681,7 @@ async function loginOK(){
   await fetchMemberProfile();
   await fetchMemberInvoices();
   await fetchMemberActivity();
+  await fetchEdirEvents();
   renderPortal();
   tab('home');
 }
@@ -737,10 +751,10 @@ function renderPortal(){
 
   renderBeneficiary();
 
-  // Upload dropdown — event / deceased names (e.g. Ato Brook Zewdie)
+  // Upload dropdown — all Edir deceased / memorial events
   const sel=document.getElementById('evSel');
   sel.innerHTML='<option value="">Select person…</option>';
-  const eventNames=[...new Set(myInvs.map(i=>eventPersonName(i.item)).filter(Boolean))];
+  const eventNames=[...new Set(EDAR_EVENTS.map(e=>formatDeceasedName(e)).filter(Boolean))];
   eventNames.forEach(name=>{
     const o=document.createElement('option');
     o.value=name;
@@ -803,6 +817,11 @@ function renderInvs(list){
 
 function eventPersonName(item){
   return (item||'').replace(/^#\d+\s*/,'').trim();
+}
+
+function formatDeceasedName(event){
+  if(!event) return '';
+  return (event.name||event.deceased_name||'').trim();
 }
 
 function prefill(invoiceNum){
@@ -1032,10 +1051,16 @@ function doSignOut(){
 
 // LANGUAGE
 function setLang(l){
-  document.getElementById('lb-en').classList.toggle('active',l==='en');
-  document.getElementById('lb-am').classList.toggle('active',l==='am');
-  localStorage.setItem('hlang',l);
+  const lang=l==='am'?'am':'en';
+  document.documentElement.lang=lang;
+  document.body.classList.toggle('lang-am',lang==='am');
+  document.getElementById('lb-en').classList.toggle('active',lang==='en');
+  document.getElementById('lb-am').classList.toggle('active',lang==='am');
+  localStorage.setItem('hlang',lang);
 }
+
+const storedLang=localStorage.getItem('hlang');
+setLang(storedLang==='am'?'am':'en');
 
 document.getElementById('receiptFileBtn')?.addEventListener('click', ()=>{
   document.getElementById('receiptFileInput')?.click();

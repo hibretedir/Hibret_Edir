@@ -594,6 +594,23 @@ async function upsertMemberBeneficiary(memberId, body, actor, { requireApproval 
   return { beneficiary, message: isNew ? 'Beneficiary added.' : 'Beneficiary updated.' };
 }
 
+async function getEdirEvents() {
+  const db = getDb();
+  const result = await db.query(
+    `SELECT id, event_number, deceased_name, event_date, status
+     FROM events
+     WHERE deceased_name IS NOT NULL AND TRIM(deceased_name) <> ''
+     ORDER BY event_date DESC NULLS LAST, event_number DESC`
+  );
+  return result.rows.map((row) => ({
+    id: row.id,
+    event_number: row.event_number,
+    name: row.deceased_name.trim(),
+    date: row.event_date,
+    status: row.status,
+  }));
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 200, headers, body: '' };
@@ -644,6 +661,11 @@ exports.handler = async (event) => {
           limit: query.limit ? Number(query.limit) : 50,
         });
         return jsonResponse(200, { activity });
+      }
+
+      if (event.httpMethod === 'GET' && path === '/events') {
+        const events = await getEdirEvents();
+        return jsonResponse(200, { events });
       }
 
       if (event.httpMethod === 'PATCH' && path === '/profile') {

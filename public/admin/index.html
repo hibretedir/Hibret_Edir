@@ -273,20 +273,31 @@ function isInvoiceLate(inv) {
   return invoiceDaysOverdue(inv) > 0;
 }
 
-function memberLateKey(inv) {
-  return String(inv.member_id || inv.email || inv.name || inv.invoice_num || '').toLowerCase();
+function normalizeInvoiceName(s) {
+  return String(s || '').trim().toLowerCase();
+}
+
+function isPlaceholderEmail(email) {
+  const e = normalizeInvoiceName(email);
+  return !e || e === 'noemailinfile@gmail.com';
+}
+
+/** Match invoice to member by PayPal/recipient name — not member_id alone (bad seed links exist). */
+function invoiceBelongsToMember(inv, member) {
+  if (!member || !inv) return false;
+  const invName = normalizeInvoiceName(inv.name || inv.recipient_name);
+  const paypal = normalizeInvoiceName(member.paypal_name || `${member.first || ''} ${member.last || ''}`);
+  const household = normalizeInvoiceName(member.full_name);
+  if (paypal && invName && invName === paypal) return true;
+  if (household && invName && invName === household) return true;
+  const invEmail = normalizeInvoiceName(inv.email);
+  const memEmail = normalizeInvoiceName(member.email);
+  if (!isPlaceholderEmail(memEmail) && invEmail && memEmail && invEmail === memEmail) return true;
+  return false;
 }
 
 function countLateInvoicesForMember(member) {
-  const keyEmail = (member.email || '').toLowerCase();
-  const keyName = (member.paypal_name || member.full_name || `${member.first || ''} ${member.last || ''}`).trim().toLowerCase();
-  return INVOICES.filter(inv => {
-    if (!isInvoiceLate(inv)) return false;
-    if (member.id && inv.member_id && inv.member_id === member.id) return true;
-    const invEmail = (inv.email || '').toLowerCase();
-    const invName = (inv.name || '').toLowerCase();
-    return (keyEmail && invEmail === keyEmail) || (keyName && invName === keyName);
-  }).length;
+  return INVOICES.filter(inv => isInvoiceLate(inv) && invoiceBelongsToMember(inv, member)).length;
 }
 
 function fmtMoney(n) {
@@ -390,7 +401,12 @@ function getStats() {
   const unpaidList = INVOICES.filter(i => !isPaid(i));
   const paidSession = INVOICES.filter(i => paidInvoices.has(i.invoice_num)).length;
   const lateInvoices = INVOICES.filter(i => isInvoiceLate(i));
-  const lateMembers = new Set(lateInvoices.map(memberLateKey).filter(Boolean));
+  const lateMembers = new Set();
+  MEMBERS.forEach(m => {
+    if (countLateInvoicesForMember(m) > 0) {
+      lateMembers.add(m.id || normalizeInvoiceName(m.paypal_name));
+    }
+  });
   const events = new Set(INVOICES.map(i => i.item)).size;
   const totalOwed = unpaidList.reduce((s, i) => s + Number(i.amount_due || 0), 0);
   return {

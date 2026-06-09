@@ -6,7 +6,7 @@
 <title>Hibret Edir Association — Ethiopian Mutual Assistance</title>
 <link rel="stylesheet" href="/css/hibret.css?v=nav1">
 <link rel="stylesheet" href="/css/compat.css?v=nav1">
-<link rel="stylesheet" href="/css/public-pages.css?v=pubfix3">
+<link rel="stylesheet" href="/css/public-pages.css?v=pubfix4">
 </head>
 <body class="site-public">
 
@@ -21,7 +21,7 @@
       <div>
         <div class="nav-brand-name en">Hibret Edir Association</div>
         <div class="nav-brand-name am">ሕብረት እድር</div>
-        <div class="nav-brand-sub en">Ethiopian Mutual Aid</div>
+        <div class="nav-brand-sub en">Ethiopian Mutual Assistance</div>
         <div class="nav-brand-sub am">የጋራ ድጋፍ መርህ</div>
       </div>
     </a>
@@ -109,24 +109,24 @@
 <div class="section-grid" id="sectionGrid">
   <div class="sg-title"><span class="en">Explore</span><span class="am">ይመልከቱ</span></div>
   <div class="sg-cards">
-    <button class="sg-card" onclick="goSection('announcement')">
+    <button class="sg-card sg-card-accent-gold" onclick="goSection('announcement')">
       <span class="sg-icon">A</span><span class="en">Announcement</span><span class="am">ማስታወቂያ</span>
     </button>
-    <button class="sg-card" onclick="goSection('about')">
+    <button class="sg-card sg-card-accent-green" onclick="goSection('about')">
       <span class="sg-icon">i</span><span class="en">About Us</span><span class="am">ስለ እኛ</span>
     </button>
+    <button class="sg-card sg-card-accent-gold" onclick="goSection('waitingliststatus')"><span class="sg-icon">#</span><span class="en">Waiting List Status</span><span class="am">የተራ ሁኔታ</span></button>
     <button class="sg-card sg-card-accent-red" onclick="goSection('howitworks')">
       <span class="sg-icon">?</span><span class="en">How It Works</span><span class="am">እንዴት ይሰራል</span>
     </button>
-    <button class="sg-card" onclick="goSection('payment')">
+    <button class="sg-card sg-card-accent-gold" onclick="goSection('payment')">
       <span class="sg-icon">$</span><span class="en">Make Payment</span><span class="am">ክፍያ</span>
     </button>
-    <button class="sg-card" onclick="goSection('bylaws')">
+    <button class="sg-card sg-card-accent-red" onclick="goSection('bylaws')">
       <span class="sg-icon">§</span><span class="en">By-Laws</span><span class="am">ደንብ</span>
     </button>
     <button class="sg-card sg-card-accent-green" onclick="goSection('apply')"><span class="sg-icon">+</span><span class="en">Waiting List</span><span class="am">ተጠባባቂ ዝርዝር</span></button>
-    <button class="sg-card sg-card-accent-gold" onclick="goSection('waitingliststatus')"><span class="sg-icon">#</span><span class="en">List Status</span><span class="am">የተራ ሁኔታ</span></button>
-    <button class="sg-card" onclick="goSection('contact')">
+    <button class="sg-card sg-card-accent-green" onclick="goSection('contact')">
       <span class="sg-icon">☎</span><span class="en">Contact Us</span><span class="am">ያግኙን</span>
     </button>
   </div>
@@ -263,8 +263,8 @@
   <div class="sec-inner">
     <div class="sec-tag en">Make a Payment</div>
     <div class="sec-tag am">ክፍያ ያድርጉ</div>
-    <h2 class="sec-title en fade-up">Three Ways to Contribute</h2>
-    <h2 class="sec-title am fade-up">ለመክፈል ሶስት መንገዶች</h2>
+    <h2 class="sec-title en fade-up">Three Ways to Pay Your Dues</h2>
+    <h2 class="sec-title am fade-up">ለክፍያዎ ሶስት መንገዶች</h2>
     <div class="sec-line"></div>
     <p class="sec-sub en">Pay your $110 per-death contribution through any accepted method. PayPal is preferred as it automatically updates your record.</p>
     <p class="sec-sub am">በሞት $110 ክፍያዎን ይፈጽሙ።</p>
@@ -469,8 +469,10 @@
     <h2 class="sec-title en fade-up">Waiting List Status</h2>
     <h2 class="sec-title am fade-up">የተጠባባቂ ዝርዝር ሁኔታ</h2>
     <div class="sec-line"></div>
-    <p class="sec-sub en fade-up">Places <strong>1–11</strong> have been added as members (through Martha Mekonnen). Everyone else is listed in order by application date. <strong>#12 is next in line.</strong></p>
-    <p class="sec-sub am fade-up">ቦታ <strong>1–11</strong> አባል ሆነዋል። ሌሎች ሁሉ በመመዝገብ ቀን ተዘርዝረዋል። <strong>#12 ቀጣይ ነው።</strong></p>
+    <div id="wlNextLine">
+      <p class="sec-sub en fade-up">Loading next in line…</p>
+      <p class="sec-sub am fade-up">ቀጣይ ስሞች በመጫን ላይ…</p>
+    </div>
 
     <div class="form-box wl-status-box fade-up">
       <div class="wl-status-toolbar">
@@ -572,6 +574,14 @@
     </div>
   </div>
 </section>
+</div>
+
+<!-- Mobile section footer — back to home -->
+<div class="mobile-section-footer" id="mobileSectionFooter" aria-hidden="true">
+  <button type="button" class="mobile-section-home-btn" onclick="goHome()">
+    <span class="en">← Back to Home</span>
+    <span class="am">← ወደ መነሻ</span>
+  </button>
 </div>
 
 <!-- ══ FOOTER ══ -->
@@ -751,7 +761,7 @@ function initNav(){
   if(mob()){
     document.body.classList.remove('mobile-section-active');
     if(grid) grid.style.display='block';
-    if(back) back.style.display='none';
+    if(back) back.style.removeProperty('display');
     document.querySelectorAll('.section-page').forEach(s=>s.classList.remove('active'));
   } else {
     document.body.classList.remove('mobile-section-active');
@@ -799,6 +809,7 @@ function setLang(l){
   });
   localStorage.setItem('hl',l);
   updateIndexPlaceholders(l);
+  if (wlStatusLoaded) renderWaitingListNextLine();
 }
 
 const INDEX_PLACEHOLDERS = {
@@ -994,6 +1005,25 @@ const WL_STATUS_PANELS = [
   { searchId: 'wlSearch', wrapId: 'wlTableWrap', msgId: 'wlStatusMsg' },
 ];
 
+function renderWaitingListNextLine() {
+  const el = document.getElementById('wlNextLine');
+  if (!el) return;
+  const waiting = wlStatusEntries
+    .filter((e) => !e.added)
+    .sort((a, b) => Number(a.position) - Number(b.position));
+  const next3 = waiting.slice(0, 3);
+  if (!next3.length) {
+    el.innerHTML = document.documentElement.lang === 'am'
+      ? '<p class="sec-sub am fade-up vis">ቀጣይ ስም አልተገኘም።</p>'
+      : '<p class="sec-sub en fade-up vis">No one is currently waiting.</p>';
+    return;
+  }
+  const names = next3.map((e) => escapeWlHtml(e.display_name || '—')).join(', ');
+  el.innerHTML = `
+    <p class="sec-sub en fade-up vis"><strong>Next on the list:</strong> ${names}</p>
+    <p class="sec-sub am fade-up vis"><strong>ቀጣይ በዝርዝሩ:</strong> ${names}</p>`;
+}
+
 function renderWaitingListTable(entries, wrapId) {
   const wrap = document.getElementById(wrapId);
   if (!wrap) return;
@@ -1075,6 +1105,7 @@ async function loadWaitingListStatus() {
       added: e.added ?? Number(e.position) <= through,
     }));
     wlStatusLoaded = true;
+    renderWaitingListNextLine();
     filterWaitingList();
   }
 

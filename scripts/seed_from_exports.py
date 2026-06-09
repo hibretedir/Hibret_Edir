@@ -692,7 +692,8 @@ def upsert_members(conn, members: list[dict], dry_run: bool) -> int:
 
 def find_member_id(cur, invoice_name: str | None, email: str | None):
     """Match invoice recipient to CRM member. PayPal name is primary; household full_name may list both spouses."""
-    if email:
+    placeholder_emails = {"noemailinfile@gmail.com", ""}
+    if email and email.strip().lower() not in placeholder_emails:
         cur.execute(
             "SELECT id FROM members WHERE LOWER(email) = LOWER(%s) LIMIT 1",
             (email,),
@@ -728,8 +729,8 @@ def find_member_id(cur, invoice_name: str | None, email: str | None):
         SELECT id FROM members
         WHERE LOWER(TRIM(split_part(full_name, '/', 1))) = LOWER(%s)
            OR LOWER(TRIM(split_part(full_name, '/', 2))) = LOWER(%s)
-           OR LOWER(full_name) LIKE LOWER(%s) || '/%'
-           OR LOWER(full_name) LIKE '%/' || LOWER(%s)
+           OR LOWER(full_name) LIKE LOWER(%s) || '/%%'
+           OR LOWER(full_name) LIKE '%%/' || LOWER(%s)
         LIMIT 1
         """,
         (name, name, name, name),
