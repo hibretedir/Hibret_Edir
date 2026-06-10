@@ -1,6 +1,6 @@
 # Hibret Edir — Agent Context & Handoff
 
-**Last updated:** June 2026 (post `679151f`)  
+**Last updated:** June 2026 (post `8e86532`)  
 **Purpose:** Onboard a new Cursor agent quickly. Read this file first, then `HIBRET_EDIR_PROJECT_HANDOFF (1).md` for deeper business rules and by-laws.
 
 ---
@@ -11,7 +11,7 @@
 
 - Every **active member pays $110** per event (via PayPal invoice, Zelle, or direct deposit).
 - The grieving family receives a **$15,000 payout** for funeral costs.
-- **~195 active members** (cap 200). Founded 2011.
+- **~197 active members** (cap 200; count is live from DB). Founded 2011.
 
 **Goal:** Replace Wix + PythonAnywhere + Google Sheets + N8N with one platform:
 
@@ -36,81 +36,90 @@
 ```
 hibretedir/
 ├── public/
-│   ├── index.html                 # Public website (multi-section SPA)
-│   ├── portal/index.html          # Member portal
+│   ├── index.html                 # Public website (multi-section SPA, live stats/announcement)
+│   ├── portal/index.html          # Member portal (live invoices, Deaths Paid)
 │   ├── admin/index.html           # Board Admin Page (CRM)
 │   ├── application/index.html     # Full membership application (step 2)
-│   ├── data/memorial.json          # In Remembrance roll (name + year) — editable
-│   ├── waiting-list-public.json   # Static fallback for public waiting list
-│   ├── member-stats.json          # Hero stats (active count)
+│   ├── waiting-list-public.json   # Static fallback for public waiting list (offline only)
+│   ├── member-stats.json          # Static fallback for hero active count (offline only)
 │   ├── css/
-│   │   ├── public-pages.css       # Public site styles
-│   │   ├── app-theme.css          # Portal theme
-│   │   ├── admin-tracker.css      # Admin dashboard
-│   │   ├── compat.css             # Shared fixes (invoice buttons, etc.)
-│   │   └── hibret.css             # Legacy/shared tokens
+│   │   ├── public-pages.css
+│   │   ├── app-theme.css
+│   │   ├── admin-tracker.css
+│   │   ├── compat.css
+│   │   └── hibret.css
 │   └── admin/invoices-snapshot.json  # Offline invoice fallback for admin
 ├── netlify/functions/
 │   ├── auth.js                    # PIN, board login, PIN reset requests
 │   ├── admin-auth.js              # Shared JWT verify helpers
-│   ├── portal.js                  # Members, invoices, profile, beneficiary, activity
-│   ├── apply.js                   # Waiting list, applications, contact messages, change requests
+│   ├── portal.js                  # Members, invoices, profile, stats, activity
+│   ├── apply.js                   # Waiting list, applications, site-stats, announcement
 │   ├── receipts.js                # Member receipt upload + admin review
 │   ├── payouts.js                 # $15K payout document workflow
-│   ├── notify.js                  # SendGrid + Twilio (profile, beneficiary, applications)
-│   ├── sync.js                    # Cross-entity sync + audit triggers
+│   ├── notify.js                  # SendGrid + Twilio
+│   ├── sync.js                    # Cross-entity sync + audit triggers (NOT PayPal)
 │   ├── audit.js                   # Activity log read/write
-│   ├── db.js                      # pg Pool singleton
+│   ├── db.js                      # pg Pool singleton + timeouts
 │   ├── geo.js                     # Address / radius helpers
-│   ├── paypal-sync.js             # PayPal pull → PostgreSQL (GET preview, POST sync)
-│   ├── paypal-env.js              # Local .env loader for PayPal creds
+│   ├── paypal-sync.js             # PayPal pull → PostgreSQL (GET list, POST batch sync)
+│   ├── paypal-sync-scheduled.js   # Netlify cron trigger (hourly; sync 9 AM & 6 PM Pacific)
+│   ├── paypal-sync-background.js  # Full batched PayPal pull (long-running)
+│   ├── paypal-env.js              # Local .env loader + PayPal API base URL
+│   ├── payment-methods.js         # PayPal vs Zelle & BofA classification for stats
+│   ├── invoice-stats-cache.js     # 60s TTL cache for admin invoice stats
+│   ├── board-notes.js             # Board note merge helpers
 │   └── member-snapshot.js         # Static member export + dev PIN file
-├── db/schema.sql                  # PostgreSQL schema + migration comments
+├── db/schema.sql                  # PostgreSQL schema + idempotent migrations
+├── docs/
+│   └── scheduled-paypal-sync.md   # Why Netlify shows "Every hour" but syncs twice daily
 ├── scripts/
-│   ├── start-dev.js               # Netlify dev (Google Drive–friendly)
-│   ├── extract_memorial.js        # Build memorial list from invoice snapshot
-│   ├── seed_from_exports.py       # Seed members/invoices from data/ exports
-│   ├── import_waiting_list.py     # Import waiting list xlsx → DB
-│   ├── build_invoice_snapshot.py  # Build admin/invoices-snapshot.json
+│   ├── start-dev.js               # Dev entry (delegates to dev-local.js)
+│   ├── dev-local.js               # Local server: public/ + functions (no Netlify CLI cache)
+│   ├── sync_paypal.js             # Full PayPal sync from terminal (no 60s limit)
+│   ├── run_schema.js              # npm run db:migrate
+│   ├── seed_from_exports.py
+│   ├── import_waiting_list.py
+│   ├── build_invoice_snapshot.py
 │   └── build_members_snapshot.py
-├── data/                          # Gitignored exports (xlsx, csv) — not in repo
+│   └── (many compare/audit scripts for ops — optional)
+├── data/                          # Gitignored exports — not in repo
 ├── .env.example
-├── netlify.toml
+├── netlify.toml                   # Redirects, function timeouts, scheduled cron, secrets scan omit
 ├── package.json
-├── README.md                      # Outdated in places — prefer this file
-└── HIBRET_EDIR_PROJECT_HANDOFF (1).md  # Original Claude handoff doc
+├── README.md
+└── HIBRET_EDIR_PROJECT_HANDOFF (1).md
 ```
 
-**Note:** `upload.js`, `members.js`, `events.js` from the original handoff **do not exist**. Receipt uploads use **`receipts.js`** (base64 in DB, not S3). Admin “create event → auto invoices” is still not built.
+**Note:** `upload.js`, `members.js`, `events.js` from the original handoff **do not exist**. Receipt uploads use **`receipts.js`** (base64 in DB). Admin “create event → auto invoices” is still not built. **`sync.js` is internal CRM sync — not PayPal.**
+
+**Removed (June 2026):** `public/data/memorial.json`, `scripts/extract_memorial.js`, public **In Remembrance** section.
 
 ---
 
 ## 3. Local development
 
-### ⚠️ Netlify free tier — local-first workflow
-
-**The maintainer uses Netlify Free (~300 build credits/month). Treat credits as scarce.**
+### ⚠️ Netlify build credits — local-first workflow
 
 | Do locally | Avoid until feature is complete |
 |------------|----------------------------------|
-| All coding, UI, and API changes via `npm run dev` | Pushing half-finished work to trigger deploys |
+| All coding via `npm run dev` | Pushing half-finished work to trigger deploys |
 | Test functions at `http://localhost:8888/.netlify/functions/...` | Multiple push/redeploy cycles to “try something” |
-| Use Render Postgres from local `.env` (same DB as prod if desired) | Preview deploys for every branch |
-| Admin offline fallback: `npm run build:invoice-snapshot` | Netlify build plugins / extra build steps |
-| Static-only UI checks: `npm run dev:static` (no credit cost) | Committing unless user explicitly asks |
+| Use Render Postgres from local `.env` | Preview deploys for every small change |
+| `npm run db:migrate` after schema changes | Committing unless user explicitly asks |
 
-**Deploy rule:** Only push to GitHub / Netlify when the user says the batch of work is **complete and tested locally**. Do not proactively commit or push. Batch related changes into one deploy.
+**Deploy rule:** Only push when the user says work is **complete and tested locally**.
 
 ```bash
-npm install          # May fail on Google Drive — start-dev.js works around this
-cp .env.example .env # Fill DATABASE_URL, JWT_SECRET, etc.
-npm run db:migrate   # Apply schema.sql (new tables: contact_messages, pin_reset_requests, etc.)
-npm run dev          # → http://localhost:8888 (full stack, no Netlify credits)
+npm install          # May fail on Google Drive — dev-local.js works around this
+cp .env.example .env # Fill DATABASE_URL, JWT_SECRET, PAYPAL_*, CRON_SECRET, etc.
+npm run db:migrate   # Apply schema.sql (safe to re-run)
+npm run dev          # → http://localhost:8888
+npm run sync:paypal  # Full PayPal → DB sync from terminal
 ```
 
-- **`scripts/start-dev.js`** installs deps under `%TEMP%/hibret-dev` when `node_modules` on Google Drive is broken.
-- Board admin locally: `ADMIN_AUTH_ENABLED` is **off by default** — admin opens without login unless `ADMIN_AUTH_ENABLED=true`.
-- Member auth locally: `DATABASE_URL` + seeded members; dev PINs in `netlify/functions/.dev-pins.json` (local only, gitignored).
+- **`scripts/dev-local.js`** serves `public/` and loads `netlify/functions/*.js` directly.
+- Board admin locally: `ADMIN_AUTH_ENABLED` **off by default**.
+- **Restart `npm run dev`** after adding new function routes or API endpoints.
 
 ---
 
@@ -124,18 +133,20 @@ See `.env.example`. Critical ones:
 | `JWT_SECRET` | Member + board tokens |
 | `ADMIN_AUTH_ENABLED` | `true` on Netlify production (recommended) |
 | `PAYPAL_CLIENT_ID` / `PAYPAL_SECRET` | PayPal sync |
+| `PAYPAL_ENV` | `sandbox` or production (empty/non-sandbox = production API). Not a secret — omitted from Netlify secrets scan via `netlify.toml` |
+| `CRON_SECRET` | **Required on Netlify** for scheduled + background PayPal sync |
 | `SENDGRID_API_KEY` / `SENDGRID_FROM_EMAIL` | Email |
 | `TWILIO_*` | SMS |
 | `BOARD_NOTIFY_EMAIL` / `BOARD_NOTIFY_PHONE` | Board alerts |
 | `ADMIN_SITE_URL` | Links in board notification emails |
 
-Notifications **skip gracefully** when SendGrid/Twilio are unset (console warn only).
+Notifications **skip gracefully** when SendGrid/Twilio are unset.
 
 ---
 
 ## 5. Database
 
-**Schema file:** `db/schema.sql` — run `npm run db:migrate` after pulling schema changes.
+**Schema file:** `db/schema.sql` — run `npm run db:migrate` after pulling schema changes (idempotent).
 
 **Tables in use:**
 
@@ -143,12 +154,13 @@ Notifications **skip gracefully** when SendGrid/Twilio are unset (console warn o
 |-------|---------|
 | `members` | CRM — includes `pin_hash` for portal |
 | `beneficiaries` | Death beneficiary per member (primary) |
-| `events` | Funeral events (deceased name, event #, date) |
-| `invoices` | PayPal-linked invoices |
-| `receipts` | Zelle/BofA receipt uploads (base64 `file_url`, admin approve → mark invoice Paid) |
+| `events` | Funeral events (deceased name, event #, amount, notes JSON for announcement venues) |
+| `invoices` | PayPal-linked invoices; `recipient_name`, `paid_note` |
+| `receipts` | Zelle/BofA receipt uploads (base64; approve → mark invoice Paid) |
 | `waiting_list` | Public waiting list queue |
 | `membership_applications` | Step-2 application + ID docs (JSONB) |
 | `member_change_requests` | Beneficiary changes pending board approval |
+| `invoice_mark_paid_requests` | Board dual-control before manual mark-paid |
 | `contact_messages` | Public Contact Us form inbox |
 | `pin_reset_requests` | Member forgot-PIN requests |
 | `event_payouts` | $15K payout document + approval workflow |
@@ -156,7 +168,7 @@ Notifications **skip gracefully** when SendGrid/Twilio are unset (console warn o
 | `board_members` | Board login accounts |
 | `notifications` | Email/SMS send log |
 
-**Migrations:** Bottom of `schema.sql` has commented snippets for existing DBs. If a function errors on missing table, run `npm run db:migrate`.
+**Recent schema additions:** performance indexes on invoices/members/receipts; `invoices.paid_note`; `invoice_mark_paid_requests`.
 
 **Seeding:**
 
@@ -164,7 +176,6 @@ Notifications **skip gracefully** when SendGrid/Twilio are unset (console warn o
 npm run seed
 npm run import:waiting-list:seed
 npm run build:invoice-snapshot
-node scripts/extract_memorial.js   # Optional: refresh memorial names from snapshot
 ```
 
 ---
@@ -178,88 +189,60 @@ Base URL: `/.netlify/functions/<name>`
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/config` | — | `{ adminAuthRequired, memberAuthRequired }` |
-| POST | `/check-phone` | — | Member lookup; `{ exists, hasPin, member }` |
-| POST | `/create-pin` | — | Set/change bcrypt PIN (phone required) |
+| POST | `/check-phone` | — | Member lookup |
+| POST | `/create-pin` | — | Set bcrypt PIN |
 | POST | `/verify-pin` | — | Returns member JWT |
-| POST | `/request-pin-reset` | — | Member locked out — creates `pin_reset_requests` row |
-| GET | `/pin-reset-requests` | Admin | List PIN reset requests |
-| POST | `/pin-reset-requests/:id/approve` | Admin | Clear PIN + mark approved |
-| POST | `/pin-reset-requests/:id/reject` | Admin | Decline request |
-| POST | `/admin/reset-pin` | Admin | `{ memberId }` — clear PIN from member modal |
+| POST | `/request-pin-reset` | — | Creates `pin_reset_requests` row |
+| GET/POST | `/pin-reset-requests/*` | Admin | List / approve / reject |
+| POST | `/admin/reset-pin` | Admin | Clear PIN from member modal |
 | GET | `/me` | Member JWT | Current member |
 | POST | `/admin/login` | — | Board JWT |
-| GET | `/admin/me` | Board JWT | Current admin |
 
 ### `portal.js`
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | `/members` | Admin | Member list |
-| GET | `/member` | Admin | Single member lookup |
-| POST | `/member` | Admin | Update member fields |
-| GET | `/invoices` | Admin or Member | Invoice list |
-| POST | `/invoice` | Admin | Mark invoice paid |
-| GET | `/profile` | Member | Profile + beneficiary + pending change |
-| PATCH | `/profile` | Member | Update profile (notifies member + board) |
-| PUT | `/beneficiary` | Member | **Submits change request** for board approval (not direct save) |
-| GET | `/events` | Member | Deceased names for receipt dropdown |
-| GET | `/activity` | Admin or Member | Audit log entries |
-| GET | `/member/journey` | Admin | Timeline for one member |
+| GET | `/members` | Admin | Member list (`?limit=2500`) |
+| GET | `/invoices` | Admin or Member | Invoice list; member query matches `member_id` **or** `recipient_name` |
+| GET | `/invoice-stats` | Admin | Aggregates: paid/unpaid, Zelle & BofA, `event_summary` with `amount_owed` |
+| GET | `/member-stats`, `/stats`, `/events`, `/deceased-members` | Public/Admin | Active count + event catalog |
+| GET | `/profile`, PATCH `/profile` | Member | Profile + beneficiary |
+| PUT | `/beneficiary` | Member | Submits change request (board approval) |
+| GET | `/activity` | Admin or Member | Audit log |
+| POST | `/invoice` | Admin | Mark paid (with approval flow where configured) |
 
-### `paypal-sync.js`
+**Member invoices:** `dedupeInvoicesByEvent()` on server; portal counts **Deaths Paid** = paid invoices with `event_number` (not legacy unlinked rows).
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | `/` | — | Preview normalized invoices from PayPal (debug) |
-| POST | `/` | Admin | Pull all PayPal invoices → upsert `invoices` table |
+**Recipient matching:** Many invoices were bulk-imported with wrong `member_id` but correct PayPal `recipient_name`. Portal matches by member's `paypal_name` / `full_name` so counts stay accurate (~21 active members affected).
 
-Run locally: `npm run sync:paypal`. Admin UI: **Sync PayPal** on Invoices tab; auto re-sync if last sync &gt; 30 minutes ago.
-
-### `receipts.js`
-
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| POST | `/` | Member | Upload receipt (base64 file, deceased name, optional `invoice_num`) |
-| GET | `/` | Admin | List receipts (optional `?status=Pending`) |
-| POST | `/:id/approve` | Admin | Approve → marks linked invoice Paid |
-| POST | `/:id/reject` | Admin | Reject upload |
-
-Max file 5 MB; JPG/PNG/PDF/WebP. Files stored as `data:` URLs in `receipts.file_url`.
-
-### `apply.js`
-
-**Public:**
+### `apply.js` (public highlights)
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/waiting-list` | Join waiting list (address validated) |
-| GET | `/waiting-list/status` | Public queue |
-| GET | `/validate-address` | 50-mile radius check |
-| POST | `/verify` | Waiting list invite token for `/application` |
-| POST | `/membership` | Submit application + ID docs |
-| POST | `/contact` | Contact Us form → `contact_messages` + email board |
+| GET | `/site-stats` | `active_count`, `amount_per_member`, `payout_amount` |
+| GET | `/current-announcement` | Latest event from DB (deceased name, venues in event `notes` JSON) |
+| GET | `/waiting-list/status` | Live queue + `added_through_position` |
+| POST | `/waiting-list`, `/membership`, `/contact` | Forms |
 
-**Admin** (board JWT):
+### PayPal sync
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/applications` | Membership applications + merged beneficiary requests |
-| GET/PATCH/POST | `/applications/:id` | Review, approve, reject applications |
-| GET | `/change-requests` | Beneficiary change requests |
-| GET/POST | `/change-requests/:id` | Detail; `approve` / `reject` |
-| GET | `/contact-messages` | Contact form inbox |
+| Function | Role |
+|----------|------|
+| `paypal-sync` | GET invoice ID list; POST batch sync (Admin **Sync PayPal** button) |
+| `paypal-sync-scheduled` | Cron `0 * * * *` — **Netlify shows "Every hour"**; only syncs **9 AM & 6 PM Pacific** |
+| `paypal-sync-background` | Full batched pull (invoked by scheduled or `CRON_SECRET`) |
 
-Beneficiary **approve** applies payload to `beneficiaries` and sends member email + SMS.
+See **`docs/scheduled-paypal-sync.md`** for schedule explanation.
 
-### `payouts.js` (admin only)
+**Manual sync:** Admin → Invoices → **Sync PayPal** · `npm run sync:paypal` · force: `/.netlify/functions/paypal-sync-scheduled?secret=CRON_SECRET`
 
-Same as before: list, open case, upload docs, checklist, 2 board approvals, mark $15,000 paid.
+**PayPal member matching:** Recipient name matched **before** email on sync (`paypal-sync.js`).
 
-### `notify.js`
+**Payment stats:** `PAID` → PayPal; `MARKED_AS_PAID` → Zelle & BofA (`payment-methods.js`).
 
-Called on profile update, beneficiary submit/approve/reject, application events, PIN reset board alert, contact form.
+### `receipts.js`, `payouts.js`, `notify.js`, `sync.js`
 
-**Beneficiary sensitivity:** SMS avoids full beneficiary names where possible; all member messages include “call (424) 547-5594 if this was not you.”
+Unchanged in role: receipts workflow, payout fund, notifications, internal CRM sync (not PayPal).
 
 ---
 
@@ -267,41 +250,47 @@ Called on profile update, beneficiary submit/approve/reject, application events,
 
 ### Public site (`public/index.html`)
 
-Single-page app with hash routing (`#remembrance`, `#apply`, etc.). English + Amharic (`lang-am`).
+Hash routing (`#announcement`, `#apply`, etc.). English + Amharic.
 
-**Sections:** Announcement (memorial letter template for current event), **In Remembrance** (`#remembrance`), How It Works, About, Payment, By-Laws, Waiting List, Waiting List Status, Contact (form first).
+**Live from API:**
 
-**In Remembrance:** Loads `public/data/memorial.json` — one card, vertical list of **name + year**. Update JSON when full historical list is available; `scripts/extract_memorial.js` pulls names from invoice snapshot (handles `# 27` spacing quirk).
+- Hero **active member count**, per-death amount, payout amount → `apply/site-stats`
+- **Current announcement** → `apply/current-announcement` (memorial letter + summary box)
+- **Waiting list status** → refetch on section open, refresh, tab visible
 
-**Other UX:** Colored Explore cards, memorial announcement `data-ann-*` template, by-laws PDF modal, waiting list shows next names in queue.
+Placeholders show `—` until API loads. Static fallbacks (`member-stats.json`, `waiting-list-public.json`) only if API fails.
+
+**Removed:** In Remembrance section and `memorial.json`.
 
 ### Member portal (`public/portal/index.html`)
 
-**Wired:**
+**Live:**
 
-- Phone + PIN login; **Forgot PIN? Request a reset** → `auth/request-pin-reset`
-- Invoices from DB; unpaid cards: **gold** “If paid, Upload Receipt” + **green** “Pay via PayPal”
-- Receipt upload → `receipts` API (person dropdown from `portal/events`, links invoice if prefilled)
-- Profile edit; beneficiary edit → **pending board approval**
-- Change PIN in Profile (logged in)
-- Activity in notifications tab
-
-**Partial mock:** Some static notification cards remain for demo.
+- Invoices from DB with recipient-name matching + event dedupe
+- **Deaths Paid** = count of **paid event invoices** (unique events)
+- Notifications built from live unpaid invoices + activity (no mock array)
+- `refreshPortalData()` on tab switch and `visibilitychange`
+- Receipt upload, profile, beneficiary change request, PIN reset
 
 ### Board Admin Page (`public/admin/index.html`)
 
-**Sidebar views:** Invoices · Members · **Approval** (applications + beneficiary changes) · **Receipts** · **Messages** (Contact + PIN Reset tabs) · Event Summary · Payout Fund · Activity Log
+**Sidebar:**
 
-**Features:**
+| Section | Views |
+|---------|-------|
+| Main | Members CRM, Invoices, Approval, Receipts, Messages |
+| Reports | Event Summary, Payout Fund |
+| Security | Activity Log |
 
-- Invoice tracker + late matching by PayPal name
-- Member modal: edit CRM fields, journey timeline, **Reset PIN** button
-- Approval: membership apps (4-checklist) + beneficiary change requests (`cr-{id}` IDs)
-- Receipts: pending/approved/rejected; preview image/PDF; approve marks invoice Paid
-- Messages: contact inbox + PIN reset queue (approve clears PIN)
-- Payout Fund workflow (unchanged)
+**Live stats bar:** Unpaid, Paid (PayPal), Zelle & BofA, Late — colors: green / green / red.
 
-**Data:** Live API + `invoices-snapshot.json` fallback for invoices offline.
+**Refresh behavior:** Members and Invoices tabs refetch on switch; Event Summary loads full invoices + stats.
+
+**Event Summary:** `amount_owed` from API (sum of unpaid `amount_due`), not `unpaid × 110`.
+
+**PayPal:** **Sync PayPal** on Invoices tab (batched POST). Stats cache invalidated after sync and member changes.
+
+**Data:** Live API + `invoices-snapshot.json` fallback when DB unavailable.
 
 ### Membership application (`public/application/index.html`)
 
@@ -309,31 +298,31 @@ Waiting list verify gate → full form → `apply/membership`.
 
 ---
 
-## 8. Completed work (summary by phase)
+## 8. Completed work (summary)
 
-### Phase 2–5 — Core platform (DONE)
+### Core platform (DONE)
 
-Auth, portal, admin CRM, applications, waiting list, notifications, audit, sync, payout fund.
+Auth, portal, admin CRM, applications, waiting list, notifications, audit, payout fund, receipts, beneficiary approval, PIN reset, contact messages.
 
-### Phase 6 — Recent (June 2026, commit `679151f`)
+### June 2026 — Live data & PayPal (commits `8a78e85` → `8e86532`)
 
-- [x] **Receipt uploads** — `receipts.js` + portal + admin Receipts tab
-- [x] **In Remembrance** public page + `memorial.json`
-- [x] **PIN reset** — member request flow + admin inbox + member modal reset
-- [x] **Beneficiary approval** — member changes require board approve; email/SMS on submit, approve, reject
-- [x] **Contact messages** — public form → admin Messages tab
-- [x] **Memorial announcement** letter template on public site
-- [x] Portal invoice UX (stacked pay/upload buttons, gold/green)
-- [x] Admin labels: Board Admin Page, Approval tab
+- [x] **Dynamic public site** — live member count, announcement, waiting list from DB
+- [x] **Dynamic portal** — Deaths Paid, invoice dedupe, recipient-name matching, live notifications
+- [x] **Dynamic admin** — invoice stats cache, Zelle & BofA split, event `amount_owed`, tab refresh
+- [x] **Scheduled PayPal sync** — 9 AM & 6 PM Pacific via `paypal-sync-scheduled` + `paypal-sync-background`
+- [x] **Removed In Remembrance** — section and memorial JSON/scripts
+- [x] **Admin Security section** — Activity Log moved under Security heading
+- [x] **Schema** — indexes, `paid_note`, `invoice_mark_paid_requests`
+- [x] **Netlify deploy fix** — `SECRETS_SCAN_OMIT_KEYS` for `PAYPAL_ENV` false positives (`aria-live`, etc.)
+- [x] **Docs** — `docs/scheduled-paypal-sync.md`
 
 ### Still partial / ops
 
-- [x] **PayPal → DB sync** — `paypal-sync.js` POST syncs all invoices; Admin **Sync PayPal** button; background sync every 30 min; `npm run sync:paypal`
-- [ ] Admin create event → bulk invoices (PayPal API create)
+- [ ] Admin create event → bulk PayPal invoices via API
 - [ ] All members have portal PINs (ops)
-- [ ] Full memorial history in `memorial.json` (user to supply list)
+- [ ] Fix mislinked `member_id` on bulk-imported invoices (recipient match covers portal; admin may still show wrong owner on some rows)
 - [ ] S3 for receipts (optional; currently DB base64)
-- [ ] Production: add `PAYPAL_*` env vars on Netlify + run `db:migrate`
+- [ ] Automated payment reminders (day 3/7/14)
 
 ---
 
@@ -341,16 +330,14 @@ Auth, portal, admin CRM, applications, waiting list, notifications, audit, sync,
 
 | Item | Notes |
 |------|-------|
-| `events.js` | No admin “create event → auto 195 invoices” via PayPal API |
-| Automated payment reminders | Day 3/7/14 — not started |
+| `events.js` | No admin “create event → auto ~197 invoices” via PayPal API |
+| Automated payment reminders | Not started |
 | Twilio SMS bot | Not started |
-| Registration fee PayPal ($200) after application approval | Partial |
+| Registration fee PayPal ($200) after approval | Partial |
 | Welcome email + digital membership card | Not started |
 | 4-month waiting period tracking | Not started |
-| Reporting (event collection, delinquency, semi-annual) | Not started |
+| Reporting (event collection, delinquency) | Not started |
 | Receipt storage at scale | Base64 in Postgres OK for now |
-| `README.md` | Partially outdated |
-| Production migrations | Run `npm run db:migrate` on Render after deploy |
 
 ---
 
@@ -365,7 +352,7 @@ From by-laws / handoff:
 - **$15,000** payout; **2 board approvals** required
 - **200** member cap
 - Coverage: member, spouse, children up to 26
-- **Beneficiary changes** require board approval (sensitive — always notify member)
+- **Beneficiary changes** require board approval
 
 ---
 
@@ -374,31 +361,28 @@ From by-laws / handoff:
 1. **Minimal diffs** — vanilla JS + CSS; match existing patterns.
 2. **Bilingual** — `.en` / `.am` pairs on public and portal strings.
 3. **Mobile first** — most members use phones.
-4. **Do not commit or push** unless the user explicitly asks. Netlify free tier ~300 build credits/month.
+4. **Do not commit or push** unless the user explicitly asks.
 5. **Do not commit** `.env`, secrets, or `data/` exports.
-6. **Database:** timeouts via `db.js` Pool; graceful empty responses if tables missing.
-7. **Production:** `ADMIN_AUTH_ENABLED=true` on Netlify.
-8. **Sensitive data:** ID/receipt/payout docs as base64 — never log full payloads.
+6. **Database:** timeouts via `db.js`; run `npm run db:migrate` after schema changes.
+7. **Production:** `ADMIN_AUTH_ENABLED=true`, `CRON_SECRET` set on Netlify.
+8. **Restart dev server** after new API routes.
 
 ---
 
-## 12. Recent session changelog (for continuity)
+## 12. Recent session changelog
 
-### June 2026 — `679151f`
+### June 2026 — `8a78e85` / `8e86532`
 
-- Memorial roll on public site; 6 names from invoice data (#25–#30).
-- Receipt API + admin Receipts + portal upload linked to invoices.
-- PIN reset request (portal) + admin Messages → PIN Reset + Reset PIN on member.
-- Beneficiary email/SMS: on request submitted, board approved, board rejected.
-- Portal: gold upload / green PayPal invoice buttons.
-- Admin: “Board Admin Page”, Approval tab, Receipts tab.
+- Live data across public site, portal, admin (stats, announcement, invoices).
+- Portal Deaths Paid fix: match invoices by `recipient_name` + count paid events only.
+- PayPal scheduled sync (9 AM & 6 PM Pacific); `CRON_SECRET` required.
+- Admin: Zelle & BofA stats, Security section, event owed from API.
+- Removed In Remembrance; memorial JSON/scripts deleted.
+- Netlify secrets scan omit for `PAYPAL_ENV`; deploy docs.
 
-### Earlier sessions
+### June 2026 — `679151f` (earlier)
 
-- Beneficiary approval workflow (`member_change_requests`).
-- Contact messages tab.
-- Memorial announcement template (Brook Zewdie).
-- Payout fund, waiting list embed, admin late invoice matching.
+- Receipt API, PIN reset, beneficiary notifications, contact messages, memorial announcement template.
 
 ---
 
@@ -407,19 +391,23 @@ From by-laws / handoff:
 | Problem | Likely cause |
 |---------|----------------|
 | Admin shows no invoices | No `DATABASE_URL`; run `build:invoice-snapshot` |
-| Receipts / PIN reset / Messages empty | Run `npm run db:migrate` |
-| Memorial shows 4 not 6 names | Old `memorial.json`; run `extract_memorial.js` or edit JSON |
-| PIN reset 503 locally | No `DATABASE_URL` |
-| Beneficiary stuck “pending” | Board must approve in Admin → Approval |
+| Portal Deaths Paid wrong | Stale cache — refresh; check `recipient_name` vs member `paypal_name` |
+| Member missing invoices | Wrong `member_id` on import — portal uses recipient match; consider relinking in DB |
+| Scheduled sync not running | `CRON_SECRET` missing on Netlify; redeploy after setting |
+| Netlify build failed secrets scan | `PAYPAL_ENV=live` matches `aria-live` — fixed via `SECRETS_SCAN_OMIT_KEYS` in `netlify.toml` |
+| `paypal-sync-scheduled` missing | Code not deployed — push latest `main` |
+| New function 404 locally | Restart `npm run dev` |
+| Receipts / PIN reset empty | Run `npm run db:migrate` |
 | Notifications not sending | SendGrid/Twilio unset (expected locally) |
-| Netlify dev slow | Google Drive sync; use `start-dev.js` |
+| PayPal sync timeout on Netlify | Use Admin batched sync or `npm run sync:paypal`; background function for cron |
 
 ---
 
 ## 14. Related documents
 
+- **`docs/scheduled-paypal-sync.md`** — PayPal cron schedule (why “Every hour” in Netlify UI).
 - **`HIBRET_EDIR_PROJECT_HANDOFF (1).md`** — Original handoff (business, SMS bot spec, roadmap).
-- **`README.md`** — Deploy instructions (partially outdated).
+- **`README.md`** — Deploy overview.
 - **`.env.example`** — All env vars.
 
 ---

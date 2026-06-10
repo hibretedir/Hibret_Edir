@@ -1,16 +1,27 @@
-// Netlify scheduled trigger — runs hourly, syncs at 9:00 AM and 6:00 PM Pacific.
-// Dispatches paypal-sync-background so the full pull can exceed the 60s HTTP limit.
+// paypal-sync-scheduled — Netlify scheduled function
+//
+// Netlify dashboard shows: schedule "0 * * * *" (Every hour)
+// That is intentional. Cron cannot target "9 AM Pacific" directly (UTC + DST).
+//
+// Actual PayPal sync times: 9:00 AM and 6:00 PM America/Los_Angeles only.
+// Other hourly runs log "skipped" and do not call PayPal.
+//
+// Manual test (any time): GET/POST with ?secret=CRON_SECRET
+// See docs/scheduled-paypal-sync.md
 
 const { getLosAngelesHour, verifyCronSecret } = require('./paypal-sync');
 
 const SYNC_HOURS_PACIFIC = [9, 18];
+const SCHEDULE_LABEL = '9:00 AM & 6:00 PM Pacific (America/Los_Angeles)';
 
 exports.handler = async (event) => {
   const force = verifyCronSecret(event);
   const laHour = getLosAngelesHour();
 
   if (!force && !SYNC_HOURS_PACIFIC.includes(laHour)) {
-    console.log(`PayPal scheduled sync skipped (LA hour ${laHour}, want ${SYNC_HOURS_PACIFIC.join(', ')})`);
+    console.log(
+      `PayPal scheduled sync skipped — ${SCHEDULE_LABEL} only (LA hour ${laHour})`
+    );
     return {
       statusCode: 200,
       body: JSON.stringify({ skipped: true, la_hour: laHour }),
@@ -36,7 +47,7 @@ exports.handler = async (event) => {
   }
 
   try {
-    console.log(`Dispatching background PayPal sync (LA hour ${laHour}, forced=${force})…`);
+    console.log(`Dispatching background PayPal sync — ${SCHEDULE_LABEL} (LA hour ${laHour}, forced=${force})…`);
     const res = await fetch(`${siteUrl}/.netlify/functions/paypal-sync-background`, {
       method: 'POST',
       headers: {

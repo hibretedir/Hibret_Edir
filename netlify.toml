@@ -13,10 +13,14 @@
 [functions."paypal-sync"]
   timeout = 60
 
-# Hourly check; runs full sync at 9:00 AM & 6:00 PM America/Los_Angeles (see paypal-sync-scheduled.js)
+# Hourly trigger for paypal-sync-scheduled (Netlify cron is UTC-only).
+# Netlify UI shows "Every hour" — that is intentional. PayPal sync runs ONLY at
+# 9:00 AM and 6:00 PM America/Los_Angeles; all other hours exit immediately.
 [functions."paypal-sync-scheduled"]
   schedule = "0 * * * *"
   timeout = 30
+
+# Full batched PayPal pull (invoked by paypal-sync-scheduled or CRON_SECRET)
 
 [functions."paypal-sync-background"]
   timeout = 900

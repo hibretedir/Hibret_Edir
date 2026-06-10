@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/css/admin-tracker.css?v=admin23">
+<link rel="stylesheet" href="/css/admin-tracker.css?v=admin25">
 </head>
 <body class="app-admin tracker">
 
@@ -17,15 +17,35 @@
       <img src="/logo.png" alt="Hibret Edir">
       <div>
         <div class="admin-login-title">Board Admin Page</div>
-        <div class="admin-login-sub">Sign in to manage members &amp; invoices</div>
+        <div class="admin-login-sub" id="adminLoginSub">Sign in to manage members &amp; invoices</div>
       </div>
     </div>
     <div class="admin-login-err" id="adminLoginErr"></div>
-    <label class="admin-login-label">Email</label>
-    <input type="email" class="admin-login-input" id="adminEmail" placeholder="board@example.com" autocomplete="username">
-    <label class="admin-login-label">Password</label>
-    <input type="password" class="admin-login-input" id="adminPassword" placeholder="Password" autocomplete="current-password">
-    <button class="btn primary" type="button" onclick="adminLogin()">Sign In</button>
+    <div id="adminLoginStepEmail">
+      <label class="admin-login-label">Email</label>
+      <input type="email" class="admin-login-input" id="adminEmail" placeholder="board@example.com" autocomplete="username"
+        onkeydown="if(event.key==='Enter')adminLoginContinue()">
+      <button class="btn primary" type="button" onclick="adminLoginContinue()">Continue →</button>
+    </div>
+    <div id="adminLoginStepPassword" style="display:none">
+      <p class="admin-login-hint" id="adminLoginEmailHint"></p>
+      <label class="admin-login-label">Password</label>
+      <input type="password" class="admin-login-input" id="adminPassword" placeholder="Password" autocomplete="current-password"
+        onkeydown="if(event.key==='Enter')adminLogin()">
+      <button class="btn primary" type="button" onclick="adminLogin()">Sign In</button>
+      <button class="btn-link admin-login-back" type="button" onclick="adminLoginBack()">← Use a different email</button>
+    </div>
+    <div id="adminLoginStepSetup" style="display:none">
+      <p class="admin-login-hint" id="adminSetupEmailHint"></p>
+      <p class="admin-login-hint">Create a password for your board account (at least 8 characters).</p>
+      <label class="admin-login-label">New password</label>
+      <input type="password" class="admin-login-input" id="adminSetupPassword" placeholder="New password" autocomplete="new-password">
+      <label class="admin-login-label">Confirm password</label>
+      <input type="password" class="admin-login-input" id="adminSetupPasswordConfirm" placeholder="Confirm password" autocomplete="new-password"
+        onkeydown="if(event.key==='Enter')adminSetupPassword()">
+      <button class="btn primary" type="button" onclick="adminSetupPassword()">Create Password &amp; Sign In</button>
+      <button class="btn-link admin-login-back" type="button" onclick="adminLoginBack()">← Use a different email</button>
+    </div>
     <a href="/" class="admin-main-site-link admin-login-home">Back to Main Site →</a>
   </div>
 </div>
@@ -82,6 +102,10 @@
     </div>
     <div class="sidebar-section">
       <div class="sidebar-label">Security</div>
+      <button type="button" class="sidebar-nav" id="nav-board-access" onclick="switchView('board-access')">
+        <span class="sidebar-nav-icon">🔐</span>
+        <span>Board Access</span>
+      </button>
       <button type="button" class="sidebar-nav" id="nav-activity" onclick="switchView('activity')">
         <span class="sidebar-nav-icon">◷</span>
         <span>Activity Log</span>
@@ -167,6 +191,9 @@
   </div>
   <div class="sidebar-section">
     <div class="sidebar-label">Security</div>
+    <button type="button" class="sidebar-nav" data-view="board-access" onclick="switchView('board-access')">
+      <span class="sidebar-nav-icon">🔐</span><span>Board Access</span>
+    </button>
     <button type="button" class="sidebar-nav" data-view="activity" onclick="switchView('activity')">
       <span class="sidebar-nav-icon">◷</span><span>Activity Log</span>
     </button>
@@ -235,6 +262,35 @@
     <div class="modal-footer">
       <button class="btn" type="button" onclick="closeModal('markPaidModal')">Cancel</button>
       <button class="btn primary" type="button" id="markPaidConfirmBtn" onclick="confirmMarkPaid()">Submit for Board Approval</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="messageReplyModal">
+  <div class="modal modal-wide">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="messageReplyTitle">Reply to Member</div>
+        <div style="color:var(--tk-muted);font-size:11px;margin-top:2px" id="messageReplySub"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal('messageReplyModal')" type="button">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="msg-reply-original" id="messageReplyOriginal"></div>
+      <label class="admin-login-label" for="messageReplyText">Your reply *</label>
+      <textarea class="field-input" id="messageReplyText" rows="4" placeholder="Type your reply — this appears on the member's portal profile"></textarea>
+      <div class="fg" style="margin-top:12px">
+        <label class="admin-login-label" for="messageReplyMember">Link to member (optional)</label>
+        <select class="field-input" id="messageReplyMember">
+          <option value="">— Auto-match by phone/email —</option>
+        </select>
+      </div>
+      <label class="msg-reply-notify"><input type="checkbox" id="messageReplyNotify" checked> Email / text the member about this reply</label>
+      <div class="admin-login-err" id="messageReplyErr"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" type="button" onclick="closeModal('messageReplyModal')">Cancel</button>
+      <button class="btn primary" type="button" onclick="submitMessageReply()">Post Reply</button>
     </div>
   </div>
 </div>
@@ -335,6 +391,7 @@ const CONTACT_MESSAGES = [];
 const PIN_RESET_REQUESTS = [];
 const RECEIPTS = [];
 const ACTIVITY = [];
+const BOARD_MEMBERS = [];
 const PAYOUTS = [];
 let EVENTS_BY_NUMBER = new Map();
 let EVENTS_BY_ID = new Map();
@@ -379,11 +436,12 @@ let reviewingReceiptId = null;
 let payoutFilter = 'open';
 let appFilter = 'pending';
 let receiptFilter = 'pending';
-let messagesFilter = 'contact';
+let replyingMessageId = null;
 const PAYPAL_SYNC_KEY = 'hibret_paypal_last_sync';
 const ADMIN_CACHE_KEY = 'hibret_admin_boot_cache_v2';
 const ADMIN_CACHE_MS = 10 * 60 * 1000;
-const adminSectionsLoaded = { applications: false, receipts: false, inbox: false, activity: false, payouts: false };
+const adminSectionsLoaded = { applications: false, receipts: false, inbox: false, activity: false, payouts: false, boardAccess: false };
+let adminLoginEmail = '';
 let adminBackgroundFetch = null;
 let markPaidTarget = null;
 let pendingMarkPaidByInvoice = new Map();
@@ -1376,6 +1434,20 @@ async function fetchActivity() {
   }
 }
 
+async function fetchBoardMembers() {
+  try {
+    const res = await apiGet('auth/admin/board-members');
+    BOARD_MEMBERS.splice(0, BOARD_MEMBERS.length, ...(res?.boardMembers || []));
+    adminSectionsLoaded.boardAccess = true;
+    return true;
+  } catch (e) {
+    console.warn('Board members API failed:', e.message || e);
+    BOARD_MEMBERS.splice(0, BOARD_MEMBERS.length);
+    adminSectionsLoaded.boardAccess = false;
+    return false;
+  }
+}
+
 async function fetchPayoutsList() {
   try {
     const payRes = await apiGet('payouts');
@@ -1527,6 +1599,7 @@ function trackerHeaderHtml(stats) {
     : currentView === 'messages' ? 'Contact Messages'
     : currentView === 'events' ? 'Event Summary'
     : currentView === 'payouts' ? 'Payout Fund'
+    : currentView === 'board-access' ? 'Board Access'
     : currentView === 'activity' ? 'Activity Log'
     : 'Invoice Payment Tracker';
   const showOutstanding = currentView === 'invoices';
@@ -1536,6 +1609,7 @@ function trackerHeaderHtml(stats) {
     : currentView === 'messages' ? `${PIN_RESET_REQUESTS.filter(r => r.status === 'Pending').length} PIN resets · ${CONTACT_MESSAGES.length} contact`
     : currentView === 'events' ? `${stats.events} passed away · ${stats.total} active member invoices`
     : currentView === 'payouts' ? `${PAYOUTS.filter(p => p.status !== 'Paid Out').length} open · $15,000 per event`
+    : currentView === 'board-access' ? `${BOARD_MEMBERS.filter(b => b.is_active).length} active · ${BOARD_MEMBERS.filter(b => b.is_active && !b.has_password).length} pending setup`
     : currentView === 'activity' ? `${ACTIVITY.length} recent actions logged`
     : `${stats.total} invoices · ${stats.unpaid} unpaid`;
   return `
@@ -1632,7 +1706,7 @@ function updateSidebar() {
   const mobFooter = document.getElementById('mobSidebarFooter');
   if (mobFooter) mobFooter.textContent = footerText;
 
-  ['members', 'invoices', 'applications', 'receipts', 'messages', 'events', 'payouts', 'activity'].forEach(v => {
+  ['members', 'invoices', 'applications', 'receipts', 'messages', 'events', 'payouts', 'board-access', 'activity'].forEach(v => {
     const el = document.getElementById('nav-' + v);
     if (el) el.classList.toggle('active', currentView === v);
   });
@@ -1716,6 +1790,13 @@ async function switchView(v) {
   } else if (v === 'activity' && !adminSectionsLoaded.activity) {
     showMainLoading('Loading activity log…');
     await fetchActivity();
+  } else if (v === 'board-access' && !adminSectionsLoaded.boardAccess) {
+    showMainLoading('Loading board access…');
+    const ok = await fetchBoardMembers();
+    if (!ok) {
+      document.getElementById('mainArea').innerHTML = `<div class="tracker-banner" role="alert">Could not load board access — sign in as board admin if required.</div>`;
+      return;
+    }
   } else if (v === 'payouts' && !adminSectionsLoaded.payouts) {
     showMainLoading('Loading payout cases…');
     await fetchPayoutsList();
@@ -3026,21 +3107,34 @@ function renderMessagesBodyHtml() {
       </div>`;
   }
   {
-    const rows = CONTACT_MESSAGES.length ? CONTACT_MESSAGES.map(m => `
+    const rows = CONTACT_MESSAGES.length ? CONTACT_MESSAGES.map(m => {
+      const src = String(m.source || 'website').toLowerCase();
+      const srcLabel = src === 'portal-login' ? 'Login help' : src === 'portal' ? 'Portal' : 'Website';
+      const srcClass = src === 'portal' || src === 'portal-login' ? 'paid' : '';
+      const statusLabel = m.board_reply ? 'Replied' : (m.status === 'new' ? 'New' : esc(m.status || '—'));
+      const statusClass = m.board_reply ? 'paid' : 'warn';
+      const memberHint = m.member_id
+        ? `<div class="tracker-member-email">Member #${esc(m.member_number || m.member_id)}</div>`
+        : '';
+      return `
       <tr class="data-row">
-        <td><div class="tracker-member-name">${esc(m.name || '—')}</div><div class="tracker-member-email">${esc(m.email || '—')}</div></td>
+        <td><div class="tracker-member-name">${esc(m.name || '—')}</div>${memberHint}<div class="tracker-member-email">${esc(m.email || '—')}</div></td>
         <td>${esc(m.phone || '—')}</td>
+        <td><span class="tracker-status ${srcClass}"><span class="tracker-status-dot"></span>${srcLabel}</span></td>
+        <td><span class="tracker-status ${statusClass}"><span class="tracker-status-dot"></span>${statusLabel}</span></td>
         <td><div class="msg-preview">${esc(m.message || '').slice(0, 120)}${(m.message || '').length > 120 ? '…' : ''}</div></td>
         <td><span class="tracker-date">${esc(fmtDate(m.created_at))}</span></td>
+        <td><button type="button" class="tracker-mark-btn" onclick="openMessageReply(${m.id})">${m.board_reply ? 'Edit reply' : 'Reply'}</button></td>
       </tr>
       <tr class="data-row msg-detail-row">
-        <td colspan="4"><div class="msg-detail-body">${esc(m.message || '')}</div></td>
-      </tr>`).join('') : '';
+        <td colspan="7"><div class="msg-detail-body">${esc(m.message || '')}${m.board_reply ? `<div class="msg-reply-block"><strong>Board reply</strong> (${esc(fmtDate(m.replied_at))})<br>${esc(m.board_reply)}</div>` : ''}</div></td>
+      </tr>`;
+    }).join('') : '';
     return `
-      <div class="tracker-banner">Messages from the public Contact Us form. They are saved here for all board members and also emailed to <strong>hibretedirtext@gmail.com</strong>.</div>
+      <div class="tracker-banner">Messages from the public Contact Us form and the <strong>Member Portal</strong>. Replies are posted on the member's portal profile and optionally emailed.</div>
       <div class="tracker-table-wrap">
         ${CONTACT_MESSAGES.length ? `<table class="tracker-table">
-          <thead><tr><th>From</th><th>Phone</th><th>Message</th><th>Received</th></tr></thead>
+          <thead><tr><th>From</th><th>Phone</th><th>Source</th><th>Status</th><th>Message</th><th>Received</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>` : '<div class="tracker-empty">No contact messages yet. Run <code>npm run db:migrate</code> if the inbox table is missing.</div>'}
       </div>`;
@@ -3094,6 +3188,90 @@ async function rejectPinResetRequest(id) {
   }
 }
 
+function fillMessageReplyMemberSelect(selectedId) {
+  const sel = document.getElementById('messageReplyMember');
+  if (!sel) return;
+  const active = MEMBERS.filter(m => m.status === 'Active').slice(0, 500);
+  sel.innerHTML = '<option value="">— Auto-match by phone/email —</option>' +
+    active.map(m => {
+      const d = getMemberData(m);
+      const label = `#${d.member_number || d.id} ${d.full_name || d.paypal_name || d.first || 'Member'}`;
+      return `<option value="${d.id}">${esc(label)}</option>`;
+    }).join('');
+  if (selectedId) sel.value = String(selectedId);
+}
+
+function openMessageReply(id) {
+  const msg = CONTACT_MESSAGES.find(m => Number(m.id) === Number(id));
+  if (!msg) return;
+  replyingMessageId = id;
+  document.getElementById('messageReplyTitle').textContent = msg.board_reply ? 'Edit Reply' : 'Reply to Member';
+  document.getElementById('messageReplySub').textContent = `${msg.name || '—'} · ${msg.phone || msg.email || 'no contact on file'}`;
+  document.getElementById('messageReplyOriginal').innerHTML = `<strong>Their message</strong><div class="msg-detail-body" style="margin-top:6px">${esc(msg.message || '')}</div>`;
+  document.getElementById('messageReplyText').value = msg.board_reply || '';
+  document.getElementById('messageReplyNotify').checked = !msg.board_reply;
+  fillMessageReplyMemberSelect(msg.member_id || '');
+  const err = document.getElementById('messageReplyErr');
+  err.textContent = '';
+  err.classList.remove('show');
+  openModal('messageReplyModal');
+  setTimeout(() => document.getElementById('messageReplyText')?.focus(), 50);
+}
+
+async function submitMessageReply() {
+  if (!replyingMessageId) return;
+  const reply = (document.getElementById('messageReplyText')?.value || '').trim();
+  const memberId = document.getElementById('messageReplyMember')?.value || '';
+  const notify = document.getElementById('messageReplyNotify')?.checked !== false;
+  const err = document.getElementById('messageReplyErr');
+  if (!reply) {
+    err.textContent = 'Enter a reply message.';
+    err.classList.add('show');
+    return;
+  }
+  err.classList.remove('show');
+  try {
+    const body = { reply, notify_member: notify };
+    if (memberId) body.member_id = Number(memberId);
+    const res = await apiPost('apply/contact-messages/' + replyingMessageId + '/reply', body);
+    if (res?.contact_message) {
+      const idx = CONTACT_MESSAGES.findIndex(m => Number(m.id) === Number(replyingMessageId));
+      if (idx !== -1) CONTACT_MESSAGES[idx] = res.contact_message;
+    }
+    closeModal('messageReplyModal');
+    replyingMessageId = null;
+    showAdminToast('Reply posted to member profile.', 'ok');
+    if (currentView === 'messages') updateMessagesList();
+    if (editingMemberId) loadMemberMessages(editingMemberId);
+  } catch (e) {
+    err.textContent = e.message || 'Could not post reply.';
+    err.classList.add('show');
+  }
+}
+
+async function loadMemberMessages(memberId) {
+  const el = document.getElementById('memberMessages');
+  if (!el) return;
+  try {
+    const res = await apiGet('apply/contact-messages?member_id=' + memberId);
+    const msgs = res?.messages || [];
+    if (!msgs.length) {
+      el.innerHTML = '<div style="font-size:12px;color:var(--tk-muted)">No contact messages linked to this member yet.</div>';
+      return;
+    }
+    el.innerHTML = msgs.map(m => `
+      <div class="msg-member-thread">
+        <div style="font-size:10px;color:var(--tk-muted)">${esc(fmtDate(m.created_at))} · ${esc(m.source || 'contact')}</div>
+        <div style="font-size:12px;margin:4px 0">${esc(m.message || '')}</div>
+        ${m.board_reply
+          ? `<div class="msg-reply-block"><strong>Board reply</strong> (${esc(fmtDate(m.replied_at))})<br>${esc(m.board_reply)}</div>`
+          : `<button type="button" class="tracker-mark-btn" style="margin-top:6px" onclick="openMessageReply(${m.id})">Reply</button>`}
+      </div>`).join('');
+  } catch {
+    el.innerHTML = '<div style="font-size:12px;color:var(--tk-muted)">Could not load messages.</div>';
+  }
+}
+
 async function adminResetMemberPin() {
   if (!editingMemberId) return;
   const m = MEMBERS.find(x => x.id === editingMemberId);
@@ -3135,6 +3313,122 @@ function renderActivityView() {
     </div>`;
 }
 
+function boardAccessStatusLabel(b) {
+  if (!b.is_active) return { text: 'Deactivated', cls: 'cancelled' };
+  if (!b.has_password) return { text: 'Pending setup', cls: 'warn' };
+  return { text: 'Active', cls: 'paid' };
+}
+
+function renderBoardAccessView() {
+  const stats = getStats();
+  const rows = BOARD_MEMBERS.length ? BOARD_MEMBERS.map(b => {
+    const st = boardAccessStatusLabel(b);
+    const when = b.created_at ? String(b.created_at).replace('T', ' ').slice(0, 10) : '—';
+    const isSelf = adminUser && Number(adminUser.id) === Number(b.id);
+    let actions = '';
+    if (b.is_active) {
+      if (b.has_password && !isSelf) {
+        actions += `<button type="button" class="btn sm" onclick="resetBoardPassword(${b.id})">Reset password</button> `;
+      }
+      if (!isSelf) {
+        actions += `<button type="button" class="btn sm danger" onclick="deactivateBoardMember(${b.id})">Deactivate</button>`;
+      } else {
+        actions += '<span class="tracker-member-email">You</span>';
+      }
+    } else {
+      actions = `<button type="button" class="btn sm primary" onclick="reactivateBoardMember(${b.id})">Re-invite</button>`;
+    }
+    return `<tr class="data-row">
+      <td><div class="tracker-member-name">${esc(b.email)}</div></td>
+      <td><span class="tracker-status ${st.cls}"><span class="tracker-status-dot"></span>${st.text}</span></td>
+      <td><span class="tracker-date">${when}</span></td>
+      <td class="tracker-actions">${actions}</td>
+    </tr>`;
+  }).join('') : '';
+
+  document.getElementById('mainArea').innerHTML = `
+    ${trackerHeaderHtml(stats)}
+    <div class="tracker-banner">Add a board member's email here. They sign in at this admin page and create their own password on first visit.</div>
+    <div class="board-access-invite">
+      <label class="admin-login-label" for="boardInviteEmail">Invite board member</label>
+      <div class="board-access-invite-row">
+        <input type="email" class="field-input" id="boardInviteEmail" placeholder="name@example.com"
+          onkeydown="if(event.key==='Enter')inviteBoardMember()">
+        <button type="button" class="btn primary" onclick="inviteBoardMember()">Add Email</button>
+      </div>
+      <div class="board-access-invite-msg" id="boardInviteMsg"></div>
+    </div>
+    <div class="tracker-table-wrap">
+      ${BOARD_MEMBERS.length ? `<table class="tracker-table">
+        <thead><tr><th>Email</th><th>Status</th><th>Added</th><th></th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>` : '<div class="tracker-empty">No board logins yet. Add an email above — they will set their password when they first sign in.</div>'}
+    </div>`;
+}
+
+async function inviteBoardMember() {
+  const input = document.getElementById('boardInviteEmail');
+  const msg = document.getElementById('boardInviteMsg');
+  const email = (input?.value || '').trim();
+  if (!email) {
+    if (msg) { msg.textContent = 'Enter an email address.'; msg.className = 'board-access-invite-msg err'; }
+    return;
+  }
+  if (msg) { msg.textContent = 'Saving…'; msg.className = 'board-access-invite-msg'; }
+  try {
+    const res = await apiPost('auth/admin/board-members', { email });
+    if (input) input.value = '';
+    if (msg) { msg.textContent = res.message || 'Invited.'; msg.className = 'board-access-invite-msg ok'; }
+    await fetchBoardMembers();
+    renderBoardAccessView();
+    showAdminToast(res.message || 'Board member invited.', 'ok');
+  } catch (e) {
+    if (msg) { msg.textContent = e.message || 'Could not invite.'; msg.className = 'board-access-invite-msg err'; }
+  }
+}
+
+async function deactivateBoardMember(id) {
+  const b = BOARD_MEMBERS.find(x => Number(x.id) === Number(id));
+  const email = b?.email || 'this account';
+  if (!confirm('Deactivate board access for ' + email + '?')) return;
+  try {
+    await apiPost('auth/admin/board-members/' + id + '/deactivate', {});
+    showAdminToast('Board access deactivated.', 'ok');
+    await fetchBoardMembers();
+    renderBoardAccessView();
+  } catch (e) {
+    alert(e.message || 'Could not deactivate.');
+  }
+}
+
+async function reactivateBoardMember(id) {
+  const b = BOARD_MEMBERS.find(x => Number(x.id) === Number(id));
+  const email = b?.email || 'this account';
+  if (!confirm('Re-invite ' + email + '? They will create a new password on next sign-in.')) return;
+  try {
+    await apiPost('auth/admin/board-members/' + id + '/reactivate', {});
+    showAdminToast('Re-invited. They must set a new password.', 'ok');
+    await fetchBoardMembers();
+    renderBoardAccessView();
+  } catch (e) {
+    alert(e.message || 'Could not re-invite.');
+  }
+}
+
+async function resetBoardPassword(id) {
+  const b = BOARD_MEMBERS.find(x => Number(x.id) === Number(id));
+  const email = b?.email || 'this account';
+  if (!confirm('Clear password for ' + email + '? They will create a new one on next sign-in.')) return;
+  try {
+    await apiPost('auth/admin/board-members/' + id + '/reset-password', {});
+    showAdminToast('Password reset. They must set a new one on sign-in.', 'ok');
+    await fetchBoardMembers();
+    renderBoardAccessView();
+  } catch (e) {
+    alert(e.message || 'Could not reset password.');
+  }
+}
+
 function render() {
   updateSidebar();
   if (currentView === 'events') renderEventsView();
@@ -3143,6 +3437,7 @@ function render() {
   else if (currentView === 'receipts') renderReceiptsView();
   else if (currentView === 'messages') renderMessagesView();
   else if (currentView === 'payouts') renderPayoutsView();
+  else if (currentView === 'board-access') renderBoardAccessView();
   else if (currentView === 'activity') renderActivityView();
   else renderInvoicesView();
 }
@@ -3276,10 +3571,15 @@ async function openMemberDetail(id) {
     <div id="memberJourney" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--tk-border)">
       <div style="font-size:11px;color:var(--tk-muted);margin-bottom:8px">Member journey (waiting list → application → CRM → invoices)</div>
       <div class="tracker-empty" style="padding:12px">Loading timeline…</div>
+    </div>
+    <div id="memberMessagesWrap" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--tk-border)">
+      <div style="font-size:11px;color:var(--tk-muted);margin-bottom:8px">Contact messages &amp; board replies</div>
+      <div id="memberMessages"><div class="tracker-empty" style="padding:12px">Loading…</div></div>
     </div>`;
   memberNotesBaseline = String(m.notes || '');
   openModal('memberModal');
   loadMemberJourney(id);
+  loadMemberMessages(id);
 }
 
 async function loadMemberJourney(memberId) {
@@ -3345,26 +3645,140 @@ function showAdminApp() {
 function showAdminLogin() {
   document.getElementById('adminLoginScreen').style.display = 'flex';
   document.getElementById('adminShell').style.display = 'none';
+  adminLoginEmail = '';
+  adminLoginShowStep('email');
+  const err = document.getElementById('adminLoginErr');
+  if (err) { err.textContent = ''; err.classList.remove('show'); err.style.display = 'none'; }
+}
+
+function adminLoginShowStep(step) {
+  const emailStep = document.getElementById('adminLoginStepEmail');
+  const passStep = document.getElementById('adminLoginStepPassword');
+  const setupStep = document.getElementById('adminLoginStepSetup');
+  const sub = document.getElementById('adminLoginSub');
+  if (emailStep) emailStep.style.display = step === 'email' ? '' : 'none';
+  if (passStep) passStep.style.display = step === 'password' ? '' : 'none';
+  if (setupStep) setupStep.style.display = step === 'setup' ? '' : 'none';
+  if (sub) {
+    sub.textContent = step === 'setup'
+      ? 'First-time setup — create your password'
+      : 'Sign in to manage members & invoices';
+  }
+}
+
+function adminLoginBack() {
+  adminLoginEmail = '';
+  document.getElementById('adminPassword').value = '';
+  document.getElementById('adminSetupPassword').value = '';
+  document.getElementById('adminSetupPasswordConfirm').value = '';
+  adminLoginShowStep('email');
+  const err = document.getElementById('adminLoginErr');
+  if (err) { err.textContent = ''; err.classList.remove('show'); err.style.display = 'none'; }
+  setTimeout(() => document.getElementById('adminEmail')?.focus(), 50);
+}
+
+async function adminLoginContinue() {
+  const email = document.getElementById('adminEmail').value.trim();
+  const err = document.getElementById('adminLoginErr');
+  err.classList.remove('show');
+  err.style.display = 'none';
+  if (!email) {
+    err.textContent = 'Enter your email.';
+    err.classList.add('show');
+    err.style.display = 'block';
+    return;
+  }
+  try {
+    const res = await apiPost('auth/admin/check-email', { email });
+    adminLoginEmail = res.email || email;
+    if (res.needsSetup) {
+      document.getElementById('adminSetupEmailHint').textContent = adminLoginEmail;
+      adminLoginShowStep('setup');
+      setTimeout(() => document.getElementById('adminSetupPassword')?.focus(), 50);
+    } else {
+      document.getElementById('adminLoginEmailHint').textContent = adminLoginEmail;
+      adminLoginShowStep('password');
+      setTimeout(() => document.getElementById('adminPassword')?.focus(), 50);
+    }
+  } catch (e) {
+    err.textContent = e.message || 'Could not verify email.';
+    err.classList.add('show');
+    err.style.display = 'block';
+  }
+}
+
+async function adminSetupPassword() {
+  const password = document.getElementById('adminSetupPassword').value;
+  const confirm = document.getElementById('adminSetupPasswordConfirm').value;
+  const err = document.getElementById('adminLoginErr');
+  err.classList.remove('show');
+  err.style.display = 'none';
+  if (!adminLoginEmail) {
+    adminLoginShowStep('email');
+    return;
+  }
+  if (password.length < 8) {
+    err.textContent = 'Password must be at least 8 characters.';
+    err.classList.add('show');
+    err.style.display = 'block';
+    return;
+  }
+  if (password !== confirm) {
+    err.textContent = 'Passwords do not match.';
+    err.classList.add('show');
+    err.style.display = 'block';
+    return;
+  }
+  try {
+    const res = await apiPost('auth/admin/setup-password', {
+      email: adminLoginEmail,
+      password,
+      confirmPassword: confirm,
+    });
+    if (res.token) {
+      localStorage.setItem(ADMIN_TOKEN_KEY, res.token);
+      adminUser = res.admin;
+      showAdminApp();
+      await bootAdmin();
+    }
+  } catch (e) {
+    err.textContent = e.message || 'Could not create password.';
+    err.classList.add('show');
+    err.style.display = 'block';
+  }
 }
 
 async function adminLogin() {
-  const email = document.getElementById('adminEmail').value.trim();
+  const email = adminLoginEmail || document.getElementById('adminEmail').value.trim();
   const password = document.getElementById('adminPassword').value;
   const err = document.getElementById('adminLoginErr');
   err.classList.remove('show');
   err.style.display = 'none';
   try {
     const res = await apiPost('auth/admin/login', { email, password });
+    if (res.needsSetup) {
+      adminLoginEmail = email;
+      adminLoginShowStep('setup');
+      document.getElementById('adminSetupEmailHint').textContent = email;
+      return;
+    }
     if (res.token) {
       localStorage.setItem(ADMIN_TOKEN_KEY, res.token);
       adminUser = res.admin;
+      showAdminApp();
       await bootAdmin();
     }
   } catch (e) {
-  err.textContent = e.message || 'Sign in failed';
-  err.classList.add('show');
-  err.style.display = 'block';
-}
+    if (e.message && e.message.toLowerCase().includes('create your password')) {
+      adminLoginEmail = email;
+      adminLoginShowStep('setup');
+      document.getElementById('adminSetupEmailHint').textContent = email;
+      return;
+    }
+    err.textContent = e.message || 'Sign in failed';
+    err.classList.add('show');
+    err.style.display = 'block';
+  }
 }
 
 function adminSignOut() {

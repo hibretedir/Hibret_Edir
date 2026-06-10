@@ -335,13 +335,252 @@ async function findAdmin({ email }) {
   if (!email) return null;
   const db = getDb();
   const result = await db.query(
-    `SELECT id, email, password_hash, role, is_active
+    `SELECT id, email, password_hash, role, is_active, created_at
      FROM board_members
      WHERE LOWER(email) = LOWER($1)
      LIMIT 1`,
     [email]
   );
   return result.rows[0] || null;
+}
+
+function normalizeAdminEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+function validateAdminPassword(password) {
+  if (!password || String(password).length < 8) {
+    return 'Password must be at least 8 characters.';
+  }
+  return null;
+}
+
+function parseBoardMembersPath(path) {
+  const parts = path.replace(/\/$/, '').split('/').filter(Boolean);
+  if (parts[0] !== 'admin' || parts[1] !== 'board-members') return null;
+  return {
+    id: parts[2] ? Number(parts[2]) : null,
+    action: parts[3] || null,
+  };
+}
+
+function buildBoardMemberRow(row) {
+  return {
+    id: row.id,
+    email: row.email,
+    role: row.role,
+    is_active: row.is_active,
+    created_at: row.created_at,
+    has_password: !!row.password_hash || row.has_password === true,
+  };
+}
+
+async function issueAdminToken(admin) {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new Error('JWT_SECRET is not configured');
+  const expiresIn = process.env.JWT_EXPIRES_IN || '1d';
+  return jwt.sign({ adminId: admin.id, role: 'admin' }, secret, { expiresIn });
+}
+
+async function logAdminSignIn(admin, action = 'board.login', summary) {
+  if (!process.env.DATABASE_URL) return;
+  try {
+    const db = getDb();
+    await logActivity(db, {
+      actor_type: 'board',
+      board_member_id: admin.id,
+      actor_label: admin.email,
+      action,
+      entity_type: 'board_members',
+      record_id: admin.id,
+      summary: summary || `Board sign-in: ${admin.email}`,
+    });
+  } catch (auditErr) {
+    console.warn('Admin auth audit failed:', auditErr.message);
+  }
+}
+
+async function checkAdminEmail(body) {
+  const email = normalizeAdminEmail(body.email);
+  if (!email) return jsonResponse(400, { error: 'Email is required.' });
+  if (!adminAuthRequired()) {
+    return jsonResponse(200, { invited: true, needsSetup: false, email });
+  }
+  const admin = await findAdmin({ email });
+  if (!admin) {
+    return jsonResponse(404, {
+      error: 'This email is not on the board access list. Contact an administrator.',
+    });
+  }
+  if (!admin.is_active) {
+    return jsonResponse(403, { error: 'This board account has been deactivated.' });
+  }
+  return jsonResponse(200, {
+    invited: true,
+    needsSetup: !admin.password_hash,
+    email: admin.email,
+  });
+}
+
+async function setupAdminPassword(body) {
+  const email = normalizeAdminEmail(body.email);
+  const password = body.password;
+  const confirm = body.confirmPassword || body.confirm_password;
+  if (!email) return jsonResponse(400, { error: 'Email is required.' });
+  const pwdErr = validateAdminPassword(password);
+  if (pwdErr) return jsonResponse(400, { error: pwdErr });
+  if (password !== confirm) return jsonResponse(400, { error: 'Passwords do not match.' });
+
+  const admin = await findAdmin({ email });
+  if (!admin || !admin.is_active) {
+    return jsonResponse(404, { error: 'This email is not on the board access list.' });
+  }
+  if (admin.password_hash) {
+    return jsonResponse(400, { error: 'Password already set. Sign in with your password.' });
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  const db = getDb();
+  await db.query('UPDATE board_members SET password_hash = $1 WHERE id = $2', [passwordHash, admin.id]);
+  admin.password_hash = passwordHash;
+
+  const token = await issueAdminToken(admin);
+  await logAdminSignIn(admin, 'board.password_setup', `Board password created: ${admin.email}`);
+  return jsonResponse(200, { token, admin: buildAdminPayload(admin) });
+}
+
+async function listBoardMembers() {
+  const db = getDb();
+  const result = await db.query(
+    `SELECT id, email, role, is_active, created_at,
+            (password_hash IS NOT NULL) AS has_password
+     FROM board_members
+     ORDER BY created_at DESC NULLS LAST, id DESC`
+  );
+  return jsonResponse(200, {
+    boardMembers: result.rows.map((row) => buildBoardMemberRow(row)),
+  });
+}
+
+async function inviteBoardMember(body, actor) {
+  const email = normalizeAdminEmail(body.email);
+  if (!email || !email.includes('@')) {
+    return jsonResponse(400, { error: 'A valid email is required.' });
+  }
+  const db = getDb();
+  const existing = await findAdmin({ email });
+  let boardMember;
+
+  if (existing) {
+    if (existing.is_active && existing.password_hash) {
+      return jsonResponse(409, { error: 'This email already has board access.' });
+    }
+    const update = await db.query(
+      `UPDATE board_members
+       SET is_active = true, password_hash = NULL, role = COALESCE($2, role)
+       WHERE id = $1
+       RETURNING id, email, role, is_active, created_at`,
+      [existing.id, body.role || null]
+    );
+    boardMember = buildBoardMemberRow({ ...update.rows[0], has_password: false });
+  } else {
+    const insert = await db.query(
+      `INSERT INTO board_members (email, password_hash, role, is_active)
+       VALUES ($1, NULL, $2, true)
+       RETURNING id, email, role, is_active, created_at`,
+      [email, body.role || 'board']
+    );
+    boardMember = buildBoardMemberRow({ ...insert.rows[0], has_password: false });
+  }
+
+  await logActivity(db, {
+    actor_type: 'board',
+    board_member_id: actor?.adminId || null,
+    actor_label: actor?.email || 'Board Admin',
+    action: 'board.invite',
+    entity_type: 'board_members',
+    record_id: boardMember.id,
+    summary: `Board access invited: ${email}`,
+  });
+
+  return jsonResponse(201, {
+    ok: true,
+    boardMember,
+    message: 'Invited. They can sign in and create their password.',
+  });
+}
+
+async function updateBoardMemberAccess(id, action, actor) {
+  if (!id || Number.isNaN(id)) {
+    return jsonResponse(400, { error: 'Invalid board member id.' });
+  }
+  const db = getDb();
+  const result = await db.query(
+    `SELECT id, email, role, is_active, created_at, password_hash
+     FROM board_members WHERE id = $1 LIMIT 1`,
+    [id]
+  );
+  const row = result.rows[0];
+  if (!row) return jsonResponse(404, { error: 'Board member not found.' });
+
+  if (action === 'deactivate') {
+    if (actor?.adminId && Number(actor.adminId) === id) {
+      return jsonResponse(400, { error: 'You cannot deactivate your own account.' });
+    }
+    await db.query('UPDATE board_members SET is_active = false WHERE id = $1', [id]);
+    await logActivity(db, {
+      actor_type: 'board',
+      board_member_id: actor?.adminId || null,
+      actor_label: actor?.email || 'Board Admin',
+      action: 'board.deactivate',
+      entity_type: 'board_members',
+      record_id: id,
+      summary: `Board access deactivated: ${row.email}`,
+    });
+    return jsonResponse(200, { ok: true, message: 'Board access deactivated.' });
+  }
+
+  if (action === 'reactivate') {
+    await db.query(
+      'UPDATE board_members SET is_active = true, password_hash = NULL WHERE id = $1',
+      [id]
+    );
+    await logActivity(db, {
+      actor_type: 'board',
+      board_member_id: actor?.adminId || null,
+      actor_label: actor?.email || 'Board Admin',
+      action: 'board.reactivate',
+      entity_type: 'board_members',
+      record_id: id,
+      summary: `Board access reactivated: ${row.email}`,
+    });
+    return jsonResponse(200, {
+      ok: true,
+      message: 'Reactivated. They must create a new password on next sign-in.',
+    });
+  }
+
+  if (action === 'reset-password') {
+    if (actor?.adminId && Number(actor.adminId) === id) {
+      return jsonResponse(400, { error: 'Use Change Password after sign-in, or ask another admin to reset yours.' });
+    }
+    await db.query('UPDATE board_members SET password_hash = NULL WHERE id = $1', [id]);
+    await logActivity(db, {
+      actor_type: 'board',
+      board_member_id: actor?.adminId || null,
+      actor_label: actor?.email || 'Board Admin',
+      action: 'board.reset_password',
+      entity_type: 'board_members',
+      record_id: id,
+      summary: `Board password reset (must set up again): ${row.email}`,
+    });
+    return jsonResponse(200, {
+      ok: true,
+      message: 'Password cleared. They will create a new one on next sign-in.',
+    });
+  }
+
+  return jsonResponse(404, { error: 'Not found' });
 }
 
 exports.handler = async (event, context) => {
@@ -493,8 +732,67 @@ exports.handler = async (event, context) => {
       }
     }
 
+    if (event.httpMethod === 'POST' && path === '/admin/check-email') {
+      return await checkAdminEmail(body);
+    }
+
+    if (event.httpMethod === 'POST' && path === '/admin/setup-password') {
+      return await setupAdminPassword(body);
+    }
+
+    const boardMembersPath = parseBoardMembersPath(path);
+    if (boardMembersPath && event.httpMethod === 'GET' && !boardMembersPath.id) {
+      const admin = verifyAdminRequest(event);
+      if (!admin) return jsonResponse(401, { error: 'Admin authorization required.' });
+      try {
+        return await listBoardMembers();
+      } catch (err) {
+        console.error('board members list error:', err);
+        return jsonResponse(500, { error: 'Could not load board access list.' });
+      }
+    }
+
+    if (boardMembersPath && event.httpMethod === 'POST' && !boardMembersPath.id) {
+      const admin = verifyAdminRequest(event);
+      if (!admin) return jsonResponse(401, { error: 'Admin authorization required.' });
+      try {
+        let actorEmail = admin.email;
+        if (admin.adminId && process.env.DATABASE_URL) {
+          const db = getDb();
+          const r = await db.query('SELECT email FROM board_members WHERE id = $1', [admin.adminId]);
+          actorEmail = r.rows[0]?.email || actorEmail;
+        }
+        return await inviteBoardMember(body, { ...admin, email: actorEmail });
+      } catch (err) {
+        console.error('board invite error:', err);
+        return jsonResponse(500, { error: 'Could not invite board member.' });
+      }
+    }
+
+    if (boardMembersPath?.id && event.httpMethod === 'POST' && boardMembersPath.action) {
+      const admin = verifyAdminRequest(event);
+      if (!admin) return jsonResponse(401, { error: 'Admin authorization required.' });
+      try {
+        let actorEmail = admin.email;
+        if (admin.adminId && process.env.DATABASE_URL) {
+          const db = getDb();
+          const r = await db.query('SELECT email FROM board_members WHERE id = $1', [admin.adminId]);
+          actorEmail = r.rows[0]?.email || actorEmail;
+        }
+        return await updateBoardMemberAccess(
+          boardMembersPath.id,
+          boardMembersPath.action,
+          { ...admin, email: actorEmail }
+        );
+      } catch (err) {
+        console.error('board member update error:', err);
+        return jsonResponse(500, { error: 'Could not update board access.' });
+      }
+    }
+
     if (event.httpMethod === 'POST' && path === '/admin/login') {
-      const { email, password } = body;
+      const email = normalizeAdminEmail(body.email);
+      const { password } = body;
       if (!email || !password) {
         return jsonResponse(400, { error: 'Email and password are required' });
       }
@@ -504,33 +802,20 @@ exports.handler = async (event, context) => {
         return jsonResponse(401, { error: 'Invalid credentials' });
       }
 
+      if (!admin.password_hash) {
+        return jsonResponse(403, {
+          error: 'Create your password first.',
+          needsSetup: true,
+        });
+      }
+
       const valid = await bcrypt.compare(password, admin.password_hash);
       if (!valid) {
         return jsonResponse(401, { error: 'Invalid credentials' });
       }
 
-      const secret = process.env.JWT_SECRET;
-      if (!secret) {
-        throw new Error('JWT_SECRET is not configured');
-      }
-      const expiresIn = process.env.JWT_EXPIRES_IN || '1d';
-      const token = jwt.sign({ adminId: admin.id, role: 'admin' }, secret, { expiresIn });
-      if (process.env.DATABASE_URL) {
-        try {
-          const db = getDb();
-          await logActivity(db, {
-            actor_type: 'board',
-            board_member_id: admin.id,
-            actor_label: admin.email,
-            action: 'board.login',
-            entity_type: 'board_members',
-            record_id: admin.id,
-            summary: `Board sign-in: ${admin.email}`,
-          });
-        } catch (auditErr) {
-          console.warn('Admin login audit failed:', auditErr.message);
-        }
-      }
+      const token = await issueAdminToken(admin);
+      await logAdminSignIn(admin);
       return jsonResponse(200, {
         token,
         admin: buildAdminPayload(admin)

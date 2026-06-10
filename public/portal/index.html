@@ -6,7 +6,7 @@
 <title>Hibret Edir Association — Member Portal</title>
 <link rel="stylesheet" href="/css/hibret.css?v=portal3">
 <link rel="stylesheet" href="/css/compat.css?v=portal5">
-<link rel="stylesheet" href="/css/app-theme.css?v=portal13">
+<link rel="stylesheet" href="/css/app-theme.css?v=portal17">
 </head>
 <body class="app-portal">
 
@@ -24,7 +24,28 @@
     </div>
     <h1 class="auth-title">Welcome</h1>
     <p class="auth-sub">Enter your mobile number to sign in<span class="amh">ሞባይል ቁጥርዎን ያስገቡ</span></p>
-    <div class="error-msg" id="phoneErr">Phone number not found. Contact (424) 547-5594 for help.</div>
+    <div class="error-msg" id="phoneErr"></div>
+    <div id="phoneHelpPanel" class="phone-help-panel" style="display:none">
+      <p class="phone-help-intro">Send a message to the board — we'll help you get signed in.</p>
+      <div class="form-msg" id="phoneHelpMsg"></div>
+      <div class="form-group">
+        <label class="form-label">Your name</label>
+        <input type="text" class="form-input" id="phoneHelpName" placeholder="First and last name">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Mobile (you entered)</label>
+        <input type="tel" class="form-input" id="phoneHelpPhone" readonly tabindex="-1">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email <span class="form-optional">(optional)</span></label>
+        <input type="email" class="form-input" id="phoneHelpEmail" placeholder="your@email.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Message</label>
+        <textarea class="form-input" id="phoneHelpMessage" rows="3" placeholder="Tell us how we can help"></textarea>
+      </div>
+      <button type="button" class="btn-main" onclick="submitPhoneHelp()">Send to Board →</button>
+    </div>
     <div class="form-group">
       <label class="form-label">Mobile Phone <span class="amh">ሞባይል</span></label>
       <div class="phone-wrap">
@@ -205,11 +226,11 @@
           <div class="qa-title">All Invoices</div>
           <div class="qa-sub">Full history</div>
         </button>
-        <a href="mailto:hibretedirtext@gmail.com" class="qa-btn qa-accent-green">
+        <button class="qa-btn qa-accent-green" onclick="tab('contact')">
           <div class="qa-icon">✉</div>
-          <div class="qa-title">Email Support</div>
-          <div class="qa-sub">hibretedirtext@gmail.com</div>
-        </a>
+          <div class="qa-title">Contact Us</div>
+          <div class="qa-sub">Message the board</div>
+        </button>
       </div>
     </div>
 
@@ -294,6 +315,11 @@
         </div>
         <div id="benShow" style="display:none"></div>
       </div>
+      <div class="settings-card" id="boardMessagesCard">
+        <h3>✉️ Messages from the Board</h3>
+        <p class="board-msg-intro">Replies to your Contact Us messages appear here.</p>
+        <div id="boardMessagesList"></div>
+      </div>
       <div class="settings-card">
         <h3>Account Settings</h3>
         <button class="setting-row" onclick="openModal('cpModal')">
@@ -302,6 +328,28 @@
         <button class="setting-row danger" onclick="doSignOut()">
           <span>🚪</span><span>Sign Out</span>
         </button>
+      </div>
+    </div>
+
+    <!-- CONTACT -->
+    <div class="screen" id="tContact">
+      <div class="sec-hd">
+        <h2>Contact Us</h2>
+        <button class="see-all" onclick="tab('home')">← Home</button>
+      </div>
+      <div class="upload-card">
+        <p class="contact-intro">Send a message to the board. It appears in Admin → Messages and is emailed to the board.</p>
+        <div class="form-msg" id="contactPortalMsg"></div>
+        <label>Your name</label>
+        <input type="text" class="form-input" id="contactPortalName" readonly>
+        <label style="margin-top:12px">Mobile</label>
+        <input type="tel" class="form-input" id="contactPortalPhone" placeholder="(xxx) xxx-xxxx">
+        <label style="margin-top:12px">Email</label>
+        <input type="email" class="form-input" id="contactPortalEmail" placeholder="your@email.com">
+        <label style="margin-top:12px">Message <span class="req">*</span></label>
+        <textarea class="form-input" id="contactPortalMessage" rows="4" placeholder="How can we help you?" style="margin-bottom:0;resize:vertical;min-height:96px"></textarea>
+        <button type="button" class="btn primary" style="width:100%;margin-top:16px" onclick="submitPortalContact()">Send Message</button>
+        <p class="contact-fine">Or call <a href="tel:4245475594">(424) 547-5594</a></p>
       </div>
     </div>
 
@@ -421,6 +469,7 @@ const TOKEN_KEY = 'hibret_portal_token';
 const PAYPAL_INVOICE_BASE = 'https://www.paypal.com/invoice/p/#';
 const MY_INVOICES = [];
 const MY_ACTIVITY = [];
+const MY_BOARD_MESSAGES = [];
 let EDAR_EVENTS = [];
 let me = null, myPhone = '', myBeneficiary = null, pendingBeneficiaryChange = null, profEditKey = '', selMeth = null, uploadedFile = null, curTab = 'home';
 let notifReadAt = 0;
@@ -580,6 +629,17 @@ async function fetchMemberInvoices() {
   return MY_INVOICES;
 }
 
+async function fetchMemberBoardMessages() {
+  try {
+    const data = await apiGet('portal/messages');
+    MY_BOARD_MESSAGES.splice(0, MY_BOARD_MESSAGES.length, ...(data.messages || []));
+  } catch (error) {
+    console.warn('Failed to fetch board messages:', error);
+    MY_BOARD_MESSAGES.splice(0, MY_BOARD_MESSAGES.length);
+  }
+  return MY_BOARD_MESSAGES;
+}
+
 async function refreshPortalData() {
   if (!getStoredToken()) return;
   await fetchCurrentMember();
@@ -587,6 +647,7 @@ async function refreshPortalData() {
     fetchMemberProfile(),
     fetchMemberInvoices(),
     fetchMemberActivity(),
+    fetchMemberBoardMessages(),
     fetchEdirEvents(),
   ]);
 }
@@ -700,9 +761,59 @@ function fmtPhone(inp){
   inp.value=v;
 }
 function normPhone(p){return p.replace(/\D/g,'').slice(-10)}
+function hidePhoneHelp(){
+  const panel=document.getElementById('phoneHelpPanel');
+  if(panel) panel.style.display='none';
+  const msg=document.getElementById('phoneHelpMsg');
+  if(msg){ msg.textContent=''; msg.className='form-msg'; msg.style.display='none'; }
+}
+
+function showPhoneHelp(phone){
+  const err=document.getElementById('phoneErr');
+  err.textContent="We couldn't find that number in our records.";
+  err.classList.add('show');
+  const panel=document.getElementById('phoneHelpPanel');
+  if(panel) panel.style.display='block';
+  const phoneEl=document.getElementById('phoneHelpPhone');
+  if(phoneEl) phoneEl.value=phone;
+  const msgEl=document.getElementById('phoneHelpMessage');
+  if(msgEl && !msgEl.value.trim()){
+    msgEl.value=`I tried to sign in to the member portal but my phone number was not found. Please help me access my account.\n\nPhone entered: ${phone}`;
+  }
+  setTimeout(()=>document.getElementById('phoneHelpName')?.focus(),100);
+}
+
+function showPhoneHelpMsg(text, ok){
+  const el=document.getElementById('phoneHelpMsg');
+  if(!el) return;
+  el.textContent=text||'';
+  el.className='form-msg'+(text ? (ok ? ' ok' : ' err') : '');
+  el.style.display=text ? 'block' : 'none';
+}
+
+async function submitPhoneHelp(){
+  const name=(document.getElementById('phoneHelpName')?.value||'').trim()||'Portal login help';
+  const phone=(document.getElementById('phoneHelpPhone')?.value||'').trim();
+  const email=(document.getElementById('phoneHelpEmail')?.value||'').trim();
+  const message=(document.getElementById('phoneHelpMessage')?.value||'').trim();
+  if(!message){
+    showPhoneHelpMsg('Please enter a message for the board.', false);
+    return;
+  }
+  showPhoneHelpMsg('Sending…', true);
+  try {
+    await apiPost('apply/contact', { name, phone, email, message, source: 'portal-login' });
+    showPhoneHelpMsg('Message sent! The board will contact you soon.', true);
+    document.getElementById('phoneHelpMessage').value='';
+  } catch (error) {
+    showPhoneHelpMsg(error.message || 'Could not send message. Please try again.', false);
+  }
+}
+
 async function goPhone(){
   const p=document.getElementById('phoneInp').value;
   const err=document.getElementById('phoneErr');
+  hidePhoneHelp();
   if(normPhone(p).length<10){err.textContent='Please enter a valid 10-digit phone number.';err.classList.add('show');return;}
   err.classList.remove('show');
   myPhone=p;
@@ -710,8 +821,7 @@ async function goPhone(){
   try {
     const result = await apiPost('auth/check-phone',{ phone:p });
     if(!result.exists){
-      err.textContent='Phone not found. Contact (424) 547-5594 for help.';
-      err.classList.add('show');
+      showPhoneHelp(p);
       return;
     }
     me = result.member || null;
@@ -888,6 +998,7 @@ function renderPortal(){
     </div>`).join('');
 
   renderBeneficiary();
+  renderBoardMessages();
 
   // Upload dropdown — all Edir deceased / memorial events
   const sel=document.getElementById('evSel');
@@ -996,9 +1107,58 @@ function goOutstandingInvoices(){
   tab('invoices');
 }
 
+function fillContactForm(){
+  if(!me) return;
+  const nameEl=document.getElementById('contactPortalName');
+  const phoneEl=document.getElementById('contactPortalPhone');
+  const emailEl=document.getElementById('contactPortalEmail');
+  const fullName=[me.first, me.last].filter(Boolean).join(' ').trim() || me.full_name || 'Member';
+  const memberNum=me.memberNumber || me.member_number || me.id;
+  if(nameEl) nameEl.value=memberNum ? `${fullName} (#${memberNum})` : fullName;
+  if(phoneEl && !phoneEl.value) phoneEl.value=me.mobile || me.home || '';
+  if(emailEl && !emailEl.value) emailEl.value=me.email || '';
+}
+
+function showContactPortalMsg(text, ok){
+  const el=document.getElementById('contactPortalMsg');
+  if(!el) return;
+  el.textContent=text||'';
+  el.className='form-msg'+(text ? (ok ? ' ok' : ' err') : '');
+  el.style.display=text ? 'block' : 'none';
+}
+
+async function submitPortalContact(){
+  if(!me) return;
+  const message=(document.getElementById('contactPortalMessage')?.value||'').trim();
+  const phone=(document.getElementById('contactPortalPhone')?.value||'').trim();
+  const email=(document.getElementById('contactPortalEmail')?.value||'').trim();
+  const fullName=[me.first, me.last].filter(Boolean).join(' ').trim() || me.full_name || 'Member';
+  if(!message){
+    showContactPortalMsg('Please enter a message for the board.', false);
+    return;
+  }
+  showContactPortalMsg('Sending…', true);
+  try {
+    await apiPost('apply/contact', {
+      name: fullName,
+      phone,
+      email,
+      message,
+      source: 'portal',
+      member_id: me.id,
+      member_number: me.memberNumber || me.member_number || me.id,
+    });
+    document.getElementById('contactPortalMessage').value='';
+    showContactPortalMsg('Message sent! The board will respond soon.', true);
+  } catch (error) {
+    showContactPortalMsg(error.message || 'Could not send message. Try again or call (424) 547-5594.', false);
+  }
+}
+
 // TABS
 async function tab(t,opts){
   opts=opts||{};
+  if(t==='contact') fillContactForm();
   if(t==='upload'){
     resetReceiptPaymentMethod();
     if(!opts.keepReceiptPrefill) resetReceiptPersonSelect();
@@ -1008,7 +1168,8 @@ async function tab(t,opts){
     renderPortal();
   }
   curTab=t;
-  ['home','invoices','upload','profile','notifications'].forEach(x=>{
+  const screens=['home','invoices','upload','profile','notifications','contact'];
+  screens.forEach(x=>{
     const sc=document.getElementById('t'+x.charAt(0).toUpperCase()+x.slice(1));
     if(sc) sc.classList.toggle('active',x===t);
     const bn=document.getElementById('bn-'+x);
@@ -1119,6 +1280,16 @@ function readFileAsBase64(file){
 // NOTIFICATIONS
 function buildLiveNotifications() {
   const items = [];
+  for (const msg of MY_BOARD_MESSAGES.filter(m => m.board_reply)) {
+    const when = msg.replied_at ? String(msg.replied_at).replace('T', ' ').slice(0, 10) : '';
+    items.push({
+      type: 'green',
+      icon: '✉️',
+      title: 'Reply from the Board',
+      msg: String(msg.board_reply).slice(0, 120) + (String(msg.board_reply).length > 120 ? '…' : ''),
+      time: when,
+    });
+  }
   for (const inv of getMyInvs().filter(isInvoiceOutstanding)) {
     const overdue = inv.date ? daysOverdue(inv.date) : 0;
     const person = eventPersonName(inv.item || inv.deceased_name || '');
@@ -1135,6 +1306,32 @@ function buildLiveNotifications() {
     });
   }
   return items;
+}
+
+function renderBoardMessages() {
+  const el = document.getElementById('boardMessagesList');
+  const card = document.getElementById('boardMessagesCard');
+  if (!el) return;
+  if (!MY_BOARD_MESSAGES.length) {
+    el.innerHTML = '<p class="board-msg-empty">No messages yet. Use Contact Us on the home tab to reach the board.</p>';
+    return;
+  }
+  el.innerHTML = MY_BOARD_MESSAGES.map(m => {
+    const sent = m.created_at ? String(m.created_at).replace('T', ' ').slice(0, 16) : '';
+    const replied = m.replied_at ? String(m.replied_at).replace('T', ' ').slice(0, 16) : '';
+    return `<div class="board-msg-thread">
+      <div class="board-msg-meta">${sent}${m.source === 'portal' ? ' · Portal' : ''}</div>
+      <div class="board-msg-you"><span class="board-msg-label">You</span>${escHtml(m.message || '')}</div>
+      ${m.board_reply
+        ? `<div class="board-msg-board"><span class="board-msg-label">Board</span>${escHtml(m.board_reply)}<div class="board-msg-meta">${replied}</div></div>`
+        : '<div class="board-msg-pending">Waiting for board reply…</div>'}
+    </div>`;
+  }).join('');
+  if (card) card.style.display = '';
+}
+
+function escHtml(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
 }
 
 function renderNotifs(){
@@ -1323,6 +1520,10 @@ function openPortalDeepLink(){
   if(hash==='receipt'||hash==='upload'){
     if(document.getElementById('portalApp')?.style.display!=='none'){
       tab('upload');
+    }
+  } else if(hash==='contact'){
+    if(document.getElementById('portalApp')?.style.display!=='none'){
+      tab('contact');
     }
   }
 }

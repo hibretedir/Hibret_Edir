@@ -672,6 +672,40 @@ async function getMemberProfile(memberId) {
   };
 }
 
+async function getMemberBoardMessages(memberId) {
+  const db = getDb();
+  const member = await fetchMemberRow(memberId);
+  if (!member) return [];
+  const phoneNorm = member.mobile ? String(member.mobile).replace(/\D/g, '').slice(-10) : null;
+  const homeNorm = member.home_phone ? String(member.home_phone).replace(/\D/g, '').slice(-10) : null;
+  const emailNorm = member.email ? String(member.email).trim().toLowerCase() : null;
+  try {
+    const result = await db.query(
+      `SELECT cm.id, cm.message, cm.board_reply, cm.source, cm.status, cm.created_at, cm.replied_at
+       FROM contact_messages cm
+       WHERE cm.member_id = $1
+          OR ($2::text IS NOT NULL AND LOWER(TRIM(cm.email)) = $2)
+          OR ($3::text IS NOT NULL AND RIGHT(regexp_replace(COALESCE(cm.phone, ''), '\\D', '', 'g'), 10) = $3)
+          OR ($4::text IS NOT NULL AND RIGHT(regexp_replace(COALESCE(cm.phone, ''), '\\D', '', 'g'), 10) = $4)
+       ORDER BY cm.created_at DESC NULLS LAST, cm.id DESC
+       LIMIT 50`,
+      [memberId, emailNorm, phoneNorm, homeNorm]
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      message: row.message,
+      board_reply: row.board_reply,
+      source: row.source,
+      status: row.status,
+      created_at: row.created_at,
+      replied_at: row.replied_at,
+    }));
+  } catch (err) {
+    console.warn('Member board messages lookup skipped:', err.message);
+    return [];
+  }
+}
+
 async function patchMemberProfile(memberId, body, actor) {
   const old = await fetchMemberRow(memberId);
   if (!old) return null;
@@ -1170,6 +1204,11 @@ exports.handler = async (event) => {
           return jsonResponse(404, { error: 'Member not found' });
         }
         return jsonResponse(200, profile);
+      }
+
+      if (event.httpMethod === 'GET' && path === '/messages') {
+        const messages = await getMemberBoardMessages(memberPayload.memberId);
+        return jsonResponse(200, { messages });
       }
 
       if (event.httpMethod === 'GET' && path === '/activity') {

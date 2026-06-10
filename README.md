@@ -114,7 +114,7 @@ The initial PostgreSQL schema is available in `db/schema.sql` for Render Postgre
 - [x] Board CRM (frontend)
 - [ ] Render PostgreSQL backend
 - [ ] Real authentication (PIN hashed)
-- [ ] PayPal API sync
+- [x] PayPal API sync (Admin button + scheduled 9 AM / 6 PM Pacific — see `docs/scheduled-paypal-sync.md`)
 - [ ] Receipt upload to cloud storage
 - [ ] SMS/WhatsApp notifications via Twilio
 - [ ] Automated invoice creation

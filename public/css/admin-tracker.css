@@ -1658,6 +1658,65 @@ body.tracker .btn.primary {
   display: block;
 }
 
+.admin-login-hint {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--tk-muted, #9ca3af);
+  margin: 0 0 14px;
+}
+
+.admin-login-back {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  background: none;
+  border: none;
+  color: var(--gold, #fcdd09);
+  font-size: 13px;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 8px 0;
+}
+
+.board-access-invite {
+  margin: 0 0 20px;
+  padding: 16px;
+  border: 1px solid var(--tk-border, #2a2a2a);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.board-access-invite-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.board-access-invite-row .field-input {
+  flex: 1;
+  min-width: 200px;
+}
+
+.board-access-invite-msg {
+  margin-top: 10px;
+  font-size: 13px;
+  min-height: 1.2em;
+}
+
+.board-access-invite-msg.ok { color: #86efac; }
+.board-access-invite-msg.err { color: #fca5a5; }
+
+.tracker-actions {
+  white-space: nowrap;
+}
+
+.tracker-actions .btn {
+  font-size: 12px;
+  padding: 6px 10px;
+  margin-right: 6px;
+}
+
 /* Payout fund workflow */
 .tracker-status.warn {
   background: rgba(252, 221, 9, 0.12);
@@ -1784,6 +1843,49 @@ body.tracker .btn.primary {
   border-radius: 6px;
   padding: 12px 14px;
   margin-bottom: 8px;
+}
+
+.msg-reply-block {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: rgba(7, 137, 48, 0.15);
+  border: 1px solid rgba(7, 137, 48, 0.35);
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--tk-text);
+  white-space: pre-wrap;
+}
+
+.msg-reply-block strong {
+  color: #9ae6b0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.msg-reply-original {
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: var(--tk-muted);
+}
+
+.msg-reply-notify {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--tk-muted);
+  cursor: pointer;
+}
+
+.msg-member-thread {
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--tk-border);
 }
 
 .receipt-review-grid {

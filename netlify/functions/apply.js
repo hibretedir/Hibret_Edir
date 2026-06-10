@@ -7,6 +7,7 @@ const {
   notifyApplicationApproved,
   notifyApplicationRejected,
   notifyBoard,
+  notifyMember,
   notifyBeneficiaryChangeApproved,
   notifyBeneficiaryChangeRejected,
 } = require('./notify');
@@ -23,6 +24,7 @@ const {
 } = require('./admin-auth');
 const { stampBoardNote, mergeBoardNotes } = require('./board-notes');
 const { invalidateInvoiceStatsCache } = require('./invoice-stats-cache');
+const { logActivity } = require('./audit');
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -1047,18 +1049,83 @@ async function rejectChangeRequest(id, body, actor) {
   return getChangeRequest(id);
 }
 
+async function findMemberIdForContact(db, { member_id, member_number, email, phone }) {
+  if (member_id != null && member_id !== '') {
+    const id = Number(member_id);
+    if (!Number.isNaN(id) && id > 0) return id;
+  }
+  if (member_number != null && member_number !== '') {
+    const r = await db.query(
+      `SELECT id FROM members WHERE member_number = $1 LIMIT 1`,
+      [Number(member_number)]
+    );
+    if (r.rows[0]) return r.rows[0].id;
+  }
+  const phoneNorm = phone ? String(phone).replace(/\D/g, '').slice(-10) : null;
+  if (phoneNorm && phoneNorm.length >= 10) {
+    const r = await db.query(
+      `SELECT id FROM members
+       WHERE RIGHT(regexp_replace(COALESCE(mobile, ''), '\\D', '', 'g'), 10) = $1
+          OR RIGHT(regexp_replace(COALESCE(home_phone, ''), '\\D', '', 'g'), 10) = $1
+       LIMIT 1`,
+      [phoneNorm]
+    );
+    if (r.rows[0]) return r.rows[0].id;
+  }
+  const emailNorm = email ? String(email).trim().toLowerCase() : null;
+  if (emailNorm) {
+    const r = await db.query(
+      `SELECT id FROM members WHERE LOWER(TRIM(email)) = $1 LIMIT 1`,
+      [emailNorm]
+    );
+    if (r.rows[0]) return r.rows[0].id;
+  }
+  return null;
+}
+
+function buildContactMessageRow(row) {
+  return {
+    id: row.id,
+    member_id: row.member_id,
+    member_number: row.member_number,
+    member_name: row.member_full_name || null,
+    name: row.name,
+    email: row.email,
+    phone: row.phone,
+    message: row.message,
+    source: row.source,
+    status: row.status,
+    board_reply: row.board_reply,
+    replied_at: row.replied_at,
+    replied_by_admin_id: row.replied_by_admin_id,
+    created_at: row.created_at,
+  };
+}
+
 async function submitContactForm(body) {
   const name = String(body.name || '').trim();
   const message = String(body.message || '').trim();
   const email = String(body.email || '').trim();
   const phone = String(body.phone || '').trim();
+  const sourceRaw = String(body.source || 'website').toLowerCase();
+  const allowedSources = new Set(['website', 'portal', 'portal-login']);
+  const source = allowedSources.has(sourceRaw) ? sourceRaw : 'website';
+  const memberNumber = body.member_number != null && body.member_number !== ''
+    ? Number(body.member_number)
+    : null;
   if (!name || !message) {
     return json(400, { error: 'Name and message are required.' });
   }
+  const savedName = memberNumber ? `${name} (#${memberNumber})` : name;
   const text = [
-    'New message from the Hibret Edir website contact form:',
+    source === 'portal-login'
+      ? 'New login help request from the Member Portal (phone not found on sign-in):'
+      : source === 'portal'
+        ? 'New message from a member via the Member Portal:'
+        : 'New message from the Hibret Edir website contact form:',
     '',
-    `Name: ${name}`,
+    `Name: ${savedName}`,
+    memberNumber ? `Member #: ${memberNumber}` : null,
     email ? `Email: ${email}` : null,
     phone ? `Phone: ${phone}` : null,
     '',
@@ -1067,16 +1134,26 @@ async function submitContactForm(body) {
   let savedId = null;
   try {
     const db = getDb();
+    const memberId = await findMemberIdForContact(db, {
+      member_id: body.member_id,
+      member_number: memberNumber,
+      email,
+      phone,
+    });
     const insert = await db.query(
-      `INSERT INTO contact_messages (name, email, phone, message, source, status)
-       VALUES ($1, $2, $3, $4, 'website', 'new')
+      `INSERT INTO contact_messages (member_id, name, email, phone, message, source, status)
+       VALUES ($1, $2, $3, $4, $5, $6, 'new')
        RETURNING id`,
-      [name, email || null, phone || null, message]
+      [memberId, savedName, email || null, phone || null, message, source]
     );
     savedId = insert.rows[0]?.id;
     await notifyBoard({
       db,
-      subject: `Hibret Edir contact form — ${name}`,
+      subject: source === 'portal-login'
+        ? `Hibret Edir portal login help — ${savedName}`
+        : source === 'portal'
+          ? `Hibret Edir member portal — ${savedName}`
+          : `Hibret Edir contact form — ${savedName}`,
       text,
     });
   } catch (err) {
@@ -1085,7 +1162,11 @@ async function submitContactForm(body) {
       try {
         await notifyBoard({
           db: getDb(),
-          subject: `Hibret Edir contact form — ${name}`,
+          subject: source === 'portal-login'
+            ? `Hibret Edir portal login help — ${savedName}`
+            : source === 'portal'
+              ? `Hibret Edir member portal — ${savedName}`
+              : `Hibret Edir contact form — ${savedName}`,
           text,
         });
       } catch (notifyErr) {
@@ -1099,18 +1180,168 @@ async function submitContactForm(body) {
 async function listContactMessages() {
   const db = getDb();
   const result = await db.query(
-    `SELECT id, name, email, phone, message, source, status, created_at
-     FROM contact_messages
-     ORDER BY created_at DESC NULLS LAST, id DESC
+    `SELECT cm.id, cm.member_id, cm.name, cm.email, cm.phone, cm.message, cm.source, cm.status,
+            cm.board_reply, cm.replied_at, cm.replied_by_admin_id, cm.created_at,
+            m.member_number, m.full_name AS member_full_name
+     FROM contact_messages cm
+     LEFT JOIN members m ON m.id = cm.member_id
+     ORDER BY cm.created_at DESC NULLS LAST, cm.id DESC
      LIMIT 200`
   );
-  return json(200, { messages: result.rows });
+  return json(200, { messages: result.rows.map(buildContactMessageRow) });
+}
+
+async function listContactMessagesForMember(memberId) {
+  const db = getDb();
+  const member = await db.query(
+    `SELECT id, email, mobile, home_phone FROM members WHERE id = $1 LIMIT 1`,
+    [memberId]
+  );
+  const row = member.rows[0];
+  if (!row) return [];
+  const phoneNorm = row.mobile ? String(row.mobile).replace(/\D/g, '').slice(-10) : null;
+  const homeNorm = row.home_phone ? String(row.home_phone).replace(/\D/g, '').slice(-10) : null;
+  const emailNorm = row.email ? String(row.email).trim().toLowerCase() : null;
+  const result = await db.query(
+    `SELECT cm.id, cm.member_id, cm.name, cm.email, cm.phone, cm.message, cm.source, cm.status,
+            cm.board_reply, cm.replied_at, cm.replied_by_admin_id, cm.created_at,
+            m.member_number, m.full_name AS member_full_name
+     FROM contact_messages cm
+     LEFT JOIN members m ON m.id = cm.member_id
+     WHERE cm.member_id = $1
+        OR ($2::text IS NOT NULL AND LOWER(TRIM(cm.email)) = $2)
+        OR ($3::text IS NOT NULL AND RIGHT(regexp_replace(COALESCE(cm.phone, ''), '\\D', '', 'g'), 10) = $3)
+        OR ($4::text IS NOT NULL AND RIGHT(regexp_replace(COALESCE(cm.phone, ''), '\\D', '', 'g'), 10) = $4)
+     ORDER BY cm.created_at DESC NULLS LAST, cm.id DESC
+     LIMIT 50`,
+    [memberId, emailNorm, phoneNorm, homeNorm]
+  );
+  return result.rows.map(buildContactMessageRow);
+}
+
+async function replyContactMessage(id, body, actor) {
+  const reply = String(body.reply || '').trim();
+  if (!reply) return json(400, { error: 'Reply message is required.' });
+  const db = getDb();
+  const existing = await db.query(
+    `SELECT cm.*, m.member_number, m.full_name AS member_full_name
+     FROM contact_messages cm
+     LEFT JOIN members m ON m.id = cm.member_id
+     WHERE cm.id = $1 LIMIT 1`,
+    [id]
+  );
+  const msg = existing.rows[0];
+  if (!msg) return json(404, { error: 'Message not found.' });
+
+  let memberId = body.member_id != null && body.member_id !== ''
+    ? Number(body.member_id)
+    : msg.member_id;
+  if (!memberId || Number.isNaN(memberId)) {
+    memberId = await findMemberIdForContact(db, {
+      member_id: null,
+      member_number: body.member_number,
+      email: msg.email,
+      phone: msg.phone,
+    });
+  }
+
+  const update = await db.query(
+    `UPDATE contact_messages
+     SET board_reply = $1,
+         replied_at = NOW(),
+         replied_by_admin_id = $2,
+         member_id = COALESCE($3, member_id),
+         status = 'replied'
+     WHERE id = $4
+     RETURNING id`,
+    [reply, actor?.board_member_id || null, memberId || null, id]
+  );
+  if (!update.rows[0]) return json(500, { error: 'Could not save reply.' });
+
+  await logActivity(db, {
+    actor_type: 'board',
+    board_member_id: actor?.board_member_id || null,
+    member_id: memberId || null,
+    actor_label: actor?.actor_label || 'Board Admin',
+    action: 'message.reply',
+    entity_type: 'contact_messages',
+    record_id: id,
+    summary: `Board replied to message from ${msg.name || 'member'}`,
+    new_value: { reply: reply.slice(0, 500), contact_message_id: id },
+  });
+
+  const notifyMemberFlag = body.notify_member !== false;
+  if (notifyMemberFlag) {
+    let memberRow = null;
+    if (memberId) {
+      const mr = await db.query(
+        `SELECT id, member_number, first_name, last_name, full_name, email, mobile
+         FROM members WHERE id = $1 LIMIT 1`,
+        [memberId]
+      );
+      memberRow = mr.rows[0];
+    }
+    const memberName = memberRow?.full_name
+      || `${memberRow?.first_name || ''} ${memberRow?.last_name || ''}`.trim()
+      || msg.name;
+    const subject = 'Hibret Edir — reply from the board';
+    const text = [
+      `Hello ${memberName},`,
+      '',
+      'The board replied to your message:',
+      '',
+      reply,
+      '',
+      'Sign in to the Member Portal → Profile to view your message history.',
+      process.env.URL ? `${process.env.URL}/portal/` : '',
+    ].filter(Boolean).join('\n');
+    const sms = `Hibret Edir: The board replied to your message. Sign in to the member portal to read it.`;
+    if (memberRow) {
+      await notifyMember({
+        db,
+        memberId: memberRow.id,
+        email: memberRow.email || msg.email,
+        phone: memberRow.mobile || msg.phone,
+        subject,
+        text,
+        smsText: sms,
+      });
+    } else if (msg.email) {
+      await notifyMember({
+        db,
+        memberId: null,
+        email: msg.email,
+        phone: msg.phone,
+        subject,
+        text,
+        smsText: sms,
+      });
+    }
+  }
+
+  const refreshed = await db.query(
+    `SELECT cm.id, cm.member_id, cm.name, cm.email, cm.phone, cm.message, cm.source, cm.status,
+            cm.board_reply, cm.replied_at, cm.replied_by_admin_id, cm.created_at,
+            m.member_number, m.full_name AS member_full_name
+     FROM contact_messages cm
+     LEFT JOIN members m ON m.id = cm.member_id
+     WHERE cm.id = $1 LIMIT 1`,
+    [id]
+  );
+  return json(200, {
+    ok: true,
+    message: 'Reply posted to the member profile.',
+    contact_message: buildContactMessageRow(refreshed.rows[0]),
+  });
 }
 
 function matchContactMessagesPath(path) {
   const parts = path.replace(/\/$/, '').split('/').filter(Boolean);
   if (parts[0] !== 'contact-messages') return null;
-  return { id: parts[1] ? Number(parts[1]) : null };
+  return {
+    id: parts[1] ? Number(parts[1]) : null,
+    action: parts[2] || null,
+  };
 }
 
 function matchChangeRequestPath(path) {
@@ -1145,6 +1376,11 @@ exports.handler = async (event) => {
       return json(401, { error: 'Admin authorization required. Please sign in.' });
     }
     try {
+      const memberId = event.queryStringParameters?.member_id;
+      if (memberId) {
+        const messages = await listContactMessagesForMember(Number(memberId));
+        return json(200, { messages });
+      }
       return await listContactMessages();
     } catch (err) {
       console.error('contact messages error:', err);
@@ -1152,6 +1388,24 @@ exports.handler = async (event) => {
         return json(200, { messages: [] });
       }
       return json(500, { error: 'Could not load contact messages.' });
+    }
+  }
+
+  if (contactMsgPath?.id && contactMsgPath.action === 'reply' && event.httpMethod === 'POST') {
+    const admin = verifyAdminRequest(event);
+    if (!admin) {
+      return json(401, { error: 'Admin authorization required. Please sign in.' });
+    }
+    try {
+      const actor = await resolveAdminActor(admin);
+      const body = parseBody(event);
+      return await replyContactMessage(contactMsgPath.id, body, actor);
+    } catch (err) {
+      console.error('contact reply error:', err);
+      if (err.message?.includes('contact_messages') || err.message?.includes('does not exist')) {
+        return json(503, { error: 'Contact messages table not ready. Run npm run db:migrate.' });
+      }
+      return json(500, { error: 'Could not post reply.' });
     }
   }
 

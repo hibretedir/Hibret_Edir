@@ -6,7 +6,7 @@
 <title>Hibret Edir Association — Ethiopian Mutual Assistance</title>
 <link rel="stylesheet" href="/css/hibret.css?v=nav1">
 <link rel="stylesheet" href="/css/compat.css?v=nav1">
-<link rel="stylesheet" href="/css/public-pages.css?v=pubfix17">
+<link rel="stylesheet" href="/css/public-pages.css?v=pubfix19">
 </head>
 <body class="site-public">
 
@@ -742,6 +742,10 @@ document.addEventListener('keydown', (e) => {
 const BYLAWS_PDF_URL = 'https://www.hibretedir.com/_files/ugd/a70440_08140f4268284ff59da2597cc775a734.pdf';
 
 function openBylawsViewer() {
+  if (mob()) {
+    window.open(BYLAWS_PDF_URL, '_blank', 'noopener,noreferrer');
+    return;
+  }
   const frame = document.getElementById('bylawFrame');
   frame.src = BYLAWS_PDF_URL + '#view=FitH';
   document.getElementById('bylawViewer').classList.add('open');
@@ -774,9 +778,16 @@ function goSection(id){
     if(page){
       page.classList.add('active');
       revealSection(page);
+      requestAnimationFrame(()=>{
+        revealSection(page);
+        window.scrollTo(0, 0);
+        page.scrollIntoView({ block: 'start' });
+      });
+    } else {
+      window.scrollTo(0, 0);
     }
-    window.scrollTo(0, 0);
   } else if(anchor){
+    if(page) revealSection(page);
     const top=anchor.getBoundingClientRect().top+window.scrollY-(parseInt(getComputedStyle(document.documentElement).getPropertyValue('--nav-h'))||56)+8;
     window.scrollTo({top,behavior:'smooth'});
   }

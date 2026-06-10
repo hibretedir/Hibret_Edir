@@ -11,6 +11,10 @@
    MEMBER PORTAL
    ══════════════════════════════════════ */
 
+html:has(body.app-portal) {
+  background: #021a09;
+}
+
 body.app-portal {
   --bg: #071810;
   --surface: rgba(255, 255, 255, 0.08);
@@ -33,15 +37,53 @@ body.app-portal #portalApp {
 
 body.app-portal .auth-card,
 body.app-portal .confirm-wrap {
-  background: #fff;
-  color: #1a1a1a;
-  --text: #1a1a1a;
-  --text-muted: #5c5c5c;
-  --border: #e5e5e0;
-  --bg: #f7f7f5;
-  --surface: #fff;
-  --green-soft: #e8f5ec;
-  --red-soft: #fdeced;
+  background: rgba(10, 34, 24, 0.94);
+  color: #eef4ee;
+  border: 1px solid rgba(252, 221, 9, 0.22);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  --text: #eef4ee;
+  --text-muted: rgba(238, 244, 238, 0.65);
+  --border: rgba(252, 221, 9, 0.22);
+  --bg: rgba(0, 0, 0, 0.35);
+  --surface: rgba(255, 255, 255, 0.08);
+  --green-soft: rgba(7, 137, 48, 0.22);
+  --red-soft: rgba(218, 18, 26, 0.18);
+}
+
+body.app-portal .auth-wrap .auth-title,
+body.app-portal .auth-wrap .auth-logo-text .name,
+body.app-portal .auth-wrap .confirm-title {
+  color: #eef4ee;
+}
+
+body.app-portal .auth-wrap .auth-sub,
+body.app-portal .auth-wrap .form-label,
+body.app-portal .auth-wrap .confirm-sub,
+body.app-portal .auth-wrap .confirm-detail {
+  color: rgba(238, 244, 238, 0.72);
+}
+
+body.app-portal .auth-wrap .btn-link {
+  color: var(--gold);
+}
+
+body.app-portal .auth-wrap .lang-btn {
+  background: rgba(0, 0, 0, 0.3);
+  border-color: rgba(252, 221, 9, 0.25);
+  color: rgba(238, 244, 238, 0.75);
+}
+
+body.app-portal .auth-wrap .lang-btn.active {
+  background: var(--green);
+  border-color: var(--green);
+  color: #fff;
+}
+
+body.app-portal .auth-wrap .error-msg {
+  background: rgba(218, 18, 26, 0.15);
+  color: #fecaca;
+  border: 1px solid rgba(218, 18, 26, 0.35);
 }
 
 body.app-portal .auth-card .form-input,
@@ -49,9 +91,16 @@ body.app-portal .auth-card .phone-prefix,
 body.app-portal .auth-card .pin-input,
 body.app-portal .confirm-wrap .form-input,
 body.app-portal .confirm-wrap .pin-input {
-  background: #fff;
-  color: #1a1a1a;
-  border-color: #e5e5e0;
+  background: rgba(0, 0, 0, 0.35);
+  color: #eef4ee;
+  border-color: rgba(252, 221, 9, 0.22);
+}
+
+body.app-portal .auth-wrap .pin-input:focus,
+body.app-portal .auth-wrap .pin-input.filled {
+  border-color: var(--gold);
+  background: rgba(7, 137, 48, 0.25);
+  color: #eef4ee;
 }
 
 .app-portal .sec-hd h2,
@@ -140,6 +189,52 @@ body.app-portal .confirm-wrap .pin-input {
   color: #fca5a5;
 }
 
+.app-portal #tContact .contact-intro {
+  margin: 0 0 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--gray, #9ca3af);
+}
+
+.app-portal #tContact .contact-fine {
+  margin: 14px 0 0;
+  font-size: 13px;
+  color: var(--gray, #9ca3af);
+  text-align: center;
+}
+
+.app-portal #tContact .contact-fine a {
+  color: var(--gold, #fcdd09);
+}
+
+.app-portal #tContact .form-msg {
+  display: none;
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.app-portal #tContact .form-msg.ok {
+  display: block;
+  background: rgba(7, 137, 48, 0.2);
+  border: 1px solid rgba(7, 137, 48, 0.45);
+  color: #b8f0c8;
+}
+
+.app-portal #tContact .form-msg.err {
+  display: block;
+  background: rgba(218, 18, 26, 0.15);
+  border: 1px solid rgba(218, 18, 26, 0.35);
+  color: #fecaca;
+}
+
+.app-portal #tContact .form-input[readonly] {
+  opacity: 0.85;
+  cursor: default;
+}
+
 .app-portal .inv-btns-stack .btn-pay {
   font-family: var(--font);
 }
@@ -156,6 +251,53 @@ body.app-portal .confirm-wrap .pin-input {
   margin-bottom: 12px;
 }
 
+.app-portal .auth-card .form-msg.err {
+  display: block;
+  background: rgba(218, 18, 26, 0.15);
+  border: 1px solid rgba(218, 18, 26, 0.35);
+  color: #fecaca;
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.app-portal .auth-card .form-msg.ok[style*="block"],
+.app-portal .auth-card .form-msg.ok.show {
+  display: block;
+}
+
+.app-portal .phone-help-panel {
+  margin: 12px 0 16px;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(252, 221, 9, 0.22);
+}
+
+.app-portal .phone-help-intro {
+  margin: 0 0 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(238, 244, 238, 0.85);
+}
+
+.app-portal .form-optional {
+  font-weight: normal;
+  opacity: 0.65;
+  font-size: 12px;
+}
+
+.app-portal .phone-help-panel .form-input[readonly] {
+  opacity: 0.85;
+  cursor: default;
+}
+
+.app-portal .phone-help-panel .btn-main {
+  margin-top: 4px;
+}
+
 .app-portal .auth-card textarea.form-input {
   min-height: 72px;
   resize: vertical;
@@ -166,7 +308,7 @@ body.app-portal .confirm-wrap .pin-input {
 }
 
 .app-portal .auth-card .form-input::placeholder {
-  color: #999;
+  color: rgba(238, 244, 238, 0.4);
 }
 
 .app-portal .method-opt {
@@ -419,6 +561,7 @@ body.app-portal .confirm-wrap .pin-input {
 }
 
 .app-portal .auth-wrap {
+  min-height: 100vh;
   background: linear-gradient(145deg, #021a09 0%, #033d11 38%, #056b24 62%, #031a0e 100%);
 }
 
@@ -1217,4 +1360,80 @@ body.app-admin {
   color: #fde68a;
   font-size: 13px;
   line-height: 1.45;
+}
+
+/* Member portal — board message threads on Profile */
+.app-portal .board-msg-intro {
+  font-size: 13px;
+  color: var(--gray);
+  margin: 0 0 12px;
+  line-height: 1.45;
+}
+
+.app-portal .board-msg-empty {
+  font-size: 13px;
+  color: var(--gray);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.app-portal .board-msg-thread {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.app-portal .board-msg-thread:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.app-portal .board-msg-meta {
+  font-size: 11px;
+  color: var(--gray);
+  margin-bottom: 6px;
+}
+
+.app-portal .board-msg-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+  color: var(--gray);
+}
+
+.app-portal .board-msg-you {
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.app-portal .board-msg-board {
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(7, 137, 48, 0.2);
+  border: 1px solid rgba(7, 137, 48, 0.35);
+}
+
+.app-portal .board-msg-board .board-msg-label {
+  color: #9ae6b0;
+}
+
+.app-portal .board-msg-board .board-msg-meta {
+  margin-top: 6px;
+  margin-bottom: 0;
+}
+
+.app-portal .board-msg-pending {
+  font-size: 12px;
+  color: var(--gray);
+  font-style: italic;
 }

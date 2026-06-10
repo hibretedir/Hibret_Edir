@@ -1,4 +1,10 @@
-"""Create or reset a board admin login (board_members table)."""
+"""Create or reset a board admin login (board_members table).
+
+For normal onboarding, use Admin → Security → Board Access to invite by email;
+the board member sets their own password on first sign-in.
+
+Use this script only for bootstrap or emergency password reset:
+"""
 import argparse
 import getpass
 import os

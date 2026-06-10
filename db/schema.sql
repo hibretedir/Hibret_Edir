@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS board_members (
   member_id INTEGER REFERENCES members(id),
   role VARCHAR(50),
   email VARCHAR(200) UNIQUE,
-  password_hash VARCHAR(200),
+  password_hash VARCHAR(200),  -- NULL until board member sets password on first sign-in
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -334,16 +334,26 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_invoice_mark_paid_pending_unique
 -- Website / contact form messages (board inbox)
 CREATE TABLE IF NOT EXISTS contact_messages (
   id SERIAL PRIMARY KEY,
+  member_id INTEGER REFERENCES members(id),
   name VARCHAR(200) NOT NULL,
   email VARCHAR(220),
   phone VARCHAR(32),
   message TEXT NOT NULL,
   source VARCHAR(50) NOT NULL DEFAULT 'website',
   status VARCHAR(20) NOT NULL DEFAULT 'new',
+  board_reply TEXT,
+  replied_at TIMESTAMP WITH TIME ZONE,
+  replied_by_admin_id INTEGER REFERENCES board_members(id),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_contact_messages_created ON contact_messages(created_at DESC);
+
+ALTER TABLE contact_messages ADD COLUMN IF NOT EXISTS member_id INTEGER REFERENCES members(id);
+ALTER TABLE contact_messages ADD COLUMN IF NOT EXISTS board_reply TEXT;
+ALTER TABLE contact_messages ADD COLUMN IF NOT EXISTS replied_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE contact_messages ADD COLUMN IF NOT EXISTS replied_by_admin_id INTEGER REFERENCES board_members(id);
+CREATE INDEX IF NOT EXISTS idx_contact_messages_member ON contact_messages(member_id);
 
 -- Member portal PIN reset requests (submitted when locked out)
 CREATE TABLE IF NOT EXISTS pin_reset_requests (
