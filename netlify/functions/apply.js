@@ -1292,7 +1292,7 @@ async function replyContactMessage(id, body, actor) {
       '',
       reply,
       '',
-      'Sign in to the Member Portal → Profile to view your message history.',
+      'Sign in to the Member Portal → Home → Messages from the Board to view your message history.',
       process.env.URL ? `${process.env.URL}/portal/` : '',
     ].filter(Boolean).join('\n');
     const sms = `Hibret Edir: The board replied to your message. Sign in to the member portal to read it.`;

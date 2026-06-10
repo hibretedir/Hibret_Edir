@@ -6,7 +6,7 @@
 <title>Hibret Edir Association — Member Portal</title>
 <link rel="stylesheet" href="/css/hibret.css?v=portal3">
 <link rel="stylesheet" href="/css/compat.css?v=portal5">
-<link rel="stylesheet" href="/css/app-theme.css?v=portal17">
+<link rel="stylesheet" href="/css/app-theme.css?v=portal18">
 </head>
 <body class="app-portal">
 
@@ -231,6 +231,11 @@
           <div class="qa-title">Contact Us</div>
           <div class="qa-sub">Message the board</div>
         </button>
+        <button class="qa-btn qa-accent-gold" onclick="tab('boardmessages')">
+          <div class="qa-icon">📬</div>
+          <div class="qa-title">Messages from the Board</div>
+          <div class="qa-sub">Replies to your messages</div>
+        </button>
       </div>
     </div>
 
@@ -315,11 +320,6 @@
         </div>
         <div id="benShow" style="display:none"></div>
       </div>
-      <div class="settings-card" id="boardMessagesCard">
-        <h3>✉️ Messages from the Board</h3>
-        <p class="board-msg-intro">Replies to your Contact Us messages appear here.</p>
-        <div id="boardMessagesList"></div>
-      </div>
       <div class="settings-card">
         <h3>Account Settings</h3>
         <button class="setting-row" onclick="openModal('cpModal')">
@@ -329,6 +329,19 @@
           <span>🚪</span><span>Sign Out</span>
         </button>
       </div>
+    </div>
+
+    <!-- BOARD MESSAGES -->
+    <div class="screen" id="tBoardmessages">
+      <div class="sec-hd">
+        <h2>Messages from the Board</h2>
+        <button class="see-all" onclick="tab('home')">← Home</button>
+      </div>
+      <div class="settings-card board-messages-card" id="boardMessagesCard">
+        <p class="board-msg-intro">Replies to your Contact Us messages appear here.</p>
+        <div id="boardMessagesList"></div>
+      </div>
+      <button type="button" class="btn-outline" style="width:100%;margin-top:8px" onclick="tab('contact')">Send a new message</button>
     </div>
 
     <!-- CONTACT -->
@@ -1163,12 +1176,12 @@ async function tab(t,opts){
     resetReceiptPaymentMethod();
     if(!opts.keepReceiptPrefill) resetReceiptPersonSelect();
   }
-  if(!opts.skipRefresh && ['home','invoices','notifications','profile','upload'].includes(t)){
+  if(!opts.skipRefresh && ['home','invoices','notifications','profile','upload','boardmessages'].includes(t)){
     await refreshPortalData();
     renderPortal();
   }
   curTab=t;
-  const screens=['home','invoices','upload','profile','notifications','contact'];
+  const screens=['home','invoices','upload','profile','notifications','contact','boardmessages'];
   screens.forEach(x=>{
     const sc=document.getElementById('t'+x.charAt(0).toUpperCase()+x.slice(1));
     if(sc) sc.classList.toggle('active',x===t);
@@ -1310,10 +1323,9 @@ function buildLiveNotifications() {
 
 function renderBoardMessages() {
   const el = document.getElementById('boardMessagesList');
-  const card = document.getElementById('boardMessagesCard');
   if (!el) return;
   if (!MY_BOARD_MESSAGES.length) {
-    el.innerHTML = '<p class="board-msg-empty">No messages yet. Use Contact Us on the home tab to reach the board.</p>';
+    el.innerHTML = '<p class="board-msg-empty">No messages yet. Use <strong>Contact Us</strong> on the home screen to reach the board.</p>';
     return;
   }
   el.innerHTML = MY_BOARD_MESSAGES.map(m => {
@@ -1327,7 +1339,6 @@ function renderBoardMessages() {
         : '<div class="board-msg-pending">Waiting for board reply…</div>'}
     </div>`;
   }).join('');
-  if (card) card.style.display = '';
 }
 
 function escHtml(s) {

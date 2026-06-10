@@ -1437,3 +1437,7 @@ body.app-admin {
   color: var(--gray);
   font-style: italic;
 }
+
+.app-portal .board-messages-card {
+  margin-bottom: 0;
+}
