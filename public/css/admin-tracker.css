@@ -962,6 +962,24 @@ body.app-admin.tracker {
   font-size: 13px;
 }
 
+@media (max-width: 900px) {
+  .tracker-intro-banner {
+    display: none !important;
+  }
+
+  .tracker-receipts-toolbar .tracker-intro-text {
+    display: none;
+  }
+
+  .tracker-receipts-toolbar {
+    margin-top: 8px;
+    padding: 0;
+    background: none;
+    border: none;
+    justify-content: flex-end;
+  }
+}
+
 /* ── Modal ── */
 .modal-overlay {
   display: none;

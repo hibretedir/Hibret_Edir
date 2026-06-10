@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/css/admin-tracker.css?v=admin25">
+<link rel="stylesheet" href="/css/admin-tracker.css?v=admin26">
 </head>
 <body class="app-admin tracker">
 
@@ -2220,7 +2220,7 @@ function renderApplicationsView() {
       <button type="button" class="tracker-tab${appFilter === 'rejected' ? ' active' : ''}" data-app-filter="rejected" onclick="switchAppFilter('rejected')">Rejected</button>
       <button type="button" class="tracker-tab${appFilter === 'all' ? ' active' : ''}" data-app-filter="all" onclick="switchAppFilter('all')">All</button>
     </nav>
-    <div class="tracker-banner">Membership applications, <strong>mark-paid requests</strong> (dual board approval), and beneficiary changes appear here.</div>
+    <div class="tracker-banner tracker-intro-banner">Membership applications, <strong>mark-paid requests</strong> (dual board approval), and beneficiary changes appear here.</div>
     <div class="tracker-table-wrap">
       ${renderApplicationsTableHtml(filtered)}
     </div>`;
@@ -2624,7 +2624,7 @@ function renderPayoutsView() {
       <button type="button" class="tracker-tab${payoutFilter === 'paid' ? ' active' : ''}" data-payout-filter="paid" onclick="switchPayoutFilter('paid')">Paid Out</button>
       <button type="button" class="tracker-tab${payoutFilter === 'all' ? ' active' : ''}" data-payout-filter="all" onclick="switchPayoutFilter('all')">All</button>
     </nav>
-    <div class="tracker-banner payout-workflow-banner">
+    <div class="tracker-banner payout-workflow-banner tracker-intro-banner">
       <strong>Payout workflow</strong>
       Collect deceased &amp; beneficiary documents → board confirms checklist → 2 board approvals required (by-laws) → mark $15,000 paid out.
       SSN copies are optional per board policy — confirm legal requirements before collecting.
@@ -3072,8 +3072,8 @@ function renderReceiptsView() {
       <button type="button" class="tracker-tab${receiptFilter === 'rejected' ? ' active' : ''}" data-receipt-filter="rejected" onclick="switchReceiptFilter('rejected')">Rejected</button>
       <button type="button" class="tracker-tab${receiptFilter === 'all' ? ' active' : ''}" data-receipt-filter="all" onclick="switchReceiptFilter('all')">All</button>
     </nav>
-    <div class="tracker-banner" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-      <span>Receipts uploaded by members after Zelle or Bank of America payments. Approving marks the linked invoice as paid.</span>
+    <div class="tracker-banner tracker-receipts-toolbar" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+      <span class="tracker-intro-text">Receipts uploaded by members after Zelle or Bank of America payments. Approving marks the linked invoice as paid.</span>
       <button type="button" class="tracker-mark-btn" onclick="refreshReceipts()">Refresh</button>
     </div>
     <div class="tracker-table-wrap">
@@ -3132,7 +3132,7 @@ function renderMessagesBodyHtml() {
       </tr>`;
     }).join('') : '';
     return `
-      <div class="tracker-banner">Messages from the public Contact Us form and the <strong>Member Portal</strong>. Replies appear under Home → Messages from the Board and are optionally emailed.</div>
+      <div class="tracker-banner tracker-intro-banner">Messages from the public Contact Us form and the <strong>Member Portal</strong>. Replies appear under Home → Messages from the Board and are optionally emailed.</div>
       <div class="tracker-table-wrap">
         ${CONTACT_MESSAGES.length ? `<table class="tracker-table">
           <thead><tr><th>From</th><th>Phone</th><th>Source</th><th>Status</th><th>Message</th><th>Received</th><th></th></tr></thead>
@@ -3305,7 +3305,7 @@ function renderActivityView() {
 
   document.getElementById('mainArea').innerHTML = `
     ${trackerHeaderHtml(stats)}
-    <div class="tracker-banner">Every board and member change is logged here. Waiting list → application → CRM → invoices stay synced automatically.</div>
+    <div class="tracker-banner tracker-intro-banner">Every board and member change is logged here. Waiting list → application → CRM → invoices stay synced automatically.</div>
     <div class="tracker-table-wrap">
       ${ACTIVITY.length ? `<table class="tracker-table">
         <thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead>
@@ -3349,7 +3349,7 @@ function renderBoardAccessView() {
 
   document.getElementById('mainArea').innerHTML = `
     ${trackerHeaderHtml(stats)}
-    <div class="tracker-banner">Add a board member's email here. They sign in at this admin page and create their own password on first visit.</div>
+    <div class="tracker-banner tracker-intro-banner">Add a board member's email here. They sign in at this admin page and create their own password on first visit.</div>
     <div class="board-access-invite">
       <label class="admin-login-label" for="boardInviteEmail">Invite board member</label>
       <div class="board-access-invite-row">
