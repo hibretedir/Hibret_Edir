@@ -6,7 +6,7 @@
 <title>Hibret Edir Association — Member Portal</title>
 <link rel="stylesheet" href="/css/hibret.css?v=portal3">
 <link rel="stylesheet" href="/css/compat.css?v=portal5">
-<link rel="stylesheet" href="/css/app-theme.css?v=portal18">
+<link rel="stylesheet" href="/css/app-theme.css?v=portal19">
 </head>
 <body class="app-portal">
 
@@ -1335,7 +1335,7 @@ function renderBoardMessages() {
       <div class="board-msg-meta">${sent}${m.source === 'portal' ? ' · Portal' : ''}</div>
       <div class="board-msg-you"><span class="board-msg-label">You</span>${escHtml(m.message || '')}</div>
       ${m.board_reply
-        ? `<div class="board-msg-board"><span class="board-msg-label">Board</span>${escHtml(m.board_reply)}<div class="board-msg-meta">${replied}</div></div>`
+        ? `<div class="board-msg-board"><div class="board-msg-head"><span class="board-msg-label">Board reply</span>${replied ? `<span class="board-msg-date">(${escHtml(replied.slice(0, 10))})</span>` : ''}</div><div class="board-msg-text">${escHtml(m.board_reply)}</div></div>`
         : '<div class="board-msg-pending">Waiting for board reply…</div>'}
     </div>`;
   }).join('');

@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/css/admin-tracker.css?v=admin26">
+<link rel="stylesheet" href="/css/admin-tracker.css?v=admin27">
 </head>
 <body class="app-admin tracker">
 
@@ -3128,7 +3128,7 @@ function renderMessagesBodyHtml() {
         <td><button type="button" class="tracker-mark-btn" onclick="openMessageReply(${m.id})">${m.board_reply ? 'Edit reply' : 'Reply'}</button></td>
       </tr>
       <tr class="data-row msg-detail-row">
-        <td colspan="7"><div class="msg-detail-body">${esc(m.message || '')}${m.board_reply ? `<div class="msg-reply-block"><strong>Board reply</strong> (${esc(fmtDate(m.replied_at))})<br>${esc(m.board_reply)}</div>` : ''}</div></td>
+        <td colspan="7"><div class="msg-detail-body">${esc(m.message || '')}${m.board_reply ? `<div class="msg-reply-block"><div class="msg-reply-head"><strong>Board reply</strong><span class="msg-reply-date">(${esc(fmtDate(m.replied_at))})</span></div><div class="msg-reply-text">${esc(m.board_reply)}</div></div>` : ''}</div></td>
       </tr>`;
     }).join('') : '';
     return `
@@ -3265,7 +3265,7 @@ async function loadMemberMessages(memberId) {
         <div style="font-size:10px;color:var(--tk-muted)">${esc(fmtDate(m.created_at))} · ${esc(m.source || 'contact')}</div>
         <div style="font-size:12px;margin:4px 0">${esc(m.message || '')}</div>
         ${m.board_reply
-          ? `<div class="msg-reply-block"><strong>Board reply</strong> (${esc(fmtDate(m.replied_at))})<br>${esc(m.board_reply)}</div>`
+          ? `<div class="msg-reply-block"><div class="msg-reply-head"><strong>Board reply</strong><span class="msg-reply-date">(${esc(fmtDate(m.replied_at))})</span></div><div class="msg-reply-text">${esc(m.board_reply)}</div></div>`
           : `<button type="button" class="tracker-mark-btn" style="margin-top:6px" onclick="openMessageReply(${m.id})">Reply</button>`}
       </div>`).join('');
   } catch {

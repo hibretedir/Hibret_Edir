@@ -1414,17 +1414,37 @@ body.app-admin {
 }
 
 .app-portal .board-msg-board {
-  font-size: 14px;
   line-height: 1.5;
-  white-space: pre-wrap;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
   background: rgba(7, 137, 48, 0.2);
   border: 1px solid rgba(7, 137, 48, 0.35);
 }
 
+.app-portal .board-msg-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
 .app-portal .board-msg-board .board-msg-label {
   color: #9ae6b0;
+  margin-bottom: 0;
+}
+
+.app-portal .board-msg-date {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #9ae6b0;
+}
+
+.app-portal .board-msg-text {
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
 }
 
 .app-portal .board-msg-board .board-msg-meta {

@@ -1869,10 +1869,16 @@ body.tracker .btn.primary {
   border-radius: 6px;
   background: rgba(7, 137, 48, 0.15);
   border: 1px solid rgba(7, 137, 48, 0.35);
-  font-size: 13px;
   line-height: 1.55;
   color: var(--tk-text);
-  white-space: pre-wrap;
+}
+
+.msg-reply-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 
 .msg-reply-block strong {
@@ -1880,6 +1886,20 @@ body.tracker .btn.primary {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.msg-reply-date {
+  font-size: 11px;
+  color: #9ae6b0;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+}
+
+.msg-reply-text {
+  font-size: 14px;
+  line-height: 1.55;
+  white-space: pre-wrap;
 }
 
 .msg-reply-original {
