@@ -195,24 +195,97 @@ async function notifyProfileUpdate(db, member, changes) {
   });
 }
 
+function memberDisplayName(member) {
+  return member.full_name || `${member.first_name || ''} ${member.last_name || ''}`.trim() || 'Member';
+}
+
+function securityFooter() {
+  return '\n\nIf you did not authorize this change, call (424) 547-5594 immediately.';
+}
+
+function securitySmsSuffix() {
+  return ' Call (424) 547-5594 if this was not you.';
+}
+
+function formatBeneficiaryDetail(beneficiary) {
+  return `Beneficiary: ${beneficiary.name}\nRelationship: ${beneficiary.relationship || '—'}\nPhone: ${beneficiary.phone || '—'}`;
+}
+
 async function notifyBeneficiaryUpdate(db, member, beneficiary, isNew) {
-  const name = member.full_name || `${member.first_name || ''} ${member.last_name || ''}`.trim();
+  const name = memberDisplayName(member);
   const action = isNew ? 'added' : 'updated';
-  const detail = `Beneficiary: ${beneficiary.name}\nRelationship: ${beneficiary.relationship || '—'}\nPhone: ${beneficiary.phone || '—'}`;
+  const detail = formatBeneficiaryDetail(beneficiary);
   await notifyMember({
     db,
     memberId: member.id,
     email: member.email,
     phone: member.mobile || member.home_phone,
     subject: `Hibret Edir — beneficiary ${action}`,
-    text: `Hello ${name},\n\nYour death beneficiary on file was ${action}:\n\n${detail}\n\nKeep this information current so your family is protected.`,
-    smsText: `Hibret Edir: Beneficiary ${action} — ${beneficiary.name}. Update anytime in the member portal.`,
+    text: `Hello ${name},\n\nYour death beneficiary on file was ${action}:\n\n${detail}\n\nKeep this information current so your family is protected.${securityFooter()}`,
+    smsText: `Hibret Edir: Beneficiary ${action} on your account.${securitySmsSuffix()}`,
   });
   await notifyBoard({
     db,
     subject: `Hibret Edir — beneficiary ${action}: ${name}`,
     text: `Member ${name} (#${member.member_number || member.id}) ${action} beneficiary:\n\n${detail}`,
     smsText: `Hibret Edir: ${name} ${action} beneficiary ${beneficiary.name}.`,
+  });
+}
+
+async function notifyBeneficiaryChangeRequested(db, member, beneficiary, isNew, previous) {
+  const name = memberDisplayName(member);
+  const action = isNew ? 'add a beneficiary' : 'update your beneficiary';
+  const detail = formatBeneficiaryDetail(beneficiary);
+  const prevBlock = previous?.name
+    ? `\n\nPrevious beneficiary on file:\n${formatBeneficiaryDetail(previous)}`
+    : '';
+  await notifyMember({
+    db,
+    memberId: member.id,
+    email: member.email,
+    phone: member.mobile || member.home_phone,
+    subject: 'Hibret Edir — beneficiary change submitted',
+    text: `Hello ${name},\n\nWe received your request to ${action}. The board will review before it is saved:\n\n${detail}${prevBlock}\n\nYou will receive another email and text when the board approves or declines this request.${securityFooter()}`,
+    smsText: `Hibret Edir: We received your beneficiary change request. Board review pending.${securitySmsSuffix()}`,
+  });
+}
+
+async function notifyBeneficiaryChangeApproved(db, member, beneficiary, isNew, previous) {
+  const name = memberDisplayName(member);
+  const action = isNew ? 'added' : 'updated';
+  const detail = formatBeneficiaryDetail(beneficiary);
+  const prevBlock = previous?.name
+    ? `\n\nReplaced:\n${formatBeneficiaryDetail(previous)}`
+    : '';
+  await notifyMember({
+    db,
+    memberId: member.id,
+    email: member.email,
+    phone: member.mobile || member.home_phone,
+    subject: `Hibret Edir — beneficiary change approved`,
+    text: `Hello ${name},\n\nThe board approved your beneficiary change. Your death beneficiary on file was ${action}:\n\n${detail}${prevBlock}\n\nSign in to the member portal to review your profile.${securityFooter()}`,
+    smsText: `Hibret Edir: Your beneficiary change was approved.${securitySmsSuffix()}`,
+  });
+  await notifyBoard({
+    db,
+    subject: `Hibret Edir — beneficiary change approved: ${name}`,
+    text: `Board approved beneficiary change for ${name} (#${member.member_number || member.id}):\n\n${detail}`,
+    smsText: `Hibret Edir: Beneficiary change approved for ${name}.`,
+  });
+}
+
+async function notifyBeneficiaryChangeRejected(db, member, beneficiary, notes) {
+  const name = memberDisplayName(member);
+  const detail = formatBeneficiaryDetail(beneficiary);
+  const noteBlock = notes ? `\n\nBoard note: ${notes}` : '';
+  await notifyMember({
+    db,
+    memberId: member.id,
+    email: member.email,
+    phone: member.mobile || member.home_phone,
+    subject: 'Hibret Edir — beneficiary change not approved',
+    text: `Hello ${name},\n\nThe board did not approve your recent beneficiary change request:\n\n${detail}${noteBlock}\n\nYour previous beneficiary information remains on file. Contact (424) 547-5594 if you have questions.${securityFooter()}`,
+    smsText: `Hibret Edir: Your beneficiary change was not approved. Previous info unchanged.${securitySmsSuffix()}`,
   });
 }
 
@@ -271,6 +344,9 @@ module.exports = {
   notifyBoard,
   notifyProfileUpdate,
   notifyBeneficiaryUpdate,
+  notifyBeneficiaryChangeRequested,
+  notifyBeneficiaryChangeApproved,
+  notifyBeneficiaryChangeRejected,
   notifyApplicationSubmitted,
   notifyApplicationApproved,
   notifyApplicationRejected,

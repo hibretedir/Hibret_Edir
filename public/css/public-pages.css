@@ -708,6 +708,8 @@
 
 .site-public .ann-receipt-note a {
   color: var(--gold);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .site-public .ann-letter-signoff {
@@ -718,6 +720,29 @@
 
 .site-public .ann-letter-signoff strong {
   color: var(--gold);
+}
+
+.site-public .ann-letter[data-ann-collect-dues="true"] .ann-no-dues-block {
+  display: none;
+}
+
+.site-public .ann-letter[data-ann-collect-dues="false"] .ann-dues-block {
+  display: none;
+}
+
+.site-public .ann-no-dues-block {
+  margin: 22px 0 20px;
+  padding: 16px;
+  border-radius: var(--radius-sm);
+  background: rgba(7, 137, 48, 0.18);
+  border: 1px solid rgba(7, 137, 48, 0.4);
+}
+
+.site-public .ann-no-dues-note {
+  margin: 0;
+  font-size: 14px;
+  color: #e8fff0;
+  line-height: 1.7;
 }
 
 /* Announcement — payment summary card */
@@ -1879,4 +1904,60 @@ body.site-public .sg-icon {
     font-size: 11px;
     text-transform: uppercase;
   }
+}
+
+/* ── In Remembrance (memorial roll) ── */
+.site-public .memorial-card {
+  margin-top: 24px;
+  background: var(--pub-card);
+  border: 1px solid var(--pub-card-border);
+  border-radius: var(--radius);
+  padding: 8px 8px 12px;
+  box-shadow: var(--pub-shadow);
+  backdrop-filter: blur(10px);
+  border-top: 3px solid var(--green);
+  background-image:
+    linear-gradient(165deg, rgba(7, 137, 48, 0.14) 0%, transparent 42%),
+    linear-gradient(225deg, rgba(218, 18, 26, 0.1) 0%, transparent 38%),
+    linear-gradient(90deg, rgba(252, 221, 9, 0.08) 0%, transparent 55%);
+}
+
+.site-public .memorial-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.site-public .memorial-name {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.site-public .memorial-name:last-child {
+  border-bottom: none;
+}
+
+.site-public .memorial-name-text {
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.35;
+}
+
+.site-public .memorial-name-year {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gold);
+  flex-shrink: 0;
+}
+
+.site-public .memorial-loading,
+.site-public .memorial-empty {
+  text-align: center;
+  color: var(--pub-text-muted);
+  font-size: 14px;
+  padding: 24px 12px;
 }

@@ -6,7 +6,7 @@
 <title>Hibret Edir Association — Ethiopian Mutual Assistance</title>
 <link rel="stylesheet" href="/css/hibret.css?v=nav1">
 <link rel="stylesheet" href="/css/compat.css?v=nav1">
-<link rel="stylesheet" href="/css/public-pages.css?v=pubfix6">
+<link rel="stylesheet" href="/css/public-pages.css?v=pubfix11">
 </head>
 <body class="site-public">
 
@@ -49,6 +49,7 @@
     <div class="mmenu-list">
       <a href="#" onclick="return goSection('home')"><span class="en">Home</span><span class="am">መነሻ</span></a>
       <a href="#announcement" onclick="return goSection('announcement')"><span class="en">Announcement</span><span class="am">ማስታወቂያ</span></a>
+      <a href="#remembrance" onclick="return goSection('remembrance')"><span class="en">In Remembrance</span><span class="am">የማዘን ዝርዝር</span></a>
       <a href="#about" onclick="return goSection('about')"><span class="en">About Us</span><span class="am">ስለ እኛ</span></a>
       <a href="#howitworks" onclick="return goSection('howitworks')"><span class="en">How It Works</span><span class="am">እንዴት ይሰራል</span></a>
       <a href="#payment" onclick="return goSection('payment')"><span class="en">Make a Payment</span><span class="am">ክፍያ ያድርጉ</span></a>
@@ -109,8 +110,11 @@
 <div class="section-grid" id="sectionGrid">
   <div class="sg-title"><span class="en">Explore</span><span class="am">ይመልከቱ</span></div>
   <div class="sg-cards">
-    <button class="sg-card sg-card-accent-gold" onclick="goSection('announcement')">
+    <button class="sg-card sg-card-accent-red" onclick="goSection('announcement')">
       <span class="sg-icon">A</span><span class="en">Announcement</span><span class="am">ማስታወቂያ</span>
+    </button>
+    <button class="sg-card sg-card-accent-green" onclick="goSection('remembrance')">
+      <span class="sg-icon">🕊</span><span class="en">In Remembrance</span><span class="am">የማዘን ዝርዝር</span>
     </button>
     <button class="sg-card sg-card-accent-green" onclick="goSection('about')">
       <span class="sg-icon">i</span><span class="en">About Us</span><span class="am">ስለ እኛ</span>
@@ -146,7 +150,8 @@
     <!-- Memorial announcement template — automation fills data-ann-* fields per event -->
     <article class="ann-letter fade-up" id="annMemorial" data-announcement-template="memorial-v1"
       data-ann-deceased-name="Ato Brook Zewdie"
-      data-ann-event-number="30">
+      data-ann-event-number="30"
+      data-ann-collect-dues="true">
       <div class="ann-letter-icon" aria-hidden="true">🕊️</div>
       <div class="ann-letter-body">
         <p class="ann-letter-opening">
@@ -167,14 +172,18 @@
           <p class="ann-service-address" data-ann-field="burial_address">5835 W Slauson Ave, Culver City, CA 90230</p>
         </div>
 
-        <div class="ann-dues-block">
+        <div class="ann-dues-block" data-ann-dues-section="collect">
           <p class="ann-dues-note">* Please note that we will be collecting membership dues. Payments may be made through:</p>
           <ul class="ann-pay-list">
             <li>PayPal: <a href="https://www.hibretedir.com/invoice" target="_blank" rel="noopener">https://www.hibretedir.com/invoice</a></li>
             <li>Zelle: Hibret Edir (Business Account) – <a href="tel:4245475594">(424) 547-5594</a></li>
             <li>Bank Deposit: Bank of America – Account #002174902906</li>
           </ul>
-          <p class="ann-receipt-note">Kindly send your payment receipt with your name to <a href="tel:4245475594">(424) 547-5594</a>.</p>
+          <p class="ann-receipt-note">Kindly upload your payment receipt with your name to the <a href="/portal/#receipt">Member Portal receipt upload</a>.</p>
+        </div>
+
+        <div class="ann-no-dues-block" data-ann-dues-section="waived">
+          <p class="ann-no-dues-note">* No member contribution is required for this memorial. Sufficient funds are available in the Edir account to support the family at this time.</p>
         </div>
 
         <p class="ann-letter-signoff">
@@ -195,6 +204,28 @@
         <div class="ann-desc am">ሁሉም ንቁ አባላት ክፍያቸውን $110 በ3 ቀናት ውስጥ እንዲፈጽሙ ይጠየቃሉ።</div>
       </div>
       <a href="/portal/" class="ann-btn"><span class="en">Pay Now →</span><span class="am">አሁን ይክፈሉ →</span></a>
+    </div>
+  </div>
+</section>
+</div>
+
+<!-- ══ IN REMEMBRANCE ══ -->
+<div class="section-page" id="section-remembrance">
+<section class="sec sec-dark" id="remembrance">
+  <div class="sec-inner">
+    <div class="sec-tag en">Memorial Roll</div>
+    <div class="sec-tag am">የማዘን ዝርዝር</div>
+    <h2 class="sec-title en fade-up">In Remembrance</h2>
+    <h2 class="sec-title am fade-up">በזክሮች ውስጥ</h2>
+    <div class="sec-line"></div>
+    <p class="sec-sub en fade-up">Members and loved ones the Hibret Edir community has supported since our founding in 2011.</p>
+    <p class="sec-sub am fade-up">ከ2011 ጀምሮ ሕብረት እድር ያጠራቀመባቸው አባላትና ቤተሰቦች።</p>
+
+    <div class="memorial-card fade-up">
+      <div class="memorial-list" id="memorialList">
+        <p class="memorial-loading en">Loading memorial roll…</p>
+        <p class="memorial-loading am">ዝርዝር በመጫን ላይ…</p>
+      </div>
     </div>
   </div>
 </section>
@@ -545,7 +576,39 @@
     <h2 class="sec-title am fade-up">እርዳታ ለመስጠት ዝግጁ ነን</h2>
     <div class="sec-line"></div>
     <div class="contact-grid">
-      <div class="contact-links fade-up">
+      <div class="contact-form-box fade-up">
+        <h3 class="en">Send Us a Message</h3>
+        <h3 class="am">መልዕክት ይላኩልን</h3>
+        <p class="form-fine en" style="margin-bottom:12px">Messages go to the board at <strong>hibretedirtext@gmail.com</strong> and appear in Admin → Messages.</p>
+        <p class="form-fine am" style="margin-bottom:12px">መልዕክቶች ወደ <strong>hibretedirtext@gmail.com</strong> ይሄዳሉ።</p>
+        <div class="form-msg" id="contactMsg"></div>
+        <form onsubmit="submitContact(event)">
+          <div class="fg-row">
+            <div class="fg">
+              <label class="en">Name</label>
+              <label class="am">ስም</label>
+              <input type="text" id="contactName" required>
+            </div>
+            <div class="fg">
+              <label class="en">Phone</label>
+              <label class="am">ስልክ</label>
+              <input type="tel" id="contactPhone">
+            </div>
+          </div>
+          <div class="fg">
+            <label class="en">Email</label>
+            <label class="am">ኢሜይል</label>
+            <input type="email" id="contactEmail">
+          </div>
+          <div class="fg">
+            <label class="en">Message</label>
+            <label class="am">መልዕክት</label>
+            <textarea id="contactMessage" required></textarea>
+          </div>
+          <button type="submit" class="form-submit"><span class="en">Send Message →</span><span class="am">መልዕክት ይላኩ →</span></button>
+        </form>
+      </div>
+      <div class="contact-links fade-up" style="animation-delay:.15s">
         <a href="tel:4245475594" class="contact-link">
           <div class="cl-ico">📞</div>
           <div>
@@ -581,38 +644,6 @@
           </div>
         </a>
       </div>
-      <div class="contact-form-box fade-up" style="animation-delay:.15s">
-        <h3 class="en">Send Us a Message</h3>
-        <h3 class="am">መልዕክት ይላኩልን</h3>
-        <p class="form-fine en" style="margin-bottom:12px">Messages go to the board at <strong>hibretedirtext@gmail.com</strong>.</p>
-        <p class="form-fine am" style="margin-bottom:12px">መልዕክቶች ወደ <strong>hibretedirtext@gmail.com</strong> ይሄዳሉ።</p>
-        <div class="form-msg" id="contactMsg"></div>
-        <form onsubmit="submitContact(event)">
-          <div class="fg-row">
-            <div class="fg">
-              <label class="en">Name</label>
-              <label class="am">ስም</label>
-              <input type="text" id="contactName" required>
-            </div>
-            <div class="fg">
-              <label class="en">Phone</label>
-              <label class="am">ስልክ</label>
-              <input type="tel" id="contactPhone">
-            </div>
-          </div>
-          <div class="fg">
-            <label class="en">Email</label>
-            <label class="am">ኢሜይል</label>
-            <input type="email" id="contactEmail">
-          </div>
-          <div class="fg">
-            <label class="en">Message</label>
-            <label class="am">መልዕክት</label>
-            <textarea id="contactMessage" required></textarea>
-          </div>
-          <button type="submit" class="form-submit"><span class="en">Send Message →</span><span class="am">መልዕክት ይላኩ →</span></button>
-        </form>
-      </div>
     </div>
   </div>
 </section>
@@ -646,6 +677,8 @@
         <h4 class="am">ክፍሎች</h4>
         <a href="#" onclick="return goSection('announcement')" class="en">Announcement</a>
         <a href="#" onclick="return goSection('announcement')" class="am">ማስታወቂያ</a>
+        <a href="#" onclick="return goSection('remembrance')" class="en">In Remembrance</a>
+        <a href="#" onclick="return goSection('remembrance')" class="am">የማዘን ዝርዝር</a>
         <a href="#" onclick="return goSection('about')" class="en">About Us</a>
         <a href="#" onclick="return goSection('about')" class="am">ስለ እኛ</a>
         <a href="#" onclick="return goSection('howitworks')" class="en">How It Works</a>
@@ -692,9 +725,11 @@
 </footer>
 
 <script>
-const NAV_SECTIONS = new Set(['announcement','about','howitworks','payment','bylaws','apply','waitingliststatus','contact']);
+const NAV_SECTIONS = new Set(['announcement','remembrance','about','howitworks','payment','bylaws','apply','waitingliststatus','contact']);
 let wlStatusEntries = [];
 let wlStatusLoaded = false;
+let memorialPeople = [];
+let memorialLoaded = false;
 
 function mob(){ return window.innerWidth <= 768; }
 
@@ -780,6 +815,9 @@ function goSection(id){
   }
   if(id==='waitingliststatus' && !wlStatusLoaded){
     loadWaitingListStatus();
+  }
+  if(id==='remembrance' && !memorialLoaded){
+    loadMemorialRoll();
   }
   return false;
 }
@@ -897,11 +935,16 @@ document.querySelectorAll('.fade-up').forEach(el=>obs.observe(el));
 
 const wlSec = document.getElementById('waitingliststatus');
 const applySec = document.getElementById('apply');
+const memorialSec = document.getElementById('remembrance');
 const wlStatusObserver = new IntersectionObserver((entries) => {
   if (entries.some((e) => e.isIntersecting) && !wlStatusLoaded) loadWaitingListStatus();
 }, { threshold: 0.08 });
+const memorialObserver = new IntersectionObserver((entries) => {
+  if (entries.some((e) => e.isIntersecting) && !memorialLoaded) loadMemorialRoll();
+}, { threshold: 0.08 });
 if (wlSec) wlStatusObserver.observe(wlSec);
 if (applySec) wlStatusObserver.observe(applySec);
+if (memorialSec) memorialObserver.observe(memorialSec);
 
 // Nav shadow
 window.addEventListener('scroll',()=>{
@@ -1176,6 +1219,49 @@ async function loadWaitingListStatus() {
 
 if ((location.hash || '').replace(/^#/, '') === 'waitingliststatus') {
   loadWaitingListStatus();
+}
+if ((location.hash || '').replace(/^#/, '') === 'remembrance') {
+  loadMemorialRoll();
+}
+
+function escHtml(s) {
+  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+}
+
+function renderMemorialRoll() {
+  const list = document.getElementById('memorialList');
+  if (!list) return;
+  if (!memorialPeople.length) {
+    list.innerHTML = '<p class="memorial-empty en">Memorial roll will be updated soon.</p><p class="memorial-empty am">የማዘን ዝርዝር በቅርቡ ይዘመናል።</p>';
+    return;
+  }
+  const sorted = [...memorialPeople].sort((a, b) => {
+    const yA = parseInt(a.year, 10) || 0;
+    const yB = parseInt(b.year, 10) || 0;
+    if (yB !== yA) return yB - yA;
+    return (a.name || '').localeCompare(b.name || '');
+  });
+  list.innerHTML = sorted.map((p) => `
+    <div class="memorial-name">
+      <span class="memorial-name-text">${escHtml(p.name)}</span>
+      ${p.year ? `<span class="memorial-name-year">${escHtml(p.year)}</span>` : ''}
+    </div>`).join('');
+}
+
+async function loadMemorialRoll() {
+  const list = document.getElementById('memorialList');
+  try {
+    const res = await fetch('/data/memorial.json?v=2');
+    const data = await res.json();
+    if (!res.ok) throw new Error('Could not load memorial roll');
+    memorialPeople = Array.isArray(data.people) ? data.people.filter(p => p && p.name) : [];
+    memorialLoaded = true;
+    renderMemorialRoll();
+  } catch {
+    if (list) {
+      list.innerHTML = '<p class="memorial-empty en">Could not load the memorial roll. Please try again later.</p><p class="memorial-empty am">ዝርዝሩ አልተጫነም። ቆይተው ይሞክሩ።</p>';
+    }
+  }
 }
 
 async function loadMemberStats() {

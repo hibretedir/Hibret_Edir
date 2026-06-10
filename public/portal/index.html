@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Hibret Edir Association — Member Portal</title>
 <link rel="stylesheet" href="/css/hibret.css?v=portal3">
-<link rel="stylesheet" href="/css/compat.css?v=portal3">
-<link rel="stylesheet" href="/css/app-theme.css?v=portal9">
+<link rel="stylesheet" href="/css/compat.css?v=portal5">
+<link rel="stylesheet" href="/css/app-theme.css?v=portal13">
 </head>
 <body class="app-portal">
 
@@ -35,6 +35,7 @@
       </div>
     </div>
     <button class="btn-main" onclick="goPhone()">Continue →</button>
+    <button class="btn-link" type="button" onclick="openPinResetRequest()">Forgot PIN? Request a reset</button>
     <button class="btn-link" onclick="location.href='/#apply'">Not a member? Join waiting list</button>
     <div class="lang-toggle">
       <button class="lang-btn active" id="lb-en" onclick="setLang('en')">EN</button>
@@ -62,7 +63,37 @@
     </div>
     <div style="height:16px"></div>
     <button class="btn-main" id="pinBtn" onclick="doPin()" disabled>Sign In</button>
+    <button class="btn-link" type="button" onclick="openPinResetRequest()">Forgot PIN? Request a reset</button>
     <button class="btn-link" onclick="show('sPhone')">← Back</button>
+  </div>
+</div>
+
+<!-- ========== SCREEN: PIN RESET REQUEST ========== -->
+<div id="sPinReset" class="auth-wrap" style="display:none">
+  <div class="auth-bg"></div>
+  <div class="auth-card">
+    <div class="auth-logo">
+      <img src="/logo.png" alt="Hibret Edir Logo">
+      <div class="auth-logo-text"><div class="name">Hibret Edir Association</div><div class="sub">PIN Reset Request</div></div>
+    </div>
+    <h1 class="auth-title">Request PIN Reset</h1>
+    <p class="auth-sub">The board will verify your identity and clear your PIN so you can create a new one.<span class="amh">ቦርዱ ማንነትዎን ካረጋገጠ በኋላ አዲስ PIN ይፈጥራሉ</span></p>
+    <div class="error-msg" id="pinResetErr"></div>
+    <div class="form-msg ok" id="pinResetOk" style="display:none"></div>
+    <div class="form-group">
+      <label class="form-label">Mobile Phone <span class="amh">ሞባይል</span></label>
+      <div class="phone-wrap">
+        <div class="phone-prefix">+1</div>
+        <input type="tel" class="form-input" id="pinResetPhone" placeholder="(xxx) xxx-xxxx"
+          inputmode="tel" maxlength="12" oninput="fmtPhone(this)">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Note (optional)</label>
+      <textarea class="form-input" id="pinResetNotes" rows="2" placeholder="e.g. I forgot my PIN"></textarea>
+    </div>
+    <button class="btn-main" type="button" onclick="submitPinResetRequest()">Send Reset Request →</button>
+    <button class="btn-link" type="button" onclick="show(myPhone ? 'sPin' : 'sPhone')">← Back</button>
   </div>
 </div>
 
@@ -108,7 +139,7 @@
         <img src="/logo.png" alt="" class="portal-nav-logo">
         <span class="portal-nav-brand-text">
           <span class="portal-nav-name">Hibret Edir Association</span>
-          <span class="portal-nav-site-link">Visit main site →</span>
+          <span class="portal-nav-site-link">Back to Main Site →</span>
         </span>
       </a>
       <div class="portal-nav-right">
@@ -209,11 +240,11 @@
         </div>
       </div>
       <div class="upload-card">
-        <label>Receipt photo</label>
+        <label>Receipt photo <span class="req">*</span></label>
         <div class="receipt-upload-actions">
           <button type="button" class="receipt-upload-btn" id="receiptFileBtn">Upload file</button>
         </div>
-        <input type="file" id="receiptFileInput" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf" hidden>
+        <input type="file" id="receiptFileInput" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf" hidden required>
         <div class="drop-zone" id="dropZ"
           ondragover="event.preventDefault();this.classList.add('over')"
           ondragleave="this.classList.remove('over')"
@@ -558,13 +589,51 @@ function getMyInvs() {
 
 // SCREENS
 function show(id){
-  ['sPhone','sPin','sCreate','sConfirm'].forEach(s=>{
+  ['sPhone','sPin','sCreate','sConfirm','sPinReset'].forEach(s=>{
     const el=document.getElementById(s);
     if(el) el.style.display='none';
   });
   document.getElementById('portalApp').style.display='none';
   const el=document.getElementById(id);
   if(el) el.style.display='flex';
+}
+
+function openPinResetRequest(){
+  const phoneEl=document.getElementById('pinResetPhone');
+  const err=document.getElementById('pinResetErr');
+  const ok=document.getElementById('pinResetOk');
+  if(phoneEl) phoneEl.value=myPhone||document.getElementById('phoneInp')?.value||'';
+  if(document.getElementById('pinResetNotes')) document.getElementById('pinResetNotes').value='';
+  err.classList.remove('show');
+  err.textContent='';
+  if(ok){ ok.style.display='none'; ok.textContent=''; }
+  show('sPinReset');
+  setTimeout(()=>phoneEl?.focus(),100);
+}
+
+async function submitPinResetRequest(){
+  const phone=document.getElementById('pinResetPhone')?.value||'';
+  const notes=document.getElementById('pinResetNotes')?.value||'';
+  const err=document.getElementById('pinResetErr');
+  const ok=document.getElementById('pinResetOk');
+  if(normPhone(phone).length<10){
+    err.textContent='Please enter a valid 10-digit phone number.';
+    err.classList.add('show');
+    if(ok) ok.style.display='none';
+    return;
+  }
+  err.classList.remove('show');
+  try {
+    const result=await apiPost('auth/request-pin-reset',{ phone, notes });
+    if(ok){
+      ok.textContent=result.message||'Request sent. The board will approve your reset soon.';
+      ok.style.display='block';
+    }
+  } catch (error) {
+    if(ok) ok.style.display='none';
+    err.textContent=error.message||'Could not send request. Call (424) 547-5594 for help.';
+    err.classList.add('show');
+  }
 }
 function backPortal(){
   document.getElementById('sConfirm').style.display='none';
@@ -693,6 +762,7 @@ async function loginOK(){
   await fetchEdirEvents();
   renderPortal();
   tab('home');
+  openPortalDeepLink();
 }
 
 // RENDER
@@ -824,8 +894,10 @@ function renderInvs(list){
           <div class="inv-btns">
             ${paid
               ? '<span class="btn-paid-badge">✓ Paid</span>'
-              : `<a href="${inv.paypal_link || (inv.paypal_id ? PAYPAL_INVOICE_BASE + inv.paypal_id : '#')}" target="_blank" rel="noopener" class="btn-pay">💳 Pay via PayPal</a>
-                 <button class="btn-receipt" onclick="prefill(${inv.invoice_num})">📤</button>`
+              : `<div class="inv-btns-stack">
+                   <button type="button" class="btn-pay btn-pay-gold" onclick="prefill(${inv.invoice_num})">📤 If paid, Upload Receipt</button>
+                   <a href="${inv.paypal_link || (inv.paypal_id ? PAYPAL_INVOICE_BASE + inv.paypal_id : '#')}" target="_blank" rel="noopener" class="btn-pay btn-pay-paypal">💳 Pay via PayPal</a>
+                 </div>`
             }
           </div>
         </div>
@@ -846,6 +918,7 @@ function formatDeceasedName(event){
 function prefill(invoiceNum){
   const inv=getMyInvs().find(i=>String(i.invoice_num)===String(invoiceNum));
   if(inv) document.getElementById('evSel').value=eventPersonName(inv.item);
+  window.__receiptInvoiceNum=invoiceNum;
   tab('upload');
 }
 
@@ -914,7 +987,30 @@ function doUpload(){
   const personName=document.getElementById('evSel').value;
   if(!personName){alert('Please select which person you are paying for.');return;}
   if(!uploadedFile){alert('Please add a photo or PDF of your receipt.');return;}
+  submitReceiptUpload(personName);
+}
+
+async function submitReceiptUpload(personName){
   const personLabel=personName;
+  const notes=document.getElementById('upNotes').value.trim();
+  try {
+    const base64=await readFileAsBase64(uploadedFile);
+    await apiPost('receipts', {
+      deceased_name: personLabel,
+      payment_method: selMeth,
+      notes,
+      invoice_num: window.__receiptInvoiceNum || undefined,
+      file: {
+        data: base64,
+        mime_type: uploadedFile.type,
+        filename: uploadedFile.name,
+        size: uploadedFile.size,
+      },
+    });
+  } catch (error) {
+    alert(error.message || 'Could not upload receipt. Please try again.');
+    return;
+  }
   document.getElementById('confMsg').innerHTML=
     'Your receipt for <strong>'+personLabel+'</strong> has been submitted.<br>The board will review and confirm your payment shortly.<br><br><small style="color:var(--gray)">ደረሰኝዎ ተልኳል። ቦርዱ ያረጋግጣል።</small>';
   document.getElementById('confDetail').innerHTML=`
@@ -927,6 +1023,19 @@ function doUpload(){
   rmFile();
   document.getElementById('evSel').value='';
   document.getElementById('upNotes').value='';
+}
+
+function readFileAsBase64(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>{
+      const result=String(reader.result||'');
+      const comma=result.indexOf(',');
+      resolve(comma>=0?result.slice(comma+1):result);
+    };
+    reader.onerror=()=>reject(new Error('Could not read file.'));
+    reader.readAsDataURL(file);
+  });
 }
 
 // NOTIFICATIONS
@@ -1102,6 +1211,16 @@ document.getElementById('receiptFileInput')?.addEventListener('change', function
 });
 
 loadStoredSession();
+
+function openPortalDeepLink(){
+  const hash=(location.hash||'').replace(/^#/,'').toLowerCase();
+  if(hash==='receipt'||hash==='upload'){
+    if(document.getElementById('portalApp')?.style.display!=='none'){
+      tab('upload');
+    }
+  }
+}
+window.addEventListener('hashchange',openPortalDeepLink);
 </script>
 </body>
 </html>

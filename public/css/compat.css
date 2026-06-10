@@ -184,9 +184,27 @@ body.app-portal .auth-wrap .btn-main {
 .inv-body, .he-inv-body { padding: 14px; }
 .inv-for, .he-inv-name { font-weight: 600; font-size: 15px; margin-bottom: 8px; }
 .inv-foot, .he-inv-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.inv-btns { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.inv-btns-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+  max-width: 240px;
+}
+.inv-btns-stack .btn-pay {
+  width: 100%;
+  justify-content: center;
+}
 .inv-amt, .he-inv-amt { font-size: 22px; font-weight: 700; color: var(--red); }
 .inv-amt.paid { color: var(--green); font-size: 18px; }
-.btn-pay { background: var(--green); color: #fff; padding: 10px 16px; border-radius: var(--radius-sm); font-weight: 600; font-size: 14px; border: none; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; min-height: 44px; }
+.btn-pay { background: var(--green); color: #fff; padding: 10px 16px; border-radius: var(--radius-sm); font-weight: 600; font-size: 14px; border: none; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; min-height: 44px; }
+.btn-pay-gold {
+  background: linear-gradient(135deg, var(--gold-dark), var(--gold));
+  color: #1a1a1a;
+}
+.btn-pay-gold:hover { filter: brightness(1.05); }
 .btn-receipt { background: var(--gold); color: var(--text); padding: 10px 14px; border-radius: var(--radius-sm); font-size: 14px; border: none; cursor: pointer; min-height: 44px; }
 .btn-paid-badge { background: var(--green-soft); color: var(--green-dark); padding: 8px 12px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600; }
 .inv-due { font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 20px; }

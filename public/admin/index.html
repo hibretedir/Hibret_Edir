@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Board Admin — Hibret Edir</title>
-<link rel="stylesheet" href="/css/admin-tracker.css?v=admin3">
+<title>Board Admin Page — Hibret Edir</title>
+<link rel="stylesheet" href="/css/admin-tracker.css?v=admin6">
 </head>
 <body class="app-admin tracker">
 
@@ -13,7 +13,7 @@
     <div class="admin-login-brand">
       <img src="/logo.png" alt="Hibret Edir">
       <div>
-        <div class="admin-login-title">Board Admin</div>
+        <div class="admin-login-title">Board Admin Page</div>
         <div class="admin-login-sub">Sign in to manage members &amp; invoices</div>
       </div>
     </div>
@@ -32,7 +32,7 @@
       <div class="tracker-logo"><img src="/logo.png" alt="HE"></div>
       <div>
         <div class="sidebar-brand-name">Hibret Edir</div>
-        <div class="sidebar-brand-sub">Board Admin</div>
+        <div class="sidebar-brand-sub">Board Admin Page</div>
       </div>
     </div>
     <div class="sidebar-section">
@@ -49,8 +49,18 @@
       </button>
       <button type="button" class="sidebar-nav accent-red" id="nav-applications" onclick="switchView('applications')">
         <span class="sidebar-nav-icon">✓</span>
-        <span>Applications</span>
+        <span>Approval</span>
         <span class="sidebar-badge" id="sb-applications">—</span>
+      </button>
+      <button type="button" class="sidebar-nav accent-gold" id="nav-receipts" onclick="switchView('receipts')">
+        <span class="sidebar-nav-icon">📄</span>
+        <span>Receipts</span>
+        <span class="sidebar-badge" id="sb-receipts">—</span>
+      </button>
+      <button type="button" class="sidebar-nav accent-gold" id="nav-messages" onclick="switchView('messages')">
+        <span class="sidebar-nav-icon">✉</span>
+        <span>Messages</span>
+        <span class="sidebar-badge" id="sb-messages">—</span>
       </button>
     </div>
     <div class="sidebar-section">
@@ -81,7 +91,7 @@
       <img src="/logo.png" alt="Hibret Edir Association">
       <div class="tracker-page-top-text">
         <div class="tracker-page-top-name">Hibret Edir Association</div>
-        <div class="tracker-page-top-sub">Board Admin</div>
+        <div class="tracker-page-top-sub">Board Admin Page</div>
       </div>
     </div>
     <div class="tracker-app" id="trackerApp">
@@ -94,6 +104,8 @@
   <button type="button" data-view="invoices" onclick="switchView('invoices')">Invoices</button>
   <button type="button" data-view="members" onclick="switchView('members')">Members</button>
   <button type="button" data-view="applications" onclick="switchView('applications')">Approval</button>
+  <button type="button" data-view="receipts" onclick="switchView('receipts')">Receipts</button>
+  <button type="button" data-view="messages" onclick="switchView('messages')">Messages</button>
   <button type="button" data-view="events" onclick="switchView('events')">Summary</button>
   <button type="button" data-view="payouts" onclick="switchView('payouts')">Payouts</button>
   <button type="button" data-view="activity" onclick="switchView('activity')">Log</button>
@@ -129,6 +141,7 @@
     </div>
     <div class="modal-body" id="modalMemberBody"></div>
     <div class="modal-footer">
+      <button class="btn danger" type="button" onclick="adminResetMemberPin()">Reset PIN</button>
       <button class="btn" type="button" onclick="closeModal('memberModal')">Close</button>
       <button class="btn primary" type="button" onclick="saveMemberEdit()">Save Changes</button>
     </div>
@@ -188,10 +201,31 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="receiptModal">
+  <div class="modal modal-wide">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="receiptModalTitle">Review Receipt</div>
+        <div style="color:var(--tk-muted);font-size:11px;margin-top:2px" id="receiptModalSub"></div>
+      </div>
+      <button class="modal-close" onclick="closeModal('receiptModal')" type="button">✕</button>
+    </div>
+    <div class="modal-body" id="receiptModalBody"></div>
+    <div class="modal-footer">
+      <button class="btn danger" type="button" id="receiptRejectBtn" onclick="rejectReceiptReview()">Reject</button>
+      <button class="btn" type="button" onclick="closeModal('receiptModal')">Close</button>
+      <button class="btn primary" type="button" id="receiptApproveBtn" onclick="approveReceiptReview()">Approve &amp; Mark Paid</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const MEMBERS = [];
 const INVOICES = [];
 const APPLICATIONS = [];
+const CONTACT_MESSAGES = [];
+const PIN_RESET_REQUESTS = [];
+const RECEIPTS = [];
 const ACTIVITY = [];
 const PAYOUTS = [];
 const API_BASE = '/.netlify/functions';
@@ -216,8 +250,11 @@ let memberSearch = '';
 let editingMemberId = null;
 let reviewingApplicationId = null;
 let reviewingPayoutId = null;
+let reviewingReceiptId = null;
 let payoutFilter = 'open';
 let appFilter = 'pending';
+let receiptFilter = 'pending';
+let messagesFilter = 'contact';
 
 function getAdminToken() {
   return localStorage.getItem(ADMIN_TOKEN_KEY);
@@ -379,21 +416,27 @@ async function fetchAdminData() {
   }
   try {
     const appsRes = await apiGet('apply/applications');
-    APPLICATIONS.splice(0, APPLICATIONS.length, ...(appsRes?.applications || []));
-    if (!APPLICATIONS.some(a => a.kind === 'beneficiary_change')) {
+    const merged = [...(appsRes?.applications || [])];
+    if (!merged.some(a => a.kind === 'beneficiary_change')) {
       try {
         const crRes = await apiGet('apply/change-requests');
         const extra = (crRes?.change_requests || []).filter(
-          cr => !APPLICATIONS.some(a => a.change_request_id === cr.change_request_id)
+          cr => !merged.some(a => a.change_request_id === cr.change_request_id)
         );
-        APPLICATIONS.push(...extra);
-      } catch { /* change-requests list optional */ }
+        merged.push(...extra);
+      } catch { /* optional */ }
     }
-    APPLICATIONS.sort((a, b) => {
+    const seen = new Set();
+    APPLICATIONS.splice(0, APPLICATIONS.length, ...merged.filter(a => {
+      const key = String(a.id);
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).sort((a, b) => {
       const da = a.submitted_at ? new Date(a.submitted_at).getTime() : 0;
       const db = b.submitted_at ? new Date(b.submitted_at).getTime() : 0;
       return db - da;
-    });
+    }));
   } catch {
     try {
       const crRes = await apiGet('apply/change-requests');
@@ -401,6 +444,24 @@ async function fetchAdminData() {
     } catch {
       APPLICATIONS.splice(0, APPLICATIONS.length);
     }
+  }
+  try {
+    const msgRes = await apiGet('apply/contact-messages');
+    CONTACT_MESSAGES.splice(0, CONTACT_MESSAGES.length, ...(msgRes?.messages || []));
+  } catch {
+    CONTACT_MESSAGES.splice(0, CONTACT_MESSAGES.length);
+  }
+  try {
+    const pinRes = await apiGet('auth/pin-reset-requests');
+    PIN_RESET_REQUESTS.splice(0, PIN_RESET_REQUESTS.length, ...(pinRes?.requests || []));
+  } catch {
+    PIN_RESET_REQUESTS.splice(0, PIN_RESET_REQUESTS.length);
+  }
+  try {
+    const recRes = await apiGet('receipts');
+    RECEIPTS.splice(0, RECEIPTS.length, ...(recRes?.receipts || []));
+  } catch {
+    RECEIPTS.splice(0, RECEIPTS.length);
   }
   try {
     const actRes = await apiGet('portal/activity?limit=150');
@@ -468,14 +529,18 @@ function getInvFiltered() {
 
 function trackerHeaderHtml(stats) {
   const sectionTitle = currentView === 'members' ? 'Members CRM'
-    : currentView === 'applications' ? 'Membership Applications'
+    : currentView === 'applications' ? 'Approval'
+    : currentView === 'receipts' ? 'Uploaded Receipts'
+    : currentView === 'messages' ? 'Contact Messages'
     : currentView === 'events' ? 'Event Summary'
     : currentView === 'payouts' ? 'Payout Fund'
     : currentView === 'activity' ? 'Activity Log'
     : 'Invoice Payment Tracker';
   const showOutstanding = currentView === 'invoices';
   const subtitle = currentView === 'members' ? `${MEMBERS.length} members on file`
-    : currentView === 'applications' ? `${APPLICATIONS.filter(a => a.status === 'Submitted' || a.status === 'Under Review').length} pending review`
+    : currentView === 'applications' ? `${APPLICATIONS.filter(a => a.status === 'Submitted' || a.status === 'Under Review' || a.status === 'Pending').length} pending review`
+    : currentView === 'receipts' ? `${RECEIPTS.filter(r => r.status === 'Pending').length} pending review`
+    : currentView === 'messages' ? `${PIN_RESET_REQUESTS.filter(r => r.status === 'Pending').length} PIN resets · ${CONTACT_MESSAGES.length} contact`
     : currentView === 'events' ? `${stats.events} passed away · ${stats.total} invoices`
     : currentView === 'payouts' ? `${PAYOUTS.filter(p => p.status !== 'Paid Out').length} open · $15,000 per event`
     : currentView === 'activity' ? `${ACTIVITY.length} recent actions logged`
@@ -533,11 +598,16 @@ function updateSidebar() {
   if (membersEl) membersEl.textContent = MEMBERS.length ? activeMembers : '—';
   const appsEl = document.getElementById('sb-applications');
   if (appsEl) appsEl.textContent = APPLICATIONS.filter(a => ['Submitted', 'Under Review', 'Pending'].includes(a.status)).length || '—';
+  const recEl = document.getElementById('sb-receipts');
+  if (recEl) recEl.textContent = RECEIPTS.filter(r => r.status === 'Pending').length || '—';
+  const msgEl = document.getElementById('sb-messages');
+  const pendingPins = PIN_RESET_REQUESTS.filter(r => r.status === 'Pending').length;
+  if (msgEl) msgEl.textContent = (CONTACT_MESSAGES.length + pendingPins) || '—';
   const payoutsEl = document.getElementById('sb-payouts');
   if (payoutsEl) payoutsEl.textContent = PAYOUTS.filter(p => p.status !== 'Paid Out').length || '—';
   if (footerEl) footerEl.textContent = reportLabel.replace('Report as of ', 'Data as of ');
 
-  ['invoices', 'members', 'applications', 'events', 'payouts', 'activity'].forEach(v => {
+  ['invoices', 'members', 'applications', 'receipts', 'messages', 'events', 'payouts', 'activity'].forEach(v => {
     const el = document.getElementById('nav-' + v);
     if (el) el.classList.toggle('active', currentView === v);
   });
@@ -802,14 +872,14 @@ function renderApplicationsView() {
       ? `<div class="tracker-member-name">${esc(a.beneficiary_member?.name || '—')}</div><div class="tracker-member-email">${esc(a.beneficiary_member?.relationship || 'Beneficiary')}</div>`
       : `<div class="tracker-member-name">${esc(a.waiting_list?.full_name || '—')}</div><div class="tracker-member-email">Waiting list</div>`;
     const typeBadge = isBen ? '<span class="tracker-event-badge">Beneficiary</span>' : '<span class="tracker-event-badge">Membership</span>';
-    return `<tr class="data-row data-row-clickable" onclick="openApplicationReview(${JSON.stringify(a.id)})" role="button" tabindex="0" onkeydown="if(event.key==='Enter')openApplicationReview(${JSON.stringify(a.id)})">
+    return `<tr class="data-row data-row-clickable" onclick='openApplicationReview(${JSON.stringify(a.id)})' role="button" tabindex="0" onkeydown="if(event.key==='Enter')openApplicationReview(${JSON.stringify(a.id)})">
       <td><div class="tracker-member-name">${esc(a.member_full_name)}</div><div class="tracker-member-email">${esc(a.email || a.waiting_list?.email || '—')}</div></td>
       <td>${typeBadge}</td>
       <td>${secondCol}</td>
       <td><span class="tracker-date">${esc(fmtDate(a.submitted_at))}</span></td>
       <td><span class="tracker-status ${statusClass}"><span class="tracker-status-dot"></span>${esc(a.status)}</span></td>
       <td><span class="tracker-inv-num">${isBen ? (a.is_new_beneficiary ? 'New' : 'Update') : `${done}/4`}</span></td>
-      <td><button type="button" class="tracker-mark-btn" onclick="event.stopPropagation();openApplicationReview(${JSON.stringify(a.id)})">${a.status === 'Approved' ? 'View' : 'Review'}</button></td>
+      <td><button type="button" class="tracker-mark-btn" onclick='event.stopPropagation();openApplicationReview(${JSON.stringify(a.id)})'>${a.status === 'Approved' ? 'View' : 'Review'}</button></td>
     </tr>`;
   }).join('') : '';
 
@@ -819,7 +889,7 @@ function renderApplicationsView() {
       <div class="tracker-stat"><div class="tracker-stat-lbl">Pending Review</div><div class="tracker-stat-val orange">${pending}</div></div>
       <div class="tracker-stat"><div class="tracker-stat-lbl">Approved</div><div class="tracker-stat-val green">${approved}</div></div>
       <div class="tracker-stat"><div class="tracker-stat-lbl">Rejected</div><div class="tracker-stat-val">${rejected}</div></div>
-      <div class="tracker-stat"><div class="tracker-stat-lbl">Total Applications</div><div class="tracker-stat-val">${APPLICATIONS.length}</div></div>
+      <div class="tracker-stat"><div class="tracker-stat-lbl">Total</div><div class="tracker-stat-val">${APPLICATIONS.length}</div></div>
     </div>
     <nav class="tracker-tabs">
       <button type="button" class="tracker-tab${appFilter === 'pending' ? ' active' : ''}" onclick="appFilter='pending';render()">Pending</button>
@@ -1420,6 +1490,224 @@ async function holdPayoutCase() {
   }
 }
 
+function getReceiptsFiltered() {
+  return RECEIPTS.filter(r => {
+    if (receiptFilter === 'pending' && r.status !== 'Pending') return false;
+    if (receiptFilter === 'approved' && r.status !== 'Approved') return false;
+    if (receiptFilter === 'rejected' && r.status !== 'Rejected') return false;
+    return true;
+  });
+}
+
+function receiptPreviewHtml(r) {
+  if (!r.file_preview) return '<div class="tracker-empty" style="padding:12px">No file attached</div>';
+  if (r.file_preview.startsWith('data:application/pdf')) {
+    return `<iframe class="receipt-preview-pdf" src="${r.file_preview}" title="Receipt PDF"></iframe>`;
+  }
+  return `<img class="receipt-preview-img" src="${r.file_preview}" alt="Receipt upload">`;
+}
+
+function openReceiptReview(id) {
+  reviewingReceiptId = id;
+  const r = RECEIPTS.find(x => x.id === id);
+  if (!r) return;
+  document.getElementById('receiptModalTitle').textContent = r.member_name || 'Receipt';
+  document.getElementById('receiptModalSub').textContent = `Invoice #${r.invoice_number || '—'} · ${r.payment_method || '—'} · ${esc(r.status)}`;
+  document.getElementById('receiptModalBody').innerHTML = `
+    <div class="receipt-review-grid">
+      <div class="receipt-review-meta">
+        <div class="fg"><label>Member</label><div>${esc(r.member_name || '—')}${r.member_number ? ` <span class="tracker-member-email">#${esc(r.member_number)}</span>` : ''}</div></div>
+        <div class="fg"><label>Invoice</label><div>${r.invoice_number ? `#${esc(r.invoice_number)}` : '—'}</div></div>
+        <div class="fg"><label>Paying for</label><div>${esc(r.deceased_name || '—')}</div></div>
+        <div class="fg"><label>Payment method</label><div>${esc(r.payment_method || '—')}</div></div>
+        <div class="fg"><label>Amount</label><div>${r.amount != null ? fmtMoney(r.amount) : '—'}</div></div>
+        <div class="fg"><label>Submitted</label><div>${esc(fmtDate(r.submitted_at))}</div></div>
+        <div class="fg"><label>Status</label><div><span class="tracker-status ${r.status === 'Approved' ? 'paid' : r.status === 'Rejected' ? 'unpaid' : 'warn'}"><span class="tracker-status-dot"></span>${esc(r.status)}</span></div></div>
+        ${r.notes ? `<div class="fg" style="grid-column:1/-1"><label>Notes</label><div class="msg-detail-body">${esc(r.notes)}</div></div>` : ''}
+      </div>
+      <div class="receipt-review-file">${receiptPreviewHtml(r)}</div>
+    </div>`;
+  const approveBtn = document.getElementById('receiptApproveBtn');
+  const rejectBtn = document.getElementById('receiptRejectBtn');
+  const done = r.status === 'Approved' || r.status === 'Rejected';
+  if (approveBtn) {
+    approveBtn.style.display = done ? 'none' : '';
+    approveBtn.disabled = false;
+  }
+  if (rejectBtn) rejectBtn.style.display = done ? 'none' : '';
+  document.getElementById('receiptModal').classList.add('open');
+}
+
+async function approveReceiptReview() {
+  if (!reviewingReceiptId) return;
+  try {
+    await apiPost('receipts/' + reviewingReceiptId + '/approve');
+    closeModal('receiptModal');
+    await fetchAdminData();
+    render();
+  } catch {
+    alert('Could not approve receipt.');
+  }
+}
+
+async function rejectReceiptReview() {
+  if (!reviewingReceiptId) return;
+  if (!confirm('Reject this receipt upload? The member may need to resubmit.')) return;
+  try {
+    await apiPost('receipts/' + reviewingReceiptId + '/reject');
+    closeModal('receiptModal');
+    await fetchAdminData();
+    render();
+  } catch {
+    alert('Could not reject receipt.');
+  }
+}
+
+function renderReceiptsView() {
+  const stats = getStats();
+  const filtered = getReceiptsFiltered();
+  const pending = RECEIPTS.filter(r => r.status === 'Pending').length;
+  const approved = RECEIPTS.filter(r => r.status === 'Approved').length;
+  const rejected = RECEIPTS.filter(r => r.status === 'Rejected').length;
+
+  const rows = filtered.length ? filtered.map(r => {
+    const statusClass = r.status === 'Approved' ? 'paid' : r.status === 'Rejected' ? 'unpaid' : 'warn';
+    return `<tr class="data-row data-row-clickable" onclick="openReceiptReview(${r.id})" role="button" tabindex="0" onkeydown="if(event.key==='Enter')openReceiptReview(${r.id})">
+      <td><div class="tracker-member-name">${esc(r.member_name || '—')}</div><div class="tracker-member-email">${r.member_number ? '#' + esc(r.member_number) : esc(r.payment_method || '—')}</div></td>
+      <td><span class="tracker-inv-num">${r.invoice_number ? '#' + esc(r.invoice_number) : '—'}</span></td>
+      <td>${esc(r.deceased_name || '—')}</td>
+      <td>${esc(r.payment_method || '—')}</td>
+      <td>${r.amount != null ? fmtMoney(r.amount) : '—'}</td>
+      <td><span class="tracker-date">${esc(fmtDate(r.submitted_at))}</span></td>
+      <td><span class="tracker-status ${statusClass}"><span class="tracker-status-dot"></span>${esc(r.status)}</span></td>
+      <td><button type="button" class="tracker-mark-btn" onclick="event.stopPropagation();openReceiptReview(${r.id})">${r.status === 'Pending' ? 'Review' : 'View'}</button></td>
+    </tr>`;
+  }).join('') : '';
+
+  document.getElementById('mainArea').innerHTML = `
+    ${trackerHeaderHtml(stats)}
+    <div class="tracker-stats">
+      <div class="tracker-stat"><div class="tracker-stat-lbl">Pending Review</div><div class="tracker-stat-val orange">${pending}</div></div>
+      <div class="tracker-stat"><div class="tracker-stat-lbl">Approved</div><div class="tracker-stat-val green">${approved}</div></div>
+      <div class="tracker-stat"><div class="tracker-stat-lbl">Rejected</div><div class="tracker-stat-val">${rejected}</div></div>
+      <div class="tracker-stat"><div class="tracker-stat-lbl">Total Uploads</div><div class="tracker-stat-val">${RECEIPTS.length}</div></div>
+    </div>
+    <nav class="tracker-tabs">
+      <button type="button" class="tracker-tab${receiptFilter === 'pending' ? ' active' : ''}" onclick="receiptFilter='pending';render()">Pending</button>
+      <button type="button" class="tracker-tab${receiptFilter === 'approved' ? ' active' : ''}" onclick="receiptFilter='approved';render()">Approved</button>
+      <button type="button" class="tracker-tab${receiptFilter === 'rejected' ? ' active' : ''}" onclick="receiptFilter='rejected';render()">Rejected</button>
+      <button type="button" class="tracker-tab${receiptFilter === 'all' ? ' active' : ''}" onclick="receiptFilter='all';render()">All</button>
+    </nav>
+    <div class="tracker-banner">Receipts uploaded by members after Zelle or Bank of America payments. Approving marks the linked invoice as paid.</div>
+    <div class="tracker-table-wrap">
+      ${filtered.length ? `<table class="tracker-table">
+        <thead><tr><th>Member</th><th>Invoice</th><th>Paying for</th><th>Method</th><th>Amount</th><th>Submitted</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>` : '<div class="tracker-empty">No receipts in this filter</div>'}
+    </div>`;
+}
+
+function renderMessagesView() {
+  const stats = getStats();
+  const pendingPins = PIN_RESET_REQUESTS.filter(r => r.status === 'Pending').length;
+
+  let bodyHtml = '';
+  if (messagesFilter === 'pin-reset') {
+    const pinRows = PIN_RESET_REQUESTS.length ? PIN_RESET_REQUESTS.map(r => {
+      const statusClass = r.status === 'Approved' ? 'paid' : r.status === 'Rejected' ? 'unpaid' : 'warn';
+      const canReview = r.status === 'Pending';
+      return `<tr class="data-row">
+        <td><div class="tracker-member-name">${esc(r.member_name || '—')}</div><div class="tracker-member-email">${r.member_number ? '#' + esc(r.member_number) : esc(r.phone || '—')}</div></td>
+        <td>${esc(r.phone || '—')}</td>
+        <td>${esc(r.notes || '—')}</td>
+        <td><span class="tracker-date">${esc(fmtDate(r.created_at))}</span></td>
+        <td><span class="tracker-status ${statusClass}"><span class="tracker-status-dot"></span>${esc(r.status)}</span></td>
+        <td>${canReview
+          ? `<button type="button" class="tracker-mark-btn" onclick="approvePinResetRequest(${r.id})">Approve</button>
+             <button type="button" class="tracker-mark-btn" style="margin-left:6px;opacity:.85" onclick="rejectPinResetRequest(${r.id})">Decline</button>`
+          : '—'}</td>
+      </tr>`;
+    }).join('') : '';
+    bodyHtml = `
+      <div class="tracker-banner">Members submit these from the portal when they forget their PIN. <strong>Approve</strong> clears their PIN so they can create a new one on sign-in.</div>
+      <div class="tracker-table-wrap">
+        ${PIN_RESET_REQUESTS.length ? `<table class="tracker-table">
+          <thead><tr><th>Member</th><th>Phone</th><th>Note</th><th>Requested</th><th>Status</th><th>Action</th></tr></thead>
+          <tbody>${pinRows}</tbody>
+        </table>` : '<div class="tracker-empty">No PIN reset requests yet. Run <code>npm run db:migrate</code> if the table is missing.</div>'}
+      </div>`;
+  } else {
+    const rows = CONTACT_MESSAGES.length ? CONTACT_MESSAGES.map(m => `
+      <tr class="data-row">
+        <td><div class="tracker-member-name">${esc(m.name || '—')}</div><div class="tracker-member-email">${esc(m.email || '—')}</div></td>
+        <td>${esc(m.phone || '—')}</td>
+        <td><div class="msg-preview">${esc(m.message || '').slice(0, 120)}${(m.message || '').length > 120 ? '…' : ''}</div></td>
+        <td><span class="tracker-date">${esc(fmtDate(m.created_at))}</span></td>
+      </tr>
+      <tr class="data-row msg-detail-row">
+        <td colspan="4"><div class="msg-detail-body">${esc(m.message || '')}</div></td>
+      </tr>`).join('') : '';
+    bodyHtml = `
+      <div class="tracker-banner">Messages from the public Contact Us form. They are saved here for all board members and also emailed to <strong>hibretedirtext@gmail.com</strong>.</div>
+      <div class="tracker-table-wrap">
+        ${CONTACT_MESSAGES.length ? `<table class="tracker-table">
+          <thead><tr><th>From</th><th>Phone</th><th>Message</th><th>Received</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>` : '<div class="tracker-empty">No contact messages yet. Run <code>npm run db:migrate</code> if the inbox table is missing.</div>'}
+      </div>`;
+  }
+
+  document.getElementById('mainArea').innerHTML = `
+    ${trackerHeaderHtml(stats)}
+    <div class="tracker-stats">
+      <div class="tracker-stat"><div class="tracker-stat-lbl">PIN Resets Pending</div><div class="tracker-stat-val orange">${pendingPins}</div></div>
+      <div class="tracker-stat"><div class="tracker-stat-lbl">Contact Messages</div><div class="tracker-stat-val">${CONTACT_MESSAGES.length}</div></div>
+    </div>
+    <nav class="tracker-tabs">
+      <button type="button" class="tracker-tab${messagesFilter === 'contact' ? ' active' : ''}" onclick="messagesFilter='contact';render()">Contact</button>
+      <button type="button" class="tracker-tab${messagesFilter === 'pin-reset' ? ' active' : ''}" onclick="messagesFilter='pin-reset';render()">PIN Reset${pendingPins ? ` (${pendingPins})` : ''}</button>
+    </nav>
+    ${bodyHtml}`;
+}
+
+async function approvePinResetRequest(id) {
+  if (!confirm('Approve this PIN reset? The member will need to create a new PIN on next sign-in.')) return;
+  try {
+    await apiPost('auth/pin-reset-requests/' + id + '/approve');
+    await fetchAdminData();
+    render();
+  } catch {
+    alert('Could not approve PIN reset.');
+  }
+}
+
+async function rejectPinResetRequest(id) {
+  if (!confirm('Decline this PIN reset request?')) return;
+  try {
+    await apiPost('auth/pin-reset-requests/' + id + '/reject');
+    await fetchAdminData();
+    render();
+  } catch {
+    alert('Could not decline PIN reset request.');
+  }
+}
+
+async function adminResetMemberPin() {
+  if (!editingMemberId) return;
+  const m = MEMBERS.find(x => x.id === editingMemberId);
+  const label = m ? (m.full_name || m.paypal_name || m.first || 'this member') : 'this member';
+  if (!confirm('Reset portal PIN for ' + label + '? They will create a new PIN on next sign-in.')) return;
+  try {
+    await apiPost('auth/admin/reset-pin', { memberId: editingMemberId });
+    alert('PIN cleared. Tell the member to sign in with their phone and create a new PIN.');
+    closeModal('memberModal');
+    await fetchAdminData();
+    render();
+  } catch (e) {
+    alert(e.message || 'Could not reset PIN.');
+  }
+}
+
 function renderActivityView() {
   const stats = getStats();
   const rows = ACTIVITY.length ? ACTIVITY.map(a => {
@@ -1450,6 +1738,8 @@ function render() {
   if (currentView === 'events') renderEventsView();
   else if (currentView === 'members') renderMembersView();
   else if (currentView === 'applications') renderApplicationsView();
+  else if (currentView === 'receipts') renderReceiptsView();
+  else if (currentView === 'messages') renderMessagesView();
   else if (currentView === 'payouts') renderPayoutsView();
   else if (currentView === 'activity') renderActivityView();
   else renderInvoicesView();

@@ -67,8 +67,15 @@ async function saveSnapshotPin(member, pinOrHash, isHash = false) {
   saveDevPins(pins);
 }
 
+async function clearSnapshotPin(member) {
+  const pins = loadDevPins();
+  delete pins[pinKey(member)];
+  saveDevPins(pins);
+}
+
 module.exports = {
   findSnapshotMember,
   saveSnapshotPin,
+  clearSnapshotPin,
   loadSnapshotMembers,
 };

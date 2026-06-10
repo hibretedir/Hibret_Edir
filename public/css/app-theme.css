@@ -140,6 +140,31 @@ body.app-portal .confirm-wrap .pin-input {
   color: #fca5a5;
 }
 
+.app-portal .inv-btns-stack .btn-pay {
+  font-family: var(--font);
+}
+
+.app-portal .auth-card .form-msg.ok {
+  display: none;
+  background: rgba(7, 137, 48, 0.2);
+  border: 1px solid rgba(7, 137, 48, 0.45);
+  color: #b8f0c8;
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.app-portal .auth-card textarea.form-input {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.app-portal .inv-btns-stack .btn-pay-gold {
+  box-shadow: 0 2px 8px rgba(252, 221, 9, 0.25);
+}
+
 .app-portal .auth-card .form-input::placeholder {
   color: #999;
 }

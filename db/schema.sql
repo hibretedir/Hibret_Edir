@@ -296,5 +296,35 @@ CREATE TABLE IF NOT EXISTS member_change_requests (
 CREATE INDEX IF NOT EXISTS idx_member_change_requests_member ON member_change_requests(member_id);
 CREATE INDEX IF NOT EXISTS idx_member_change_requests_status ON member_change_requests(status);
 
+-- Website / contact form messages (board inbox)
+CREATE TABLE IF NOT EXISTS contact_messages (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(200) NOT NULL,
+  email VARCHAR(220),
+  phone VARCHAR(32),
+  message TEXT NOT NULL,
+  source VARCHAR(50) NOT NULL DEFAULT 'website',
+  status VARCHAR(20) NOT NULL DEFAULT 'new',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_contact_messages_created ON contact_messages(created_at DESC);
+
+-- Member portal PIN reset requests (submitted when locked out)
+CREATE TABLE IF NOT EXISTS pin_reset_requests (
+  id SERIAL PRIMARY KEY,
+  member_id INTEGER REFERENCES members(id),
+  phone VARCHAR(32),
+  email VARCHAR(220),
+  member_name VARCHAR(200),
+  notes TEXT,
+  status VARCHAR(20) NOT NULL DEFAULT 'Pending',
+  reviewed_by INTEGER REFERENCES board_members(id),
+  reviewed_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_pin_reset_requests_status ON pin_reset_requests(status, created_at DESC);
+
 -- Migration (existing databases):
 -- CREATE TABLE IF NOT EXISTS member_change_requests (...);  -- see full definition above

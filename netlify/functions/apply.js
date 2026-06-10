@@ -7,6 +7,8 @@ const {
   notifyApplicationApproved,
   notifyApplicationRejected,
   notifyBoard,
+  notifyBeneficiaryChangeApproved,
+  notifyBeneficiaryChangeRejected,
 } = require('./notify');
 const {
   syncApplicationSubmitted,
@@ -823,6 +825,7 @@ async function listChangeRequests(db) {
       m.first_name, m.last_name, m.full_name, m.paypal_name, m.email, m.mobile, m.member_number
      FROM member_change_requests mcr
      JOIN members m ON m.id = mcr.member_id
+     WHERE NOT (mcr.status = 'Rejected' AND COALESCE(mcr.notes, '') LIKE '%Superseded%')
      ORDER BY mcr.submitted_at DESC NULLS LAST, mcr.id DESC`
   );
   return result.rows;
@@ -890,6 +893,15 @@ async function applyBeneficiaryPayload(db, memberId, payload) {
   }
 }
 
+async function fetchMemberForNotify(db, memberId) {
+  const result = await db.query(
+    `SELECT id, member_number, first_name, last_name, full_name, email, mobile, home_phone
+     FROM members WHERE id = $1 LIMIT 1`,
+    [memberId]
+  );
+  return result.rows[0] || null;
+}
+
 async function approveChangeRequest(id, body, actor) {
   const db = getDb();
   const existing = await db.query(
@@ -900,6 +912,7 @@ async function approveChangeRequest(id, body, actor) {
   const row = existing.rows[0];
   if (row.status === 'Approved') return json(409, { error: 'Already approved.' });
   const payload = parseJsonField(row.payload, {});
+  const previous = row.previous_payload ? parseJsonField(row.previous_payload, null) : null;
   await applyBeneficiaryPayload(db, row.member_id, payload);
   await db.query(
     `UPDATE member_change_requests SET status = 'Approved', reviewed_at = NOW(), reviewed_by = $1, notes = COALESCE($2, notes) WHERE id = $3`,
@@ -907,15 +920,30 @@ async function approveChangeRequest(id, body, actor) {
   );
   try {
     const { syncBeneficiaryUpdate } = require('./sync');
-    await syncBeneficiaryUpdate(db, row.member_id, payload, !row.previous_payload, actor, { pending: false });
+    await syncBeneficiaryUpdate(db, row.member_id, payload, !previous?.name, actor, { pending: false });
   } catch (err) {
     console.error('Approve change sync failed:', err);
+  }
+  try {
+    const member = await fetchMemberForNotify(db, row.member_id);
+    if (member) {
+      await notifyBeneficiaryChangeApproved(db, member, payload, !previous?.name, previous);
+    }
+  } catch (notifyErr) {
+    console.error('Beneficiary approve notification failed:', notifyErr);
   }
   return getChangeRequest(id);
 }
 
 async function rejectChangeRequest(id, body, actor) {
   const db = getDb();
+  const existing = await db.query(
+    `SELECT * FROM member_change_requests WHERE id = $1 LIMIT 1`,
+    [id]
+  );
+  if (!existing.rows.length) return json(404, { error: 'Change request not found.' });
+  const row = existing.rows[0];
+  const payload = parseJsonField(row.payload, {});
   const result = await db.query(
     `UPDATE member_change_requests
      SET status = 'Rejected', reviewed_at = NOW(), reviewed_by = $1, notes = COALESCE($2, notes)
@@ -924,6 +952,14 @@ async function rejectChangeRequest(id, body, actor) {
     [actor?.actor_label || 'Board', body.notes || null, id]
   );
   if (!result.rows.length) return json(404, { error: 'Change request not found.' });
+  try {
+    const member = await fetchMemberForNotify(db, row.member_id);
+    if (member) {
+      await notifyBeneficiaryChangeRejected(db, member, payload, body.notes || row.notes || null);
+    }
+  } catch (notifyErr) {
+    console.error('Beneficiary reject notification failed:', notifyErr);
+  }
   return getChangeRequest(id);
 }
 
@@ -944,17 +980,53 @@ async function submitContactForm(body) {
     '',
     message,
   ].filter(Boolean).join('\n');
+  let savedId = null;
   try {
     const db = getDb();
+    const insert = await db.query(
+      `INSERT INTO contact_messages (name, email, phone, message, source, status)
+       VALUES ($1, $2, $3, $4, 'website', 'new')
+       RETURNING id`,
+      [name, email || null, phone || null, message]
+    );
+    savedId = insert.rows[0]?.id;
     await notifyBoard({
       db,
       subject: `Hibret Edir contact form — ${name}`,
       text,
     });
   } catch (err) {
-    console.error('Contact notify failed:', err);
+    console.error('Contact save/notify failed:', err);
+    if (err.message?.includes('contact_messages')) {
+      try {
+        await notifyBoard({
+          db: getDb(),
+          subject: `Hibret Edir contact form — ${name}`,
+          text,
+        });
+      } catch (notifyErr) {
+        console.error('Contact notify fallback failed:', notifyErr);
+      }
+    }
   }
-  return json(200, { ok: true, message: 'Message sent to the board.' });
+  return json(200, { ok: true, message: 'Message sent to the board.', id: savedId });
+}
+
+async function listContactMessages() {
+  const db = getDb();
+  const result = await db.query(
+    `SELECT id, name, email, phone, message, source, status, created_at
+     FROM contact_messages
+     ORDER BY created_at DESC NULLS LAST, id DESC
+     LIMIT 200`
+  );
+  return json(200, { messages: result.rows });
+}
+
+function matchContactMessagesPath(path) {
+  const parts = path.replace(/\/$/, '').split('/').filter(Boolean);
+  if (parts[0] !== 'contact-messages') return null;
+  return { id: parts[1] ? Number(parts[1]) : null };
 }
 
 function matchChangeRequestPath(path) {
@@ -981,6 +1053,23 @@ exports.handler = async (event) => {
   const path = getPath(event);
   const appPath = matchApplicationPath(path);
   const changePath = matchChangeRequestPath(path);
+  const contactMsgPath = matchContactMessagesPath(path);
+
+  if (contactMsgPath && event.httpMethod === 'GET') {
+    const admin = verifyAdminRequest(event);
+    if (!admin) {
+      return json(401, { error: 'Admin authorization required. Please sign in.' });
+    }
+    try {
+      return await listContactMessages();
+    } catch (err) {
+      console.error('contact messages error:', err);
+      if (err.message?.includes('contact_messages') || err.message?.includes('does not exist')) {
+        return json(200, { messages: [] });
+      }
+      return json(500, { error: 'Could not load contact messages.' });
+    }
+  }
 
   if (changePath && ['GET', 'POST'].includes(event.httpMethod)) {
     const admin = verifyAdminRequest(event);

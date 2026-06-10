@@ -1,5 +1,5 @@
 const { getDb } = require('./db');
-const { notifyProfileUpdate, notifyBeneficiaryUpdate } = require('./notify');
+const { notifyProfileUpdate, notifyBeneficiaryUpdate, notifyBeneficiaryChangeRequested } = require('./notify');
 const { getActivityLog, getMemberJourney } = require('./audit');
 const {
   syncMemberFromAdminUpdate,
@@ -552,10 +552,11 @@ async function upsertMemberBeneficiary(memberId, body, actor, { requireApproval 
       await notifyBoard({
         db,
         subject: `Hibret Edir — beneficiary change pending approval: ${memberName}`,
-        text: `Member ${memberName} (#${member.member_number || member.id}) ${isNew ? 'requested to add' : 'requested to update'} a beneficiary:\n\nName: ${name}\nRelationship: ${relationship}\nPhone: ${phone}\n\nReview in Admin → Applications.`,
+        text: `Member ${memberName} (#${member.member_number || member.id}) ${isNew ? 'requested to add' : 'requested to update'} a beneficiary:\n\nName: ${name}\nRelationship: ${relationship}\nPhone: ${phone}\n\nReview in Admin → Approval.`,
       });
+      await notifyBeneficiaryChangeRequested(db, member, beneficiary, isNew, previous);
     } catch (err) {
-      console.error('Beneficiary request board notify failed:', err);
+      console.error('Beneficiary request notification failed:', err);
     }
     return {
       pending: true,

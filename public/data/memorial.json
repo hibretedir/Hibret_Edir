@@ -1,0 +1,11 @@
+{
+  "note": "Edit people[] to add or update names. Each entry: name (string), year (string, e.g. \"2024\"). Run node scripts/extract_memorial.js to refresh from invoice snapshot.",
+  "people": [
+    { "name": "Ato Brook Zewdie", "year": "2026" },
+    { "name": "W/ro Nigist Yimer", "year": "2025" },
+    { "name": "W/ro Abebech D. Mulugeta", "year": "2025" },
+    { "name": "Ato Dessalegn Woldemariam", "year": "2025" },
+    { "name": "Wzro Yeshe Kebede Amede", "year": "2025" },
+    { "name": "Wzro Banchiyider Mengesha", "year": "2024" }
+  ]
+}

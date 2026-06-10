@@ -1294,3 +1294,68 @@ body.tracker .btn.primary {
 .tracker-event-payout-btn:hover {
   background: rgba(252, 221, 9, 0.16);
 }
+
+.msg-preview {
+  font-size: 13px;
+  color: var(--tk-muted);
+  line-height: 1.5;
+}
+
+.msg-detail-row td {
+  padding-top: 0;
+  border-top: none;
+}
+
+.msg-detail-body {
+  white-space: pre-wrap;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--tk-text);
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--tk-border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+}
+
+.receipt-review-grid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(280px, 1.2fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.receipt-review-meta {
+  display: grid;
+  gap: 12px;
+}
+
+.receipt-review-file {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--tk-border);
+  border-radius: 8px;
+  padding: 10px;
+  min-height: 240px;
+}
+
+.receipt-preview-img {
+  display: block;
+  max-width: 100%;
+  max-height: 520px;
+  margin: 0 auto;
+  border-radius: 6px;
+}
+
+.receipt-preview-pdf {
+  width: 100%;
+  min-height: 420px;
+  border: none;
+  border-radius: 6px;
+  background: #fff;
+}
+
+@media (max-width: 768px) {
+  .receipt-review-grid {
+    grid-template-columns: 1fr;
+  }
+}
