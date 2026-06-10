@@ -46,8 +46,9 @@ function loadLocalEnv() {
 }
 
 function paypalApiBase() {
-  const env = String(process.env.PAYPAL_ENV || 'live').toLowerCase();
-  return env === 'sandbox' ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com';
+  const env = String(process.env.PAYPAL_ENV || '').toLowerCase();
+  if (env === 'sandbox') return 'https://api-m.sandbox.paypal.com';
+  return 'https://api-m.paypal.com';
 }
 
 module.exports = { loadLocalEnv, paypalApiBase };

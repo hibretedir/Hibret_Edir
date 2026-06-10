@@ -2,6 +2,10 @@
   publish = "public"
   functions = "netlify/functions"
 
+[build.environment]
+  # PAYPAL_ENV is a mode flag (not a credential); "live" false-matches aria-live, liveNotifs, etc.
+  SECRETS_SCAN_OMIT_KEYS = "PAYPAL_ENV"
+
 [functions]
   node_bundler = "esbuild"
   external_node_modules = ["pg", "bcryptjs", "jsonwebtoken", "dotenv", "node-fetch"]

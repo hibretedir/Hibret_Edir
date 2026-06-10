@@ -206,7 +206,7 @@ CREATE TABLE notifications (
 # PayPal API
 PAYPAL_CLIENT_ID=your_client_id_here
 PAYPAL_SECRET=your_secret_here
-PAYPAL_MODE=live  # or sandbox for testing
+PAYPAL_MODE=production  # or sandbox for testing
 
 # Database
 DATABASE_URL=postgresql://user:password@host:port/dbname

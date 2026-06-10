@@ -19,7 +19,7 @@ if (fs.existsSync(envPath)) {
 
 const clientId = process.env.PAYPAL_CLIENT_ID;
 const secret = process.env.PAYPAL_SECRET;
-const env = (process.env.PAYPAL_ENV || 'live').toLowerCase();
+const env = String(process.env.PAYPAL_ENV || '').toLowerCase();
 
 if (!clientId || !secret) {
   console.error('Missing PAYPAL_CLIENT_ID or PAYPAL_SECRET in .env');
