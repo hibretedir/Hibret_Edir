@@ -227,9 +227,9 @@
         <select class="form-select" id="evSel" required><option value="">Select person…</option></select>
       </div>
       <div class="upload-card">
-        <label>Payment Method</label>
+        <label>Payment Method <span class="req">*</span></label>
         <div class="method-grid">
-          <div class="method-opt sel" id="mZelle" onclick="selMethod('Zelle')">
+          <div class="method-opt" id="mZelle" onclick="selMethod('Zelle')">
             <div class="method-opt-icon">Z</div>
             <div class="method-opt-label">Zelle</div>
           </div>
@@ -422,12 +422,8 @@ const PAYPAL_INVOICE_BASE = 'https://www.paypal.com/invoice/p/#';
 const MY_INVOICES = [];
 const MY_ACTIVITY = [];
 let EDAR_EVENTS = [];
-let me = null, myPhone = '', myBeneficiary = null, pendingBeneficiaryChange = null, profEditKey = '', selMeth = 'Zelle', uploadedFile = null, curTab = 'home';
-const NOTIFS = [
-  {id:1,type:'urgent',icon:'•',title:'Payment Due — #30',msg:'Your $110 per-death contribution for Ato Brook Zewdie is overdue by 49 days. Please pay immediately.',time:'49 days ago',read:false},
-  {id:2,type:'info',icon:'📢',title:'New Memorial — #30',msg:'#30: Ato Brook Zewdie. PayPal invoice sent to your email.',time:'52 days ago',read:false},
-  {id:3,type:'green',icon:'✅',title:'Receipt Confirmed',msg:'Your receipt for #29 W/ro Nigist Yimer was confirmed by the board.',time:'3 months ago',read:true},
-];
+let me = null, myPhone = '', myBeneficiary = null, pendingBeneficiaryChange = null, profEditKey = '', selMeth = null, uploadedFile = null, curTab = 'home';
+let notifReadAt = 0;
 
 function getStoredToken(){
   return localStorage.getItem(TOKEN_KEY);
@@ -474,6 +470,7 @@ function buildUrl(path, params = {}) {
       url.searchParams.set(key, value);
     }
   });
+  url.searchParams.set('_', String(Date.now()));
   return url.toString();
 }
 
@@ -508,7 +505,7 @@ async function apiPut(path, body = {}) {
 async function fetchMemberActivity() {
   if (!getStoredToken()) return [];
   try {
-    const data = await apiGet('portal/activity');
+    const data = await apiGet('portal/activity', { limit: 100 });
     MY_ACTIVITY.splice(0, MY_ACTIVITY.length, ...(data.activity || []));
   } catch (error) {
     console.warn('Failed to fetch activity:', error);
@@ -573,7 +570,7 @@ async function fetchMemberInvoices() {
     return [];
   }
   try {
-    const data = await apiGet('portal/invoices', { memberId: me.id });
+    const data = await apiGet('portal/invoices', { memberId: me.id, limit: 2500 });
     if (Array.isArray(data.invoices)) {
       MY_INVOICES.splice(0, MY_INVOICES.length, ...data.invoices);
     }
@@ -583,8 +580,59 @@ async function fetchMemberInvoices() {
   return MY_INVOICES;
 }
 
+async function refreshPortalData() {
+  if (!getStoredToken()) return;
+  await fetchCurrentMember();
+  await Promise.all([
+    fetchMemberProfile(),
+    fetchMemberInvoices(),
+    fetchMemberActivity(),
+    fetchEdirEvents(),
+  ]);
+}
+
+function isInvoiceCancelled(inv) {
+  return String(inv?.status || '').toLowerCase().includes('cancel');
+}
+
+function isInvoicePaid(inv) {
+  if (isInvoiceCancelled(inv)) return false;
+  return String(inv?.status || '').toLowerCase() === 'paid';
+}
+
+function isInvoiceOutstanding(inv) {
+  if (isInvoiceCancelled(inv)) return false;
+  return !isInvoicePaid(inv);
+}
+
+function invoiceEventKey(inv) {
+  const ev = inv.event_number != null ? Number(inv.event_number) : null;
+  if (ev != null) return `ev:${ev}`;
+  const name = String(inv.deceased_name || inv.item || '').trim().toLowerCase();
+  if (name) return `name:${name}`;
+  return `inv:${inv.invoice_num || inv.id}`;
+}
+
+function dedupeMyInvoices(invoices) {
+  const byEvent = new Map();
+  for (const inv of invoices || []) {
+    const key = invoiceEventKey(inv);
+    const existing = byEvent.get(key);
+    if (!existing) {
+      byEvent.set(key, inv);
+      continue;
+    }
+    const existPaid = isInvoicePaid(existing);
+    const candPaid = isInvoicePaid(inv);
+    if (candPaid && !existPaid) byEvent.set(key, inv);
+    else if (!candPaid && existPaid) { /* keep existing */ }
+    else if ((Number(inv.invoice_num) || 0) >= (Number(existing.invoice_num) || 0)) byEvent.set(key, inv);
+  }
+  return Array.from(byEvent.values()).sort((a, b) => (Number(b.invoice_num) || 0) - (Number(a.invoice_num) || 0));
+}
+
 function getMyInvs() {
-  return MY_INVOICES;
+  return dedupeMyInvoices(MY_INVOICES);
 }
 
 // SCREENS
@@ -638,7 +686,10 @@ async function submitPinResetRequest(){
 function backPortal(){
   document.getElementById('sConfirm').style.display='none';
   document.getElementById('portalApp').style.display='flex';
-  tab('home');
+  refreshPortalData().then(()=>{
+    renderPortal();
+    tab('home', { skipRefresh: true });
+  });
 }
 
 // PHONE FORMAT
@@ -756,12 +807,9 @@ async function loginOK(){
   if(!me) return;
   document.getElementById('portalApp').style.display='flex';
   ['sPhone','sPin','sCreate'].forEach(s=>document.getElementById(s).style.display='none');
-  await fetchMemberProfile();
-  await fetchMemberInvoices();
-  await fetchMemberActivity();
-  await fetchEdirEvents();
+  await refreshPortalData();
   renderPortal();
-  tab('home');
+  tab('home', { skipRefresh: true });
   openPortalDeepLink();
 }
 
@@ -776,11 +824,11 @@ function renderPortal(){
   document.getElementById('profNm').textContent=m.first+' '+m.last;
 
   const myInvs=getMyInvs();
-  const unpaid=myInvs.filter(i=>i.status!=='Paid');
-  const paid=myInvs.filter(i=>i.status==='Paid');
-  document.getElementById('gsPaid').textContent=paid.length;
+  const unpaid=myInvs.filter(i=>isInvoiceOutstanding(i));
+  const paidDeaths=myInvs.filter(i=>isInvoicePaid(i) && i.event_number != null);
+  document.getElementById('gsPaid').textContent=paidDeaths.length;
   document.getElementById('gsOwed').textContent=unpaid.length;
-  const due=unpaid.reduce((s,i)=>s+i.amount_due,0);
+  const due=unpaid.reduce((s,i)=>s+Number(i.amount_due||0),0);
   document.getElementById('gsAmt').textContent=due>0?'$'+due:'$0';
 
   const owedCard=document.getElementById('gsOwedCard');
@@ -797,7 +845,8 @@ function renderPortal(){
   if(unpaid.length>0){badge.textContent=unpaid.length;badge.style.display='flex';}
   else badge.style.display='none';
 
-  const unreadN=NOTIFS.filter(n=>!n.read).length;
+  const liveNotifs=buildLiveNotifications();
+  const unreadN=liveNotifs.length+(MY_ACTIVITY.length && !notifReadAt ? 1 : 0);
   document.getElementById('notifDot').style.display=unreadN>0?'block':'none';
 
   // Home: first 3 unpaid
@@ -868,7 +917,7 @@ function daysOverdue(ds){
 
 function renderInvs(list){
   return list.map(inv=>{
-    const paid=inv.status==='Paid';
+    const paid=isInvoicePaid(inv);
     const d=daysOverdue(inv.date);
     let dueHtml='';
     if(!paid){
@@ -915,21 +964,49 @@ function formatDeceasedName(event){
   return (event.name||event.deceased_name||'').trim();
 }
 
+function resetReceiptPaymentMethod(){
+  selMeth=null;
+  const z=document.getElementById('mZelle');
+  const b=document.getElementById('mBofA');
+  if(z) z.classList.remove('sel');
+  if(b) b.classList.remove('sel');
+}
+
+function resetReceiptPersonSelect(){
+  const sel=document.getElementById('evSel');
+  if(sel) sel.value='';
+  window.__receiptInvoiceNum=undefined;
+}
+
+function resetReceiptUploadForm(){
+  resetReceiptPersonSelect();
+  resetReceiptPaymentMethod();
+}
+
 function prefill(invoiceNum){
   const inv=getMyInvs().find(i=>String(i.invoice_num)===String(invoiceNum));
-  if(inv) document.getElementById('evSel').value=eventPersonName(inv.item);
   window.__receiptInvoiceNum=invoiceNum;
-  tab('upload');
+  tab('upload',{keepReceiptPrefill:true});
+  if(inv) document.getElementById('evSel').value=eventPersonName(inv.item);
 }
 
 function goOutstandingInvoices(){
-  const unpaid=getMyInvs().filter(i=>i.status!=='Paid');
+  const unpaid=getMyInvs().filter(i=>isInvoiceOutstanding(i));
   if(!unpaid.length) return;
   tab('invoices');
 }
 
 // TABS
-function tab(t){
+async function tab(t,opts){
+  opts=opts||{};
+  if(t==='upload'){
+    resetReceiptPaymentMethod();
+    if(!opts.keepReceiptPrefill) resetReceiptPersonSelect();
+  }
+  if(!opts.skipRefresh && ['home','invoices','notifications','profile','upload'].includes(t)){
+    await refreshPortalData();
+    renderPortal();
+  }
   curTab=t;
   ['home','invoices','upload','profile','notifications'].forEach(x=>{
     const sc=document.getElementById('t'+x.charAt(0).toUpperCase()+x.slice(1));
@@ -986,6 +1063,7 @@ function rmFile(){
 function doUpload(){
   const personName=document.getElementById('evSel').value;
   if(!personName){alert('Please select which person you are paying for.');return;}
+  if(!selMeth){alert('Please select a payment method (Zelle or Direct Deposit).');return;}
   if(!uploadedFile){alert('Please add a photo or PDF of your receipt.');return;}
   submitReceiptUpload(personName);
 }
@@ -1021,7 +1099,7 @@ async function submitReceiptUpload(personName){
   document.getElementById('portalApp').style.display='none';
   document.getElementById('sConfirm').style.display='flex';
   rmFile();
-  document.getElementById('evSel').value='';
+  resetReceiptUploadForm();
   document.getElementById('upNotes').value='';
 }
 
@@ -1039,6 +1117,26 @@ function readFileAsBase64(file){
 }
 
 // NOTIFICATIONS
+function buildLiveNotifications() {
+  const items = [];
+  for (const inv of getMyInvs().filter(isInvoiceOutstanding)) {
+    const overdue = inv.date ? daysOverdue(inv.date) : 0;
+    const person = eventPersonName(inv.item || inv.deceased_name || '');
+    const evLabel = inv.event_number != null ? `#${inv.event_number}` : '';
+    const title = person
+      ? `Payment Due — ${evLabel ? evLabel + ' ' : ''}${person}`.trim()
+      : `Invoice #${inv.invoice_num || '—'}`;
+    items.push({
+      type: overdue > 45 ? 'urgent' : 'info',
+      icon: overdue > 45 ? '•' : '📢',
+      title,
+      msg: `$${Number(inv.amount_due || 110).toFixed(2)} outstanding${overdue > 0 ? ` · ${overdue} days since sent` : ''}`,
+      time: inv.date ? String(inv.date).split(' ')[0] : '',
+    });
+  }
+  return items;
+}
+
 function renderNotifs(){
   const el=document.getElementById('notifList');
   const activityHtml = MY_ACTIVITY.length ? `
@@ -1054,14 +1152,22 @@ function renderNotifs(){
         </div>`;
       }).join('')}
     </div>` : '';
-  if(!NOTIFS.length && !MY_ACTIVITY.length){el.innerHTML='<div class="empty-state"><div class="empty-icon">•</div><h3>No Notifications</h3><p>You are all caught up.</p></div>';return;}
-  el.innerHTML=activityHtml + NOTIFS.map(n=>`
-    <div class="notif-item ${n.type}" style="opacity:${n.read?.75:1}">
+  const liveNotifs = buildLiveNotifications();
+  if(!liveNotifs.length && !MY_ACTIVITY.length){
+    el.innerHTML='<div class="empty-state"><div class="empty-icon">•</div><h3>No Notifications</h3><p>You are all caught up.</p></div>';
+    return;
+  }
+  el.innerHTML=activityHtml + liveNotifs.map(n=>`
+    <div class="notif-item ${n.type}">
       <div class="notif-ico ${n.type==='urgent'?'urgent':n.type==='info'?'info':'green'}">${n.icon}</div>
       <div><div class="notif-ttl">${n.title}</div><div class="notif-msg">${n.msg}</div><div class="notif-time">${n.time}</div></div>
     </div>`).join('');
 }
-function markRead(){NOTIFS.forEach(n=>n.read=true);document.getElementById('notifDot').style.display='none';renderNotifs();}
+function markRead(){
+  notifReadAt=Date.now();
+  document.getElementById('notifDot').style.display='none';
+  renderNotifs();
+}
 
 function renderBeneficiary(){
   const empty=document.getElementById('benEmpty');
@@ -1221,6 +1327,12 @@ function openPortalDeepLink(){
   }
 }
 window.addEventListener('hashchange',openPortalDeepLink);
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  if (!me || document.getElementById('portalApp')?.style.display === 'none') return;
+  refreshPortalData().then(renderPortal).catch(() => {});
+});
 </script>
 </body>
 </html>

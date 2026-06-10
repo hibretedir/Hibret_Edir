@@ -73,46 +73,76 @@ async function findEventForDeceased(db, deceasedName) {
   return result.rows[0]?.id || null;
 }
 
+const RECEIPT_FROM = `
+  FROM receipts r
+  LEFT JOIN members m ON m.id = r.member_id
+  LEFT JOIN events e ON e.id = r.event_id
+  LEFT JOIN invoices i ON i.id = r.invoice_id
+`;
+
+const RECEIPT_LIST_SELECT = `
+  SELECT r.id, r.member_id, r.invoice_id, r.event_id, r.payment_method, r.amount, r.notes,
+    r.status, r.submitted_at, r.reviewed_at,
+    (r.file_url IS NOT NULL AND LENGTH(r.file_url) > 20) AS has_file,
+    m.first_name, m.last_name, m.full_name, m.paypal_name, m.member_number,
+    e.deceased_name AS event_deceased_name,
+    i.invoice_number
+  ${RECEIPT_FROM}
+`;
+
+const RECEIPT_DETAIL_SELECT = `
+  SELECT r.*,
+    m.first_name, m.last_name, m.full_name, m.paypal_name, m.member_number,
+    e.deceased_name AS event_deceased_name,
+    i.invoice_number
+  ${RECEIPT_FROM}
+`;
+
+function mapReceiptRow(row, { includePreview = false } = {}) {
+  const out = {
+    id: row.id,
+    member_id: row.member_id,
+    member_name: row.full_name || `${row.first_name || ''} ${row.last_name || ''}`.trim() || row.paypal_name,
+    member_number: row.member_number,
+    invoice_id: row.invoice_id,
+    invoice_number: row.invoice_number,
+    event_id: row.event_id,
+    deceased_name: row.event_deceased_name || null,
+    payment_method: row.payment_method,
+    amount: row.amount,
+    notes: row.notes,
+    status: row.status,
+    submitted_at: row.submitted_at,
+    reviewed_at: row.reviewed_at,
+    has_file: row.has_file === true || !!(row.file_url && row.file_url.length > 20),
+  };
+  if (includePreview) {
+    out.file_preview = row.file_url && row.file_url.startsWith('data:') ? row.file_url : null;
+  }
+  return out;
+}
+
 async function listReceipts(query) {
   const db = getDb();
   const status = query.status || null;
-  let sql = `
-    SELECT r.*,
-      m.first_name, m.last_name, m.full_name, m.paypal_name, m.member_number,
-      e.deceased_name AS event_deceased_name,
-      i.invoice_number
-    FROM receipts r
-    LEFT JOIN members m ON m.id = r.member_id
-    LEFT JOIN events e ON e.id = r.event_id
-    LEFT JOIN invoices i ON i.id = r.invoice_id
-  `;
+  let sql = RECEIPT_LIST_SELECT;
   const values = [];
   if (status) {
     sql += ` WHERE r.status = $1`;
     values.push(status);
   }
-  sql += ` ORDER BY r.submitted_at DESC NULLS LAST, r.id DESC LIMIT 200`;
+  sql += ` ORDER BY r.submitted_at DESC NULLS LAST, r.id DESC LIMIT 100`;
   const result = await db.query(sql, values);
   return json(200, {
-    receipts: result.rows.map((row) => ({
-      id: row.id,
-      member_id: row.member_id,
-      member_name: row.full_name || `${row.first_name || ''} ${row.last_name || ''}`.trim() || row.paypal_name,
-      member_number: row.member_number,
-      invoice_id: row.invoice_id,
-      invoice_number: row.invoice_number,
-      event_id: row.event_id,
-      deceased_name: row.event_deceased_name || null,
-      payment_method: row.payment_method,
-      amount: row.amount,
-      notes: row.notes,
-      status: row.status,
-      submitted_at: row.submitted_at,
-      reviewed_at: row.reviewed_at,
-      has_file: !!(row.file_url && row.file_url.length > 20),
-      file_preview: row.file_url && row.file_url.startsWith('data:') ? row.file_url : null,
-    })),
+    receipts: result.rows.map((row) => mapReceiptRow(row)),
   });
+}
+
+async function getReceipt(id) {
+  const db = getDb();
+  const result = await db.query(`${RECEIPT_DETAIL_SELECT} WHERE r.id = $1 LIMIT 1`, [id]);
+  if (!result.rows[0]) return json(404, { error: 'Receipt not found.' });
+  return json(200, { receipt: mapReceiptRow(result.rows[0], { includePreview: true }) });
 }
 
 async function submitReceipt(memberId, body) {
@@ -177,7 +207,8 @@ async function updateReceiptStatus(id, status, adminPayload) {
     );
   }
 
-  return listReceipts({});
+  const detail = await db.query(`${RECEIPT_DETAIL_SELECT} WHERE r.id = $1 LIMIT 1`, [id]);
+  return json(200, { receipt: mapReceiptRow(detail.rows[0] || row, { includePreview: false }) });
 }
 
 exports.handler = async (event) => {
@@ -194,6 +225,7 @@ exports.handler = async (event) => {
     if (event.httpMethod === 'GET') {
       const admin = verifyAdminRequest(event);
       if (!admin) return json(401, { error: 'Admin authorization required.' });
+      if (receiptId && !action) return await getReceipt(receiptId);
       return await listReceipts(event.queryStringParameters || {});
     }
 

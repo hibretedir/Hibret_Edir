@@ -1,6 +1,6 @@
 # Hibret Edir — Agent Context & Handoff
 
-**Last updated:** June 2026  
+**Last updated:** June 2026 (post `679151f`)  
 **Purpose:** Onboard a new Cursor agent quickly. Read this file first, then `HIBRET_EDIR_PROJECT_HANDOFF (1).md` for deeper business rules and by-laws.
 
 ---
@@ -38,33 +38,37 @@ hibretedir/
 ├── public/
 │   ├── index.html                 # Public website (multi-section SPA)
 │   ├── portal/index.html          # Member portal
-│   ├── admin/index.html           # Board admin CRM
+│   ├── admin/index.html           # Board Admin Page (CRM)
 │   ├── application/index.html     # Full membership application (step 2)
+│   ├── data/memorial.json          # In Remembrance roll (name + year) — editable
 │   ├── waiting-list-public.json   # Static fallback for public waiting list
 │   ├── member-stats.json          # Hero stats (active count)
 │   ├── css/
 │   │   ├── public-pages.css       # Public site styles
 │   │   ├── app-theme.css          # Portal theme
 │   │   ├── admin-tracker.css      # Admin dashboard
-│   │   ├── compat.css             # Shared fixes (portal greeting logo, etc.)
+│   │   ├── compat.css             # Shared fixes (invoice buttons, etc.)
 │   │   └── hibret.css             # Legacy/shared tokens
 │   └── admin/invoices-snapshot.json  # Offline invoice fallback for admin
 ├── netlify/functions/
-│   ├── auth.js                    # Member PIN + board login
+│   ├── auth.js                    # PIN, board login, PIN reset requests
 │   ├── admin-auth.js              # Shared JWT verify helpers
 │   ├── portal.js                  # Members, invoices, profile, beneficiary, activity
-│   ├── apply.js                   # Waiting list, address validate, applications
+│   ├── apply.js                   # Waiting list, applications, contact messages, change requests
+│   ├── receipts.js                # Member receipt upload + admin review
 │   ├── payouts.js                 # $15K payout document workflow
-│   ├── notify.js                  # SendGrid + Twilio
+│   ├── notify.js                  # SendGrid + Twilio (profile, beneficiary, applications)
 │   ├── sync.js                    # Cross-entity sync + audit triggers
 │   ├── audit.js                   # Activity log read/write
 │   ├── db.js                      # pg Pool singleton
 │   ├── geo.js                     # Address / radius helpers
-│   ├── paypal-sync.js             # PayPal invoice fetch (basic, not wired to DB cron)
-│   └── member-snapshot.js         # Static member export helper
+│   ├── paypal-sync.js             # PayPal pull → PostgreSQL (GET preview, POST sync)
+│   ├── paypal-env.js              # Local .env loader for PayPal creds
+│   └── member-snapshot.js         # Static member export + dev PIN file
 ├── db/schema.sql                  # PostgreSQL schema + migration comments
 ├── scripts/
 │   ├── start-dev.js               # Netlify dev (Google Drive–friendly)
+│   ├── extract_memorial.js        # Build memorial list from invoice snapshot
 │   ├── seed_from_exports.py       # Seed members/invoices from data/ exports
 │   ├── import_waiting_list.py     # Import waiting list xlsx → DB
 │   ├── build_invoice_snapshot.py  # Build admin/invoices-snapshot.json
@@ -77,7 +81,7 @@ hibretedir/
 └── HIBRET_EDIR_PROJECT_HANDOFF (1).md  # Original Claude handoff doc
 ```
 
-**Note:** `upload.js`, `members.js`, `events.js` from the original handoff **do not exist**. Receipt upload and event creation are **not backend-complete**.
+**Note:** `upload.js`, `members.js`, `events.js` from the original handoff **do not exist**. Receipt uploads use **`receipts.js`** (base64 in DB, not S3). Admin “create event → auto invoices” is still not built.
 
 ---
 
@@ -97,21 +101,16 @@ hibretedir/
 
 **Deploy rule:** Only push to GitHub / Netlify when the user says the batch of work is **complete and tested locally**. Do not proactively commit or push. Batch related changes into one deploy.
 
-**What costs credits:** Each production (and often preview) **build** on Netlify consumes credits — not local `netlify dev`. Prefer local testing first.
-
 ```bash
 npm install          # May fail on Google Drive — start-dev.js works around this
 cp .env.example .env # Fill DATABASE_URL, JWT_SECRET, etc.
+npm run db:migrate   # Apply schema.sql (new tables: contact_messages, pin_reset_requests, etc.)
 npm run dev          # → http://localhost:8888 (full stack, no Netlify credits)
 ```
 
 - **`scripts/start-dev.js`** installs deps under `%TEMP%/hibret-dev` when `node_modules` on Google Drive is broken.
-- Netlify Dev startup can be **slow** on Google Drive synced folders.
-- Static-only fallback: `npm run dev:static` (HTML/CSS only — APIs won’t run).
-
-**Board admin locally:** `ADMIN_AUTH_ENABLED` is **off by default** — admin opens without login. Set `ADMIN_AUTH_ENABLED=true` in `.env` to test board login locally.
-
-**Member auth locally:** Works with `DATABASE_URL` + seeded members. Dev PINs may exist in `netlify/functions/.dev-pins.json` (local only).
+- Board admin locally: `ADMIN_AUTH_ENABLED` is **off by default** — admin opens without login unless `ADMIN_AUTH_ENABLED=true`.
+- Member auth locally: `DATABASE_URL` + seeded members; dev PINs in `netlify/functions/.dev-pins.json` (local only, gitignored).
 
 ---
 
@@ -123,7 +122,7 @@ See `.env.example`. Critical ones:
 |----------|---------|
 | `DATABASE_URL` | Render Postgres — required for real data |
 | `JWT_SECRET` | Member + board tokens |
-| `ADMIN_AUTH_ENABLED` | `true` on Netlify production only (recommended) |
+| `ADMIN_AUTH_ENABLED` | `true` on Netlify production (recommended) |
 | `PAYPAL_CLIENT_ID` / `PAYPAL_SECRET` | PayPal sync |
 | `SENDGRID_API_KEY` / `SENDGRID_FROM_EMAIL` | Email |
 | `TWILIO_*` | SMS |
@@ -136,32 +135,36 @@ Notifications **skip gracefully** when SendGrid/Twilio are unset (console warn o
 
 ## 5. Database
 
-**Schema file:** `db/schema.sql`
+**Schema file:** `db/schema.sql` — run `npm run db:migrate` after pulling schema changes.
 
 **Tables in use:**
 
 | Table | Purpose |
 |-------|---------|
-| `members` | CRM — 219 members when seeded |
-| `beneficiaries` | Death beneficiary per member |
-| `events` | Funeral events (schema exists; not fully wired in admin) |
+| `members` | CRM — includes `pin_hash` for portal |
+| `beneficiaries` | Death beneficiary per member (primary) |
+| `events` | Funeral events (deceased name, event #, date) |
 | `invoices` | PayPal-linked invoices |
-| `receipts` | Schema for receipt uploads (backend handler missing) |
+| `receipts` | Zelle/BofA receipt uploads (base64 `file_url`, admin approve → mark invoice Paid) |
 | `waiting_list` | Public waiting list queue |
-| `membership_applications` | Step-2 application after waiting list invite |
-| `event_payouts` | **NEW** — $15K payout document + approval workflow |
+| `membership_applications` | Step-2 application + ID docs (JSONB) |
+| `member_change_requests` | Beneficiary changes pending board approval |
+| `contact_messages` | Public Contact Us form inbox |
+| `pin_reset_requests` | Member forgot-PIN requests |
+| `event_payouts` | $15K payout document + approval workflow |
 | `audit_log` | Activity log |
 | `board_members` | Board login accounts |
-| `notifications` | Notification log |
+| `notifications` | Email/SMS send log |
 
-**Migrations:** Bottom of `schema.sql` has commented `ALTER TABLE` / `CREATE TABLE` snippets for existing DBs. If a function errors on missing table/column, run the matching migration block.
+**Migrations:** Bottom of `schema.sql` has commented snippets for existing DBs. If a function errors on missing table, run `npm run db:migrate`.
 
 **Seeding:**
 
 ```bash
-npm run seed              # Python: members + invoices from data/ exports
+npm run seed
 npm run import:waiting-list:seed
-npm run build:invoice-snapshot   # Offline admin fallback
+npm run build:invoice-snapshot
+node scripts/extract_memorial.js   # Optional: refresh memorial names from snapshot
 ```
 
 ---
@@ -175,9 +178,14 @@ Base URL: `/.netlify/functions/<name>`
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/config` | — | `{ adminAuthRequired, memberAuthRequired }` |
-| POST | `/check-phone` | — | Member lookup by phone/email |
-| POST | `/create-pin` | — | Set bcrypt PIN |
-| POST | `/verify-pin` | — | Returns JWT |
+| POST | `/check-phone` | — | Member lookup; `{ exists, hasPin, member }` |
+| POST | `/create-pin` | — | Set/change bcrypt PIN (phone required) |
+| POST | `/verify-pin` | — | Returns member JWT |
+| POST | `/request-pin-reset` | — | Member locked out — creates `pin_reset_requests` row |
+| GET | `/pin-reset-requests` | Admin | List PIN reset requests |
+| POST | `/pin-reset-requests/:id/approve` | Admin | Clear PIN + mark approved |
+| POST | `/pin-reset-requests/:id/reject` | Admin | Decline request |
+| POST | `/admin/reset-pin` | Admin | `{ memberId }` — clear PIN from member modal |
 | GET | `/me` | Member JWT | Current member |
 | POST | `/admin/login` | — | Board JWT |
 | GET | `/admin/me` | Board JWT | Current admin |
@@ -191,11 +199,32 @@ Base URL: `/.netlify/functions/<name>`
 | POST | `/member` | Admin | Update member fields |
 | GET | `/invoices` | Admin or Member | Invoice list |
 | POST | `/invoice` | Admin | Mark invoice paid |
-| GET | `/profile` | Member | Profile + beneficiary |
-| PATCH | `/profile` | Member | Update profile (syncs to waiting list if linked) |
-| PUT | `/beneficiary` | Member | Upsert beneficiary |
+| GET | `/profile` | Member | Profile + beneficiary + pending change |
+| PATCH | `/profile` | Member | Update profile (notifies member + board) |
+| PUT | `/beneficiary` | Member | **Submits change request** for board approval (not direct save) |
+| GET | `/events` | Member | Deceased names for receipt dropdown |
 | GET | `/activity` | Admin or Member | Audit log entries |
 | GET | `/member/journey` | Admin | Timeline for one member |
+
+### `paypal-sync.js`
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/` | — | Preview normalized invoices from PayPal (debug) |
+| POST | `/` | Admin | Pull all PayPal invoices → upsert `invoices` table |
+
+Run locally: `npm run sync:paypal`. Admin UI: **Sync PayPal** on Invoices tab; auto re-sync if last sync &gt; 30 minutes ago.
+
+### `receipts.js`
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/` | Member | Upload receipt (base64 file, deceased name, optional `invoice_num`) |
+| GET | `/` | Admin | List receipts (optional `?status=Pending`) |
+| POST | `/:id/approve` | Admin | Approve → marks linked invoice Paid |
+| POST | `/:id/reject` | Admin | Reject upload |
+
+Max file 5 MB; JPG/PNG/PDF/WebP. Files stored as `data:` URLs in `receipts.file_url`.
 
 ### `apply.js`
 
@@ -204,47 +233,33 @@ Base URL: `/.netlify/functions/<name>`
 | Method | Path | Description |
 |--------|------|-------------|
 | POST | `/waiting-list` | Join waiting list (address validated) |
-| GET | `/waiting-list/status` | Public queue (names + position) |
-| GET | `/validate-address` | 50-mile radius check (Downtown LA) |
-| POST | `/verify` | Verify waiting list invite token for `/application` |
-| POST | `/membership` | Submit full membership application + ID docs (base64 JSONB) |
+| GET | `/waiting-list/status` | Public queue |
+| GET | `/validate-address` | 50-mile radius check |
+| POST | `/verify` | Waiting list invite token for `/application` |
+| POST | `/membership` | Submit application + ID docs |
+| POST | `/contact` | Contact Us form → `contact_messages` + email board |
 
-**Admin** (requires board JWT):
+**Admin** (board JWT):
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/applications` | List applications |
-| GET | `/applications/:id` | Detail + ID previews |
-| PATCH | `/applications/:id` | Save review checklist |
-| POST | `/applications/:id/approve` | Approve → creates member in CRM |
-| POST | `/applications/:id/reject` | Reject |
+| GET | `/applications` | Membership applications + merged beneficiary requests |
+| GET/PATCH/POST | `/applications/:id` | Review, approve, reject applications |
+| GET | `/change-requests` | Beneficiary change requests |
+| GET/POST | `/change-requests/:id` | Detail; `approve` / `reject` |
+| GET | `/contact-messages` | Contact form inbox |
 
-Application checklist (all 4 required to approve): name match, fields complete, CA ID uploaded, $200 fee paid.
+Beneficiary **approve** applies payload to `beneficiaries` and sends member email + SMS.
 
 ### `payouts.js` (admin only)
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/` | List payout cases |
-| POST | `/` | Open new case |
-| GET | `/:id` | Detail (includes document data for review) |
-| PATCH | `/:id` | Update beneficiary, checklist, upload docs, notes |
-| POST | `/:id/approve` | Board approval (2 required per by-laws) |
-| POST | `/:id/mark-paid` | Mark $15,000 sent |
+Same as before: list, open case, upload docs, checklist, 2 board approvals, mark $15,000 paid.
 
-**Payout document slots:** `deceased_ss`, `deceased_id`, `beneficiary_ss`, `beneficiary_id`, `death_certificate` (base64 in JSONB, max 5 MB, same pattern as application IDs).
+### `notify.js`
 
-**Required for board approval:** deceased ID, beneficiary ID, relationship verified. Death certificate and SSN card copies are **optional** (board checks if collected).
+Called on profile update, beneficiary submit/approve/reject, application events, PIN reset board alert, contact form.
 
-**Statuses:** `Documents Pending` → `Under Review` → `Approved` (2 approvals) → `Paid Out`. Also `On Hold`.
-
-### Supporting modules
-
-- **`notify.js`** — Called from apply/portal/sync on profile, beneficiary, application events.
-- **`sync.js`** — Keeps waiting list ↔ application ↔ member notes in sync; logs audit entries.
-- **`audit.js`** — `logActivity`, `getActivityLog`, `getMemberJourney`.
-- **`admin-auth.js`** — `verifyAdminRequest`, `verifyMemberRequest`, actor builders.
-- **`paypal-sync.js`** — Fetches PayPal invoices; **not** persisted to DB automatically yet.
+**Beneficiary sensitivity:** SMS avoids full beneficiary names where possible; all member messages include “call (424) 547-5594 if this was not you.”
 
 ---
 
@@ -252,115 +267,73 @@ Application checklist (all 4 required to approve): name match, fields complete, 
 
 ### Public site (`public/index.html`)
 
-Single-page app with hash routing (`#apply`, `#waitingliststatus`, etc.). English + Amharic (`lang-am` body class).
+Single-page app with hash routing (`#remembrance`, `#apply`, etc.). English + Amharic (`lang-am`).
 
-**Sections:** Announcement, How It Works, About, Payment, By-Laws, Waiting List (apply), Waiting List Status, Contact.
+**Sections:** Announcement (memorial letter template for current event), **In Remembrance** (`#remembrance`), How It Works, About, Payment, By-Laws, Waiting List, Waiting List Status, Contact (form first).
 
-**Completed UX work (recent sessions):**
+**In Remembrance:** Loads `public/data/memorial.json` — one card, vertical list of **name + year**. Update JSON when full historical list is available; `scripts/extract_memorial.js` pulls names from invoice snapshot (handles `# 27` spacing quirk).
 
-- Desktop hero: content starts under nav (not vertically centered empty space).
-- Nav: desktop shows Home, Member Login, hamburger, language; other links in dropdown.
-- Payment section: PayPal/Zelle as emoji icons; Direct Deposit CTA → `/portal/` upload; phone in copy.
-- By-Laws: in-page PDF viewer modal (`#bylawViewer`) instead of forced download.
-- Waiting list apply page: **embedded waiting list status** (search + table) before the signup form; removed old “3+ year wait” static row.
-- Full waiting list status section still at `#waitingliststatus` (shared API + `waiting-list-public.json` fallback).
-- Address validation on waitlist submit via `apply/validate-address`.
-
-**CSS:** `public-pages.css` (cache-bust query params on link, e.g. `?v=wlapply1`).
+**Other UX:** Colored Explore cards, memorial announcement `data-ann-*` template, by-laws PDF modal, waiting list shows next names in queue.
 
 ### Member portal (`public/portal/index.html`)
 
-**Wired to API:**
+**Wired:**
 
-- Phone + PIN login (`auth.js`)
-- Real invoices from DB (`portal/invoices`)
-- Profile edit (`portal/profile`)
-- Beneficiary CRUD (`portal/beneficiary`)
-- Activity feed in notifications tab (`portal/activity`)
+- Phone + PIN login; **Forgot PIN? Request a reset** → `auth/request-pin-reset`
+- Invoices from DB; unpaid cards: **gold** “If paid, Upload Receipt” + **green** “Pay via PayPal”
+- Receipt upload → `receipts` API (person dropdown from `portal/events`, links invoice if prefilled)
+- Profile edit; beneficiary edit → **pending board approval**
+- Change PIN in Profile (logged in)
+- Activity in notifications tab
 
-**Still mock / not wired:**
+**Partial mock:** Some static notification cards remain for demo.
 
-- Receipt upload (`doUpload()` shows confirmation UI only — **no `upload.js`**, no S3)
-- Static `NOTIFS` array for some notification cards
-- PayPal links use invoice data when available
+### Board Admin Page (`public/admin/index.html`)
 
-**UI fix:** Greeting card logo size capped in `compat.css` + `app-theme.css`.
-
-### Board admin (`public/admin/index.html`)
-
-**Views:** Invoices · Members CRM · Applications · Event Summary · **Payout Fund** · Activity Log
-
-**Data sources:**
-
-1. Live API when `DATABASE_URL` works (`portal/members`, `portal/invoices`, `apply/applications`, `payouts`, `portal/activity`)
-2. Fallback: `admin/invoices-snapshot.json` for invoices offline
+**Sidebar views:** Invoices · Members · **Approval** (applications + beneficiary changes) · **Receipts** · **Messages** (Contact + PIN Reset tabs) · Event Summary · Payout Fund · Activity Log
 
 **Features:**
 
-- Invoice tracker: filter, search, mark paid (session + API)
-- Member edit modal + member journey timeline
-- Application review modal with 4-item checklist + approve/reject → CRM
-- Event summary cards from invoice `item` field; **“$ Payout case”** button opens payout workflow
-- **Payout Fund:** open case, upload docs, checklist, 2 board approvals, mark paid
-- Activity log view
+- Invoice tracker + late matching by PayPal name
+- Member modal: edit CRM fields, journey timeline, **Reset PIN** button
+- Approval: membership apps (4-checklist) + beneficiary change requests (`cr-{id}` IDs)
+- Receipts: pending/approved/rejected; preview image/PDF; approve marks invoice Paid
+- Messages: contact inbox + PIN reset queue (approve clears PIN)
+- Payout Fund workflow (unchanged)
 
-**Admin auth fix:** Removed erroneous `compat.css` import that broke layout. Auth gated by `ADMIN_AUTH_ENABLED`.
+**Data:** Live API + `invoices-snapshot.json` fallback for invoices offline.
 
 ### Membership application (`public/application/index.html`)
 
-- Waiting list verification gate (`apply/verify`)
-- Full form with CA ID photo upload (member + spouse)
-- Submits to `apply/membership`
+Waiting list verify gate → full form → `apply/membership`.
 
 ---
 
 ## 8. Completed work (summary by phase)
 
-### Phase 1 — Frontends (DONE)
+### Phase 2–5 — Core platform (DONE)
 
-- Public website, portal UI, admin CRM UI deployed on Netlify.
+Auth, portal, admin CRM, applications, waiting list, notifications, audit, sync, payout fund.
 
-### Phase 2 — Backend foundation (LARGELY DONE)
+### Phase 6 — Recent (June 2026, commit `679151f`)
 
-- [x] PostgreSQL schema
-- [x] `auth.js` — PIN + board login
-- [x] `portal.js` — members, invoices, profile, beneficiary
-- [x] Seed scripts from PayPal/member exports
-- [x] Admin wired to live DB with snapshot fallback
-- [ ] Full production seed on Render (ops task)
-- [ ] All 219 members with PINs (ops task)
+- [x] **Receipt uploads** — `receipts.js` + portal + admin Receipts tab
+- [x] **In Remembrance** public page + `memorial.json`
+- [x] **PIN reset** — member request flow + admin inbox + member modal reset
+- [x] **Beneficiary approval** — member changes require board approve; email/SMS on submit, approve, reject
+- [x] **Contact messages** — public form → admin Messages tab
+- [x] **Memorial announcement** letter template on public site
+- [x] Portal invoice UX (stacked pay/upload buttons, gold/green)
+- [x] Admin labels: Board Admin Page, Approval tab
 
-### Phase 3 — PayPal (PARTIAL)
+### Still partial / ops
 
-- [x] `paypal-sync.js` basic fetch
-- [ ] Hourly cron sync to DB
-- [ ] Live portal invoice refresh from PayPal
-
-### Phase 4 — Applications & waiting list (DONE)
-
-- [x] Waiting list POST + public status API
-- [x] `waiting-list-public.json` static fallback
-- [x] Address 50-mile validation (`geo.js`)
-- [x] `/application` form + admin review + approve → member CRM
-- [x] ID documents stored in JSONB on `membership_applications`
-
-### Phase 5 — Notifications & audit (DONE)
-
-- [x] `notify.js` — SendGrid + Twilio
-- [x] `audit.js` + Activity Log in admin
-- [x] `sync.js` — cross-entity sync on profile/beneficiary/application/invoice changes
-- [x] Member journey in admin member modal
-
-### Phase 6 — Payout fund workflow (NEW — DONE in code, needs DB migration)
-
-- [x] `event_payouts` table
-- [x] `payouts.js` API
-- [x] Admin **Payout Fund** view + modal
-- [ ] Family-facing document upload (not built — board uploads only for now)
-
-### Public site polish (DONE)
-
-- Nav, hero, payment, by-laws viewer, waiting list status embed, cache busting.
+- [x] **PayPal → DB sync** — `paypal-sync.js` POST syncs all invoices; Admin **Sync PayPal** button; background sync every 30 min; `npm run sync:paypal`
+- [ ] Admin create event → bulk invoices (PayPal API create)
+- [ ] All members have portal PINs (ops)
+- [ ] Full memorial history in `memorial.json` (user to supply list)
+- [ ] S3 for receipts (optional; currently DB base64)
+- [ ] Production: add `PAYPAL_*` env vars on Netlify + run `db:migrate`
 
 ---
 
@@ -368,22 +341,22 @@ Single-page app with hash routing (`#apply`, `#waitingliststatus`, etc.). Englis
 
 | Item | Notes |
 |------|-------|
-| Receipt upload backend | `upload.js` missing; portal upload is UI-only |
-| Cloud storage | S3 vars in `.env.example` unused |
-| `events.js` | No admin “create event → auto 195 invoices” flow |
-| PayPal → DB sync | Manual/snapshot based today |
-| Twilio SMS bot | Phase 5 in handoff doc — not started |
-| Automated reminders | Day 3/7/14 unpaid — not started |
-| Registration fee PayPal link | Checklist item manual in admin |
-| `README.md` | Still says “coming soon” for several done features |
-| Domain cutover | hibretedir.com may still partially be Wix |
-| `event_payouts` migration | Must run on production Postgres before Payout Fund works live |
+| `events.js` | No admin “create event → auto 195 invoices” via PayPal API |
+| Automated payment reminders | Day 3/7/14 — not started |
+| Twilio SMS bot | Not started |
+| Registration fee PayPal ($200) after application approval | Partial |
+| Welcome email + digital membership card | Not started |
+| 4-month waiting period tracking | Not started |
+| Reporting (event collection, delinquency, semi-annual) | Not started |
+| Receipt storage at scale | Base64 in Postgres OK for now |
+| `README.md` | Partially outdated |
+| Production migrations | Run `npm run db:migrate` on Render after deploy |
 
 ---
 
 ## 10. Business rules (implement carefully)
 
-From by-laws / handoff — enforce in UI copy and validation where possible:
+From by-laws / handoff:
 
 - Ethiopian origin, **50 miles** of Downtown LA
 - **$200** one-time membership fee after waiting list invite
@@ -392,44 +365,40 @@ From by-laws / handoff — enforce in UI copy and validation where possible:
 - **$15,000** payout; **2 board approvals** required
 - **200** member cap
 - Coverage: member, spouse, children up to 26
+- **Beneficiary changes** require board approval (sensitive — always notify member)
 
 ---
 
 ## 11. Agent conventions
 
-1. **Minimal diffs** — match existing vanilla JS + CSS patterns; no unnecessary frameworks.
-2. **Bilingual** — public and portal strings need `.en` / `.am` pairs; Amharic font: Noto Sans Ethiopic.
+1. **Minimal diffs** — vanilla JS + CSS; match existing patterns.
+2. **Bilingual** — `.en` / `.am` pairs on public and portal strings.
 3. **Mobile first** — most members use phones.
-4. **Do not commit or push** unless the user explicitly asks. Batch complete features before deploy — **Netlify free tier has ~300 build credits/month**; local dev first (`npm run dev`).
+4. **Do not commit or push** unless the user explicitly asks. Netlify free tier ~300 build credits/month.
 5. **Do not commit** `.env`, secrets, or `data/` exports.
-6. **Database:** use timeouts, close connections (`db.js` Pool); handle missing tables gracefully in APIs.
-7. **Admin auth:** production should set `ADMIN_AUTH_ENABLED=true` on Netlify.
-8. **Sensitive data:** ID docs and payout docs stored as base64 in JSONB — never log full payloads; UI warns about SSN handling.
+6. **Database:** timeouts via `db.js` Pool; graceful empty responses if tables missing.
+7. **Production:** `ADMIN_AUTH_ENABLED=true` on Netlify.
+8. **Sensitive data:** ID/receipt/payout docs as base64 — never log full payloads.
 
 ---
 
 ## 12. Recent session changelog (for continuity)
 
-### Waiting list / public site
+### June 2026 — `679151f`
 
-- Removed “3+ Year Wait” requirement row from apply section.
-- Added **embedded waiting list status** on apply page (search, table, link to full list).
-- Shared `loadWaitingListStatus()` across apply + status sections.
+- Memorial roll on public site; 6 names from invoice data (#25–#30).
+- Receipt API + admin Receipts + portal upload linked to invoices.
+- PIN reset request (portal) + admin Messages → PIN Reset + Reset PIN on member.
+- Beneficiary email/SMS: on request submitted, board approved, board rejected.
+- Portal: gold upload / green PayPal invoice buttons.
+- Admin: “Board Admin Page”, Approval tab, Receipts tab.
 
-### Admin fixes
+### Earlier sessions
 
-- Board login no longer required locally unless `ADMIN_AUTH_ENABLED=true`.
-- Removed `compat.css` from admin (was breaking tracker layout).
-
-### Portal
-
-- Profile + beneficiary API wired; greeting logo size fixed.
-
-### Payout fund (latest)
-
-- New `event_payouts` schema + `payouts.js`.
-- Admin sidebar **Payout Fund** with full workflow.
-- Event cards link to open payout case.
+- Beneficiary approval workflow (`member_change_requests`).
+- Contact messages tab.
+- Memorial announcement template (Brook Zewdie).
+- Payout fund, waiting list embed, admin late invoice matching.
 
 ---
 
@@ -438,18 +407,18 @@ From by-laws / handoff — enforce in UI copy and validation where possible:
 | Problem | Likely cause |
 |---------|----------------|
 | Admin shows no invoices | No `DATABASE_URL`; run `build:invoice-snapshot` |
-| Applications empty | DB not seeded or no submissions yet |
-| Payout Fund 503 | `event_payouts` table not migrated |
-| Waiting list status empty | DB empty + missing `waiting-list-public.json` |
-| Netlify dev won't start | Google Drive + node_modules; use `start-dev.js` |
-| CORS/auth errors | Missing JWT or `ADMIN_AUTH_ENABLED` mismatch |
-| Notifications not sending | SendGrid/Twilio env vars unset (expected locally) |
+| Receipts / PIN reset / Messages empty | Run `npm run db:migrate` |
+| Memorial shows 4 not 6 names | Old `memorial.json`; run `extract_memorial.js` or edit JSON |
+| PIN reset 503 locally | No `DATABASE_URL` |
+| Beneficiary stuck “pending” | Board must approve in Admin → Approval |
+| Notifications not sending | SendGrid/Twilio unset (expected locally) |
+| Netlify dev slow | Google Drive sync; use `start-dev.js` |
 
 ---
 
 ## 14. Related documents
 
-- **`HIBRET_EDIR_PROJECT_HANDOFF (1).md`** — Original full handoff (business context, AI SMS bot spec, phase roadmap).
+- **`HIBRET_EDIR_PROJECT_HANDOFF (1).md`** — Original handoff (business, SMS bot spec, roadmap).
 - **`README.md`** — Deploy instructions (partially outdated).
 - **`.env.example`** — All env vars.
 

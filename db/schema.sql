@@ -262,6 +262,9 @@ CREATE INDEX IF NOT EXISTS idx_event_payouts_event_id ON event_payouts(event_id)
 -- Migration: store PayPal invoice recipient exactly as sent (may differ from CRM household full_name)
 ALTER TABLE invoices ADD COLUMN IF NOT EXISTS recipient_name VARCHAR(220);
 
+-- Migration: board reason when manually marking an invoice paid (audit trail)
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS paid_note TEXT;
+
 -- Migration: remove duplicate rows per invoice_number (keep row with recipient_name, else newest)
 DELETE FROM invoices
 WHERE invoice_number IS NOT NULL
@@ -276,6 +279,15 @@ WHERE invoice_number IS NOT NULL
   );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_invoices_invoice_number_unique ON invoices(invoice_number) WHERE invoice_number IS NOT NULL;
+
+-- Performance indexes for admin stats, late filters, and portal lookups
+CREATE INDEX IF NOT EXISTS idx_invoices_status_lower ON invoices (LOWER(status));
+CREATE INDEX IF NOT EXISTS idx_invoices_sent_date ON invoices (sent_date) WHERE sent_date IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_invoices_member_id ON invoices (member_id);
+CREATE INDEX IF NOT EXISTS idx_members_status_lower ON members (LOWER(status));
+CREATE INDEX IF NOT EXISTS idx_beneficiaries_member_primary ON beneficiaries (member_id) WHERE is_primary = true;
+CREATE INDEX IF NOT EXISTS idx_receipts_status_submitted ON receipts (status, submitted_at DESC);
+CREATE INDEX IF NOT EXISTS idx_membership_applications_member ON membership_applications (member_id);
 
 -- Member change requests (beneficiary updates, etc.) — board approval required
 CREATE TABLE IF NOT EXISTS member_change_requests (
@@ -295,6 +307,29 @@ CREATE TABLE IF NOT EXISTS member_change_requests (
 
 CREATE INDEX IF NOT EXISTS idx_member_change_requests_member ON member_change_requests(member_id);
 CREATE INDEX IF NOT EXISTS idx_member_change_requests_status ON member_change_requests(status);
+
+-- Board approval required before manually marking an invoice paid (transparency / dual control)
+CREATE TABLE IF NOT EXISTS invoice_mark_paid_requests (
+  id SERIAL PRIMARY KEY,
+  invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+  invoice_number INTEGER NOT NULL,
+  member_id INTEGER REFERENCES members(id) ON DELETE SET NULL,
+  reason TEXT NOT NULL,
+  status VARCHAR(50) NOT NULL DEFAULT 'Pending',
+  requested_by_admin_id INTEGER REFERENCES board_members(id) ON DELETE SET NULL,
+  requested_by_label VARCHAR(220) NOT NULL,
+  reviewed_by_admin_id INTEGER REFERENCES board_members(id) ON DELETE SET NULL,
+  reviewed_by_label VARCHAR(220),
+  submitted_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  reviewed_at TIMESTAMP WITH TIME ZONE,
+  review_notes TEXT,
+  CONSTRAINT invoice_mark_paid_requests_status_check
+    CHECK (status IN ('Pending', 'Approved', 'Rejected'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_invoice_mark_paid_status ON invoice_mark_paid_requests(status, submitted_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_invoice_mark_paid_pending_unique
+  ON invoice_mark_paid_requests(invoice_id) WHERE status = 'Pending';
 
 -- Website / contact form messages (board inbox)
 CREATE TABLE IF NOT EXISTS contact_messages (

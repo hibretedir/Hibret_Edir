@@ -313,8 +313,7 @@
 .site-public .pay-card:nth-child(3n+1),
 .site-public .sg-card:nth-child(3n+1),
 .site-public .contact-links .contact-link:nth-child(3n+1),
-.site-public .req-row:nth-child(3n+1),
-.site-public .hstat:nth-child(3n+1) { border-top-color: var(--green); }
+.site-public .req-row:nth-child(3n+1) { border-top-color: var(--green); }
 
 .site-public .step-card:nth-child(3n+2),
 .site-public .val-card:nth-child(3n+2),
@@ -322,8 +321,7 @@
 .site-public .pay-card:nth-child(3n+2),
 .site-public .sg-card:nth-child(3n+2),
 .site-public .contact-links .contact-link:nth-child(3n+2),
-.site-public .req-row:nth-child(3n+2),
-.site-public .hstat:nth-child(3n+2) { border-top-color: var(--gold); }
+.site-public .req-row:nth-child(3n+2) { border-top-color: var(--gold); }
 
 .site-public .step-card:nth-child(3n+3),
 .site-public .val-card:nth-child(3n+3),
@@ -331,8 +329,7 @@
 .site-public .pay-card:nth-child(3n+3),
 .site-public .sg-card:nth-child(3n+3),
 .site-public .contact-links .contact-link:nth-child(3n+3),
-.site-public .req-row:nth-child(3n+3),
-.site-public .hstat:nth-child(3n+3) { border-top-color: var(--red); }
+.site-public .req-row:nth-child(3n+3) { border-top-color: var(--red); }
 
 /* Standalone panels — green accent (starts the cycle) */
 .site-public .ann-box {
@@ -389,9 +386,14 @@
 .site-public .sg-card:nth-child(3n+2) .sg-icon { background: rgba(252, 221, 9, 0.18); color: var(--gold); border-color: rgba(252, 221, 9, 0.35); }
 .site-public .sg-card:nth-child(3n+3) .sg-icon { background: rgba(218, 18, 26, 0.22); color: #fca5a5; border-color: rgba(218, 18, 26, 0.4); }
 
-.site-public .hstat:nth-child(3n+1) .hstat-val { color: #9ae6b0; }
-.site-public .hstat:nth-child(3n+2) .hstat-val { color: var(--gold); }
-.site-public .hstat:nth-child(3n+3) .hstat-val { color: #fca5a5; }
+/* Hero stats — unified gold (197, $15,000, $110, 2011 all match) */
+.site-public .hero-stats .hstat { border-top-color: var(--gold); }
+.site-public .hero-stats .hstat .hstat-val {
+  color: var(--gold);
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+}
 
 .site-public .val-card:nth-child(3n+1) .val-icon { filter: drop-shadow(0 0 6px rgba(7, 137, 48, 0.5)); }
 .site-public .val-card:nth-child(3n+2) .val-icon { filter: drop-shadow(0 0 6px rgba(252, 221, 9, 0.45)); }
@@ -490,7 +492,9 @@
   font-size: 16px;
   color: rgba(255, 255, 255, 0.75);
   line-height: 1.7;
-  margin-bottom: 24px;
+  margin: 0 auto 24px;
+  max-width: 560px;
+  text-align: center;
 }
 
 .site-public .hero-stats {
@@ -1904,60 +1908,4 @@ body.site-public .sg-icon {
     font-size: 11px;
     text-transform: uppercase;
   }
-}
-
-/* ── In Remembrance (memorial roll) ── */
-.site-public .memorial-card {
-  margin-top: 24px;
-  background: var(--pub-card);
-  border: 1px solid var(--pub-card-border);
-  border-radius: var(--radius);
-  padding: 8px 8px 12px;
-  box-shadow: var(--pub-shadow);
-  backdrop-filter: blur(10px);
-  border-top: 3px solid var(--green);
-  background-image:
-    linear-gradient(165deg, rgba(7, 137, 48, 0.14) 0%, transparent 42%),
-    linear-gradient(225deg, rgba(218, 18, 26, 0.1) 0%, transparent 38%),
-    linear-gradient(90deg, rgba(252, 221, 9, 0.08) 0%, transparent 55%);
-}
-
-.site-public .memorial-list {
-  display: flex;
-  flex-direction: column;
-}
-
-.site-public .memorial-name {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 11px 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.site-public .memorial-name:last-child {
-  border-bottom: none;
-}
-
-.site-public .memorial-name-text {
-  font-size: 15px;
-  font-weight: 600;
-  color: #fff;
-  line-height: 1.35;
-}
-
-.site-public .memorial-name-year {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--gold);
-  flex-shrink: 0;
-}
-
-.site-public .memorial-loading,
-.site-public .memorial-empty {
-  text-align: center;
-  color: var(--pub-text-muted);
-  font-size: 14px;
-  padding: 24px 12px;
 }

@@ -1,6 +1,6 @@
 const { getDb } = require('./db');
 const { notifyProfileUpdate, notifyBeneficiaryUpdate, notifyBeneficiaryChangeRequested } = require('./notify');
-const { getActivityLog, getMemberJourney } = require('./audit');
+const { getActivityLog, getMemberJourney, logActivity } = require('./audit');
 const {
   syncMemberFromAdminUpdate,
   syncMemberSelfUpdate,
@@ -12,7 +12,16 @@ const {
   verifyMemberRequest,
   buildActorFromAdmin,
   buildActorFromMember,
-} = require('./admin-auth');const headers = {
+} = require('./admin-auth');
+const { stampBoardNote, mergeBoardNotes } = require('./board-notes');
+const {
+  getInvoiceStatsCache,
+  setInvoiceStatsCache,
+  isInvoiceStatsCacheFresh,
+  invalidateInvoiceStatsCache,
+} = require('./invoice-stats-cache');
+const { ZELLE_BOFA_SQL } = require('./payment-methods');
+const headers = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   'Content-Type': 'application/json'
@@ -28,10 +37,16 @@ function jsonResponse(statusCode, payload) {
 
 function getPath(event) {
   const basePath = '/.netlify/functions/portal';
-  if (event.path && event.path.startsWith(basePath)) {
-    return event.path.slice(basePath.length) || '/';
+  const candidates = [event.path, event.rawUrl, event.rawPath].filter(Boolean);
+  for (const raw of candidates) {
+    const p = String(raw).split('?')[0].replace(/\/+$/, '') || '/';
+    if (p.startsWith(basePath)) {
+      const sub = p.slice(basePath.length) || '/';
+      return sub === '' ? '/' : sub;
+    }
   }
-  return event.path || '/';
+  const fallback = String(event.path || '/').split('?')[0].replace(/\/+$/, '') || '/';
+  return fallback === '' ? '/' : fallback;
 }
 
 function normalizePhone(phone) {
@@ -72,7 +87,7 @@ function buildMemberPayload(member) {
     address: member.address,
     status: member.status,
     joined_date: member.joined_date,
-    notes: member.notes || '',
+    notes: member.notes != null ? member.notes : '',
     created_at: member.created_at,
     updated_at: member.updated_at
   };
@@ -120,39 +135,48 @@ async function findMember({ phone, email, id }) {
   return result.rows[0] ? buildMemberPayload(result.rows[0]) : null;
 }
 
-async function getInvoices({ memberId, email, status, limit = 500 }) {
+/** Names used to match PayPal recipient_name when member_id was linked incorrectly. */
+function collectMemberInvoiceNames(member) {
+  const names = new Set();
+  const add = (value) => {
+    const trimmed = String(value || '').trim();
+    if (trimmed) names.add(trimmed);
+  };
+  if (!member) return [];
+  add(member.paypal_name);
+  add(member.full_name);
+  if (member.full_name && String(member.full_name).includes('/')) {
+    for (const part of String(member.full_name).split('/')) add(part);
+  }
+  add([member.first_name, member.last_name].filter(Boolean).join(' '));
+  return [...names];
+}
+
+async function getInvoices({ memberId, email, status, limit = 500, activeOnly = false }) {
   const db = getDb();
   const values = [];
   const filters = ['invoices.invoice_number IS NOT NULL'];
   let idx = 1;
-
-  let innerQuery = `
-    SELECT DISTINCT ON (invoices.invoice_number)
-      invoices.id,
-      invoices.invoice_number,
-      invoices.paypal_invoice_id AS paypal_id,
-      invoices.status,
-      invoices.amount,
-      invoices.amount_due,
-      invoices.sent_date AS date,
-      invoices.paid_date,
-      invoices.payment_method,
-      invoices.paypal_link,
-      COALESCE(events.deceased_name, '') AS item,
-      invoices.recipient_name,
-      invoices.member_id,
-      members.paypal_name AS member_paypal_name,
-      members.full_name AS member_full_name,
-      members.email AS member_email
-    FROM invoices
-    LEFT JOIN events ON invoices.event_id = events.id
-    LEFT JOIN members ON invoices.member_id = members.id
-  `;
+  const rowLimit = Math.min(Math.max(Number(limit) || 500, 1), 2500);
 
   if (memberId) {
-    filters.push(`invoices.member_id = $${idx}`);
-    values.push(memberId);
-    idx += 1;
+    const memberRow = await fetchMemberRow(memberId);
+    const matchNames = collectMemberInvoiceNames(memberRow);
+    if (matchNames.length) {
+      filters.push(`(
+        invoices.member_id = $${idx}
+        OR (
+          NULLIF(TRIM(invoices.recipient_name), '') IS NOT NULL
+          AND TRIM(invoices.recipient_name) ILIKE ANY($${idx + 1}::text[])
+        )
+      )`);
+      values.push(memberId, matchNames);
+      idx += 2;
+    } else {
+      filters.push(`invoices.member_id = $${idx}`);
+      values.push(memberId);
+      idx += 1;
+    }
   }
 
   if (email) {
@@ -167,23 +191,137 @@ async function getInvoices({ memberId, email, status, limit = 500 }) {
     idx += 1;
   }
 
-  innerQuery += ` WHERE ${filters.join(' AND ')}`;
-  innerQuery += `
-    ORDER BY invoices.invoice_number DESC,
-      (CASE WHEN invoices.recipient_name IS NOT NULL AND TRIM(invoices.recipient_name) <> '' THEN 0 ELSE 1 END),
-      invoices.updated_at DESC NULLS LAST,
-      invoices.id DESC
-  `;
+  if (activeOnly) {
+    filters.push(`LOWER(COALESCE(members.status, '')) = 'active'`);
+  }
 
-  const baseQuery = `
-    SELECT * FROM (${innerQuery}) AS deduped_invoices
-    ORDER BY date DESC NULLS LAST, invoice_number DESC
+  const sql = `
+    SELECT
+      invoices.id,
+      invoices.invoice_number,
+      invoices.paypal_invoice_id AS paypal_id,
+      invoices.status,
+      invoices.amount,
+      invoices.amount_due,
+      invoices.sent_date AS date,
+      invoices.paid_date,
+      invoices.payment_method,
+      invoices.paypal_link,
+      invoices.paid_note,
+      events.event_number,
+      COALESCE(events.deceased_name, '') AS deceased_name,
+      COALESCE(events.deceased_name, '') AS item,
+      invoices.recipient_name,
+      invoices.member_id,
+      members.paypal_name AS member_paypal_name,
+      members.full_name AS member_full_name,
+      members.email AS member_email,
+      members.status AS member_status
+    FROM invoices
+    LEFT JOIN events ON invoices.event_id = events.id
+    LEFT JOIN members ON invoices.member_id = members.id
+    WHERE ${filters.join(' AND ')}
+    ORDER BY invoices.sent_date DESC NULLS LAST, invoices.invoice_number DESC
     LIMIT $${idx}
   `;
-  values.push(limit);
+  values.push(rowLimit);
 
-  const result = await db.query(baseQuery, values);
+  const result = await db.query(sql, values);
   return result.rows.map(buildInvoicePayload);
+}
+
+async function getInvoiceStats() {
+  if (isInvoiceStatsCacheFresh()) {
+    return getInvoiceStatsCache().data;
+  }
+  const db = getDb();
+  const [result, activeResult, eventSummaryResult] = await Promise.all([
+    db.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE LOWER(COALESCE(members.status, '')) = 'active')::int AS total,
+        COUNT(*) FILTER (
+          WHERE LOWER(COALESCE(invoices.status, '')) = 'paid'
+            AND LOWER(COALESCE(members.status, '')) = 'active'
+        )::int AS paid,
+        COUNT(*) FILTER (
+          WHERE LOWER(COALESCE(invoices.status, '')) = 'unpaid'
+            AND LOWER(COALESCE(members.status, '')) = 'active'
+        )::int AS unpaid_active,
+        COUNT(*) FILTER (
+          WHERE LOWER(COALESCE(invoices.status, '')) = 'unpaid'
+            AND LOWER(COALESCE(members.status, '')) = 'active'
+            AND invoices.sent_date IS NOT NULL
+            AND invoices.sent_date < (CURRENT_DATE - INTERVAL '45 days')
+        )::int AS late_active,
+        COUNT(*) FILTER (
+        WHERE LOWER(COALESCE(invoices.status, '')) = 'paid'
+          AND LOWER(COALESCE(members.status, '')) = 'active'
+          AND ${ZELLE_BOFA_SQL}
+      )::int AS paid_zelle_bofa,
+      COUNT(*) FILTER (
+        WHERE LOWER(COALESCE(invoices.status, '')) = 'paid'
+          AND LOWER(COALESCE(members.status, '')) = 'active'
+          AND NOT ${ZELLE_BOFA_SQL}
+      )::int AS paid_paypal,
+      COALESCE(SUM(invoices.amount_due) FILTER (
+          WHERE LOWER(COALESCE(invoices.status, '')) = 'unpaid'
+            AND LOWER(COALESCE(members.status, '')) = 'active'
+        ), 0)::float AS total_owed,
+        (SELECT COUNT(*)::int FROM events e
+          WHERE e.deceased_name IS NOT NULL AND TRIM(e.deceased_name) <> '') AS events
+      FROM invoices
+      LEFT JOIN members ON invoices.member_id = members.id
+      LEFT JOIN events ON invoices.event_id = events.id
+      WHERE invoices.invoice_number IS NOT NULL
+    `),
+    db.query(`
+      SELECT COUNT(*)::int AS active_members
+      FROM members
+      WHERE LOWER(COALESCE(status, '')) = 'active'
+    `),
+    db.query(`
+      SELECT e.id, e.event_number, e.deceased_name, e.event_date,
+             COUNT(i.id) FILTER (
+               WHERE i.invoice_number IS NOT NULL
+                 AND LOWER(COALESCE(m.status, '')) = 'active'
+             )::int AS total,
+             COUNT(i.id) FILTER (
+               WHERE i.invoice_number IS NOT NULL
+                 AND LOWER(COALESCE(m.status, '')) = 'active'
+                 AND LOWER(COALESCE(i.status, '')) = 'unpaid'
+             )::int AS unpaid,
+             COALESCE(SUM(i.amount_due) FILTER (
+               WHERE i.invoice_number IS NOT NULL
+                 AND LOWER(COALESCE(m.status, '')) = 'active'
+                 AND LOWER(COALESCE(i.status, '')) = 'unpaid'
+             ), 0)::float AS amount_owed,
+             COALESCE(
+               e.event_date,
+               MIN(i.sent_date) FILTER (WHERE i.sent_date IS NOT NULL)
+             ) AS memorial_date
+      FROM events e
+      LEFT JOIN invoices i ON i.event_id = e.id
+      LEFT JOIN members m ON i.member_id = m.id
+      WHERE e.deceased_name IS NOT NULL AND TRIM(e.deceased_name) <> ''
+      GROUP BY e.id, e.event_number, e.deceased_name, e.event_date
+      ORDER BY e.event_number DESC NULLS LAST, memorial_date DESC NULLS LAST
+    `),
+  ]);
+  const row = result.rows[0] || {};
+  const stats = {
+    total: Number(row.total || 0),
+    paid: Number(row.paid || 0),
+    paid_paypal: Number(row.paid_paypal || 0),
+    paid_zelle_bofa: Number(row.paid_zelle_bofa || 0),
+    unpaid_active: Number(row.unpaid_active || 0),
+    late_active: Number(row.late_active || 0),
+    total_owed: Number(row.total_owed || 0),
+    events: Number(row.events || 0),
+    active_members: Number(activeResult.rows[0]?.active_members || 0),
+    event_summary: (eventSummaryResult.rows || []).map(mapEventSummaryRow),
+  };
+  setInvoiceStatsCache(stats);
+  return stats;
 }
 
 function buildInvoicePayload(row) {
@@ -192,7 +330,8 @@ function buildInvoicePayload(row) {
     || row.member_full_name
     || '';
   const dateStr = row.date ? row.date.toISOString().slice(0, 19).replace('T', ' ') : null;
-  const daysOverdue = computeDaysOverdue(dateStr, row.status);
+  const daysSinceSent = invoiceDaysSinceSent(dateStr, row.status);
+  const daysOverdue = computeDaysPastDue(dateStr, row.status);
   return {
     id: row.id,
     invoice_num: row.invoice_number,
@@ -201,29 +340,78 @@ function buildInvoicePayload(row) {
     total: Number(row.amount),
     amount_due: Number(row.amount_due),
     date: dateStr,
-    item: row.item || '',
+    item: row.item || row.deceased_name || '',
+    deceased_name: row.deceased_name || row.item || '',
+    event_number: row.event_number != null ? Number(row.event_number) : null,
+    event_id: row.event_id != null ? Number(row.event_id) : null,
     payment_method: row.payment_method,
     paypal_link: row.paypal_link,
     member_email: row.member_email,
     member_full_name: row.member_full_name,
     member_paypal_name: row.member_paypal_name,
     member_id: row.member_id,
+    member_status: row.member_status || null,
     recipient_name: row.recipient_name,
+    paid_note: row.paid_note || null,
     name: invoiceName,
     email: row.member_email,
+    days_since_sent: daysSinceSent,
     days_overdue: daysOverdue,
-    is_late: daysOverdue > 0 && String(row.status || '').toLowerCase() !== 'paid',
+    is_late: daysSinceSent > INVOICE_LATE_DAYS && !isClosedInvoiceStatus(row.status),
   };
 }
 
 const INVOICE_DUE_DAYS = 3;
+const INVOICE_LATE_DAYS = 45;
 
-function computeDaysOverdue(dateStr, status) {
-  if (!dateStr || String(status || '').toLowerCase() === 'paid') return 0;
+function invoiceEventGroupKey(row) {
+  const evNum = row.event_number != null ? Number(row.event_number) : null;
+  if (evNum != null) return `ev:${evNum}`;
+  const name = String(row.deceased_name || row.item || '').trim().toLowerCase();
+  if (name) return `name:${name}`;
+  return `inv:${row.invoice_number || row.id}`;
+}
+
+function pickPreferredMemberInvoice(existing, candidate) {
+  if (!existing) return candidate;
+  const existPaid = String(existing.status || '').toLowerCase() === 'paid';
+  const candPaid = String(candidate.status || '').toLowerCase() === 'paid';
+  if (candPaid && !existPaid) return candidate;
+  if (existPaid && !candPaid) return existing;
+  const existNum = Number(existing.invoice_number || existing.invoice_num || 0);
+  const candNum = Number(candidate.invoice_number || candidate.invoice_num || 0);
+  return candNum >= existNum ? candidate : existing;
+}
+
+function dedupeInvoicesByEvent(invoices) {
+  const byEvent = new Map();
+  for (const inv of invoices || []) {
+    const key = invoiceEventGroupKey(inv);
+    byEvent.set(key, pickPreferredMemberInvoice(byEvent.get(key), inv));
+  }
+  return Array.from(byEvent.values()).sort((a, b) => {
+    const nA = Number(a.invoice_num || a.invoice_number || 0);
+    const nB = Number(b.invoice_num || b.invoice_number || 0);
+    return nB - nA;
+  });
+}
+
+function isClosedInvoiceStatus(status) {
+  const s = String(status || '').toLowerCase().trim();
+  if (s === 'paid') return true;
+  if (s.includes('cancel') || s === 'refunded' || s === 'refund') return true;
+  return false;
+}
+
+function invoiceDaysSinceSent(dateStr, status) {
+  if (!dateStr || isClosedInvoiceStatus(status)) return 0;
   const sent = new Date(String(dateStr).split(' ')[0]);
   if (Number.isNaN(sent.getTime())) return 0;
-  const due = new Date(sent.getTime() + INVOICE_DUE_DAYS * 86400000);
-  return Math.max(0, Math.floor((Date.now() - due.getTime()) / 86400000));
+  return Math.max(0, Math.floor((Date.now() - sent.getTime()) / 86400000));
+}
+
+function computeDaysPastDue(dateStr, status) {
+  return Math.max(0, invoiceDaysSinceSent(dateStr, status) - INVOICE_DUE_DAYS);
 }
 
 async function updateMember(data, actor) {
@@ -257,7 +445,11 @@ async function updateMember(data, actor) {
   for (const key of Object.keys(fieldMap)) {
     if (data[key] !== undefined) {
       fields.push(`${fieldMap[key]} = $${idx}`);
-      values.push(key === 'email' ? String(data[key]).trim().toLowerCase() : data[key]);
+      let value = key === 'email' ? String(data[key]).trim().toLowerCase() : data[key];
+      if (key === 'notes' && actor) {
+        value = mergeBoardNotes(oldRow.notes, value, actor.actor_label);
+      }
+      values.push(value);
       idx += 1;
     }
   }
@@ -271,6 +463,7 @@ async function updateMember(data, actor) {
     values
   );
   const newRow = result.rows[0];
+  invalidateInvoiceStatsCache();
   if (actor) {
     try {
       await syncMemberFromAdminUpdate(db, data.id, oldRow, newRow, actor);
@@ -297,50 +490,73 @@ async function updateInvoice(data, actor) {
     values.push(data.paid_date);
     idx += 1;
   }
-
-  if (!updates.length) return null;
-  if (data.status === 'Paid' && data.paid_date === undefined) {
-    updates.push(`paid_date = NOW()`);
+  if (data.paid_note !== undefined) {
+    updates.push(`paid_note = $${idx}`);
+    values.push(data.paid_note);
+    idx += 1;
   }
 
-  let whereClause;
+  if (!updates.length) return null;
+  if (data.status === 'Paid') {
+    const note = String(data.paid_note || '').trim();
+    if (!note) {
+      throw new Error('A reason note is required when marking an invoice as paid');
+    }
+    if (data.paid_date === undefined) {
+      updates.push('paid_date = NOW()');
+    }
+  }
+
+  let lookupColumn;
+  let lookupValue;
   if (data.invoice_num !== undefined) {
-    whereClause = `invoice_number = $${idx}`;
-    values.push(data.invoice_num);
-    idx += 1;
+    lookupColumn = 'invoice_number';
+    lookupValue = data.invoice_num;
   } else if (data.id !== undefined) {
-    whereClause = `id = $${idx}`;
-    values.push(data.id);
-    idx += 1;
+    lookupColumn = 'id';
+    lookupValue = data.id;
   } else {
     return null;
   }
 
-  const lookupValue = values[values.length - 1];
   const existing = await db.query(
-    `SELECT id, invoice_number, status, member_id, sent_date FROM invoices WHERE ${whereClause}`,
+    `SELECT id, invoice_number, status, member_id, sent_date FROM invoices WHERE ${lookupColumn} = $1`,
     [lookupValue]
   );
   const oldInvoice = existing.rows[0];
 
-  updates.push(`updated_at = NOW()`);
+  if (data.status === 'Paid' && oldInvoice) {
+    const prior = String(oldInvoice.status || '').toLowerCase();
+    if (prior.includes('cancel')) {
+      throw new Error('This invoice was cancelled by the member and cannot be marked paid.');
+    }
+  }
+
+  updates.push('updated_at = NOW()');
+  const whereParam = idx;
+  values.push(lookupValue);
 
   const result = await db.query(
-    `UPDATE invoices SET ${updates.join(', ')} WHERE ${whereClause} RETURNING id, invoice_number, paypal_invoice_id AS paypal_id, status, amount, amount_due, sent_date AS date, paid_date, payment_method, paypal_link, event_id, member_id, recipient_name`,
+    `UPDATE invoices SET ${updates.join(', ')} WHERE ${lookupColumn} = $${whereParam} RETURNING id, invoice_number, paypal_invoice_id AS paypal_id, status, amount, amount_due, sent_date AS date, paid_date, payment_method, paypal_link, event_id, member_id, recipient_name, paid_note`,
     values
   );
   if (!result.rows[0]) return null;
+  invalidateInvoiceStatsCache();
 
   if (actor && oldInvoice && data.status !== undefined) {
     try {
-      await syncInvoiceStatusChange(db, result.rows[0], oldInvoice.status, data.status, actor, oldInvoice.member_id);
+      await syncInvoiceStatusChange(db, result.rows[0], oldInvoice.status, data.status, actor, oldInvoice.member_id, {
+        paid_note: data.paid_note,
+      });
     } catch (err) {
       console.error('Invoice sync failed:', err);
     }
   }
 
   const joined = await db.query(
-    `SELECT COALESCE(events.deceased_name, '') AS item,
+    `SELECT events.event_number,
+            COALESCE(events.deceased_name, '') AS deceased_name,
+            COALESCE(events.deceased_name, '') AS item,
             invoices.recipient_name,
             members.paypal_name AS member_paypal_name,
             members.full_name AS member_full_name,
@@ -358,7 +574,7 @@ async function updateInvoice(data, actor) {
 async function getMembers({ search, limit = 500 }) {
   const db = getDb();
   const values = [];
-  let sql = `SELECT id, member_number, first_name, last_name, full_name, paypal_name, email, mobile, home_phone AS home, address, status, joined_date, created_at, updated_at, notes FROM members`;
+  let sql = `SELECT id, member_number, first_name, last_name, full_name, paypal_name, email, mobile, home_phone AS home, address, status, joined_date, created_at, updated_at FROM members`;
 
   if (search) {
     const normalizedSearch = search.replace(/\D/g, '');
@@ -387,7 +603,11 @@ async function getMembers({ search, limit = 500 }) {
   values.push(limit);
 
   const result = await db.query(sql, values);
-  return result.rows.map(buildMemberPayload);
+  return result.rows.map((row) => {
+    const payload = buildMemberPayload(row);
+    payload.notes = '';
+    return payload;
+  });
 }
 
 const MEMBER_EDIT_FIELDS = {
@@ -595,21 +815,300 @@ async function upsertMemberBeneficiary(memberId, body, actor, { requireApproval 
   return { beneficiary, message: isNew ? 'Beneficiary added.' : 'Beneficiary updated.' };
 }
 
-async function getEdirEvents() {
+function formatDeceasedMemberLabel(eventNumber, deceasedName) {
+  const name = String(deceasedName || '').trim();
+  if (!name) return '';
+  return eventNumber != null && eventNumber !== '' ? `#${eventNumber} ${name}` : name;
+}
+
+function toDateOnlyString(value) {
+  if (!value) return '';
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+  const raw = String(value).trim();
+  const iso = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (iso) return iso[1];
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+  return '';
+}
+
+function mapDeceasedMemberRow(row) {
+  const name = String(row.deceased_name || '').trim();
+  const eventNumber = row.event_number;
+  const dateStr = toDateOnlyString(row.memorial_date || row.event_date || null);
+  const yearMatch = dateStr.match(/^(\d{4})/);
+  return {
+    id: row.id,
+    event_number: eventNumber,
+    deceased_name: name,
+    name,
+    label: formatDeceasedMemberLabel(eventNumber, name),
+    date: dateStr || null,
+    year: yearMatch ? yearMatch[1] : null,
+    status: row.status,
+  };
+}
+
+function mapEventSummaryRow(row) {
+  const mapped = mapDeceasedMemberRow(row);
+  return {
+    ...mapped,
+    total: Number(row.total || 0),
+    unpaid: Number(row.unpaid || 0),
+    amount_owed: Number(row.amount_owed || 0),
+  };
+}
+
+/** Deceased-member list for admin Invoices filter and Event Summary. */
+async function getDeceasedMembers() {
   const db = getDb();
   const result = await db.query(
-    `SELECT id, event_number, deceased_name, event_date, status
-     FROM events
-     WHERE deceased_name IS NOT NULL AND TRIM(deceased_name) <> ''
-     ORDER BY event_date DESC NULLS LAST, event_number DESC`
+    `SELECT e.id, e.event_number, e.deceased_name, e.event_date, e.status,
+            COALESCE(
+              e.event_date,
+              (SELECT MIN(i.sent_date) FROM invoices i
+               WHERE i.event_id = e.id AND i.sent_date IS NOT NULL)
+            ) AS memorial_date
+     FROM events e
+     WHERE e.deceased_name IS NOT NULL AND TRIM(e.deceased_name) <> ''
+     ORDER BY e.event_number DESC NULLS LAST, memorial_date DESC NULLS LAST`
   );
-  return result.rows.map((row) => ({
-    id: row.id,
-    event_number: row.event_number,
-    name: row.deceased_name.trim(),
-    date: row.event_date,
+  return result.rows.map(mapDeceasedMemberRow);
+}
+
+async function getEdirEvents() {
+  return getDeceasedMembers();
+}
+
+const MEMBER_CAP = Number(process.env.MEMBER_CAP || 200);
+
+async function getPublicMemberStats() {
+  const db = getDb();
+  const result = await db.query(`
+    SELECT
+      COUNT(*)::int AS total_count,
+      COUNT(*) FILTER (WHERE LOWER(COALESCE(status, '')) = 'active')::int AS active_count,
+      COUNT(*) FILTER (WHERE LOWER(COALESCE(status, '')) != 'active')::int AS inactive_count
+    FROM members
+  `);
+  const row = result.rows[0] || {};
+  return {
+    active_count: row.active_count || 0,
+    total_count: row.total_count || 0,
+    inactive_count: row.inactive_count || 0,
+    member_cap: MEMBER_CAP,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+const MARK_PAID_REQUEST_SELECT = `
+  SELECT r.*,
+    i.recipient_name, i.amount_due, i.status AS invoice_status,
+    e.deceased_name, e.event_number,
+    m.first_name, m.last_name, m.full_name, m.paypal_name, m.email, m.member_number
+  FROM invoice_mark_paid_requests r
+  JOIN invoices i ON i.id = r.invoice_id
+  LEFT JOIN events e ON e.id = i.event_id
+  LEFT JOIN members m ON m.id = r.member_id
+`;
+
+function buildMarkPaidRequestSummary(row) {
+  const memberName = row.recipient_name
+    || row.full_name
+    || `${row.first_name || ''} ${row.last_name || ''}`.trim()
+    || row.paypal_name
+    || 'Member';
+  return {
+    id: `mp-${row.id}`,
+    mark_paid_request_id: row.id,
+    kind: 'mark_paid',
     status: row.status,
-  }));
+    submitted_at: row.submitted_at,
+    reviewed_at: row.reviewed_at,
+    member_id: row.member_id,
+    member_full_name: memberName,
+    email: row.email,
+    invoice_num: row.invoice_number,
+    invoice_id: row.invoice_id,
+    amount_due: row.amount_due != null ? Number(row.amount_due) : null,
+    deceased_name: row.deceased_name || null,
+    event_number: row.event_number != null ? Number(row.event_number) : null,
+    reason: row.reason,
+    requested_by: row.requested_by_label,
+    requested_by_admin_id: row.requested_by_admin_id,
+    reviewed_by: row.reviewed_by_label,
+    notes: row.review_notes,
+  };
+}
+
+async function listMarkPaidRequests(query = {}) {
+  const db = getDb();
+  const values = [];
+  let sql = MARK_PAID_REQUEST_SELECT;
+  if (query.status) {
+    sql += ` WHERE r.status = $1`;
+    values.push(query.status);
+  }
+  sql += ` ORDER BY r.submitted_at DESC NULLS LAST, r.id DESC LIMIT 200`;
+  const result = await db.query(sql, values);
+  return result.rows.map(buildMarkPaidRequestSummary);
+}
+
+async function getMarkPaidRequestRow(id) {
+  const db = getDb();
+  const result = await db.query(`${MARK_PAID_REQUEST_SELECT} WHERE r.id = $1 LIMIT 1`, [id]);
+  return result.rows[0] || null;
+}
+
+function isClosedInvoiceStatusForMarkPaid(status) {
+  const s = String(status || '').toLowerCase().trim();
+  if (s === 'paid') return true;
+  if (s.includes('cancel') || s === 'refunded' || s === 'refund') return true;
+  return false;
+}
+
+async function createMarkPaidRequest(data, actor, adminPayload) {
+  const note = stampBoardNote(data.paid_note || data.reason, actor.actor_label);
+  if (!note) {
+    throw new Error('A reason is required when requesting mark paid');
+  }
+  const invoiceNum = Number(data.invoice_num);
+  if (!invoiceNum) {
+    throw new Error('invoice_num is required');
+  }
+
+  const db = getDb();
+  const invRes = await db.query(
+    `SELECT id, invoice_number, status, member_id FROM invoices WHERE invoice_number = $1 LIMIT 1`,
+    [invoiceNum]
+  );
+  const inv = invRes.rows[0];
+  if (!inv) {
+    throw new Error('Invoice not found');
+  }
+  if (isClosedInvoiceStatusForMarkPaid(inv.status)) {
+    throw new Error('This invoice cannot be marked paid');
+  }
+
+  const pending = await db.query(
+    `SELECT id FROM invoice_mark_paid_requests WHERE invoice_id = $1 AND status = 'Pending' LIMIT 1`,
+    [inv.id]
+  );
+  if (pending.rows.length) {
+    throw new Error('This invoice already has a pending mark-paid request — check Admin → Approval');
+  }
+
+  const requesterLabel = (adminPayload?.bypass && data.requested_by_label)
+    ? String(data.requested_by_label).trim()
+    : actor.actor_label;
+
+  const insert = await db.query(
+    `INSERT INTO invoice_mark_paid_requests
+      (invoice_id, invoice_number, member_id, reason, requested_by_admin_id, requested_by_label)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id`,
+    [inv.id, inv.invoice_number, inv.member_id, note, adminPayload?.adminId || null, requesterLabel]
+  );
+
+  await logActivity(db, {
+    ...actor,
+    member_id: inv.member_id,
+    action: 'invoice.mark_paid_requested',
+    entity_type: 'invoice_mark_paid_requests',
+    table_name: 'invoice_mark_paid_requests',
+    record_id: insert.rows[0].id,
+    summary: `Mark paid requested for Invoice #${inv.invoice_number}: ${note}`,
+    new_value: { invoice_number: inv.invoice_number, reason: note },
+  });
+
+  const row = await getMarkPaidRequestRow(insert.rows[0].id);
+  return buildMarkPaidRequestSummary(row);
+}
+
+function approverIsRequester(row, adminPayload, actor) {
+  if (row.requested_by_admin_id && adminPayload?.adminId) {
+    return row.requested_by_admin_id === adminPayload.adminId;
+  }
+  if (row.requested_by_label && actor?.actor_label) {
+    return String(row.requested_by_label).toLowerCase() === String(actor.actor_label).toLowerCase();
+  }
+  return false;
+}
+
+async function approveMarkPaidRequest(id, body, actor, adminPayload) {
+  const db = getDb();
+  const row = await getMarkPaidRequestRow(id);
+  if (!row) {
+    throw new Error('Mark paid request not found');
+  }
+  if (row.status !== 'Pending') {
+    throw new Error(`Request is already ${row.status}`);
+  }
+  if (approverIsRequester(row, adminPayload, actor)) {
+    throw new Error('You cannot approve your own mark-paid request. Another board member must approve.');
+  }
+  if (isClosedInvoiceStatusForMarkPaid(row.invoice_status)) {
+    throw new Error('Invoice is no longer unpaid');
+  }
+
+  const updatedInvoice = await updateInvoice(
+    { invoice_num: row.invoice_number, status: 'Paid', paid_note: row.reason },
+    actor
+  );
+  if (!updatedInvoice) {
+    throw new Error('Could not mark invoice paid');
+  }
+
+  await db.query(
+    `UPDATE invoice_mark_paid_requests
+     SET status = 'Approved',
+         reviewed_at = NOW(),
+         reviewed_by_admin_id = $1,
+         reviewed_by_label = $2,
+         review_notes = COALESCE($3, review_notes)
+     WHERE id = $4`,
+    [adminPayload?.adminId || null, actor.actor_label, stampBoardNote(body.review_notes || body.notes || '', actor.actor_label) || null, id]
+  );
+
+  const summary = await getMarkPaidRequestRow(id);
+  return { request: buildMarkPaidRequestSummary(summary), invoice: updatedInvoice };
+}
+
+async function rejectMarkPaidRequest(id, body, actor, adminPayload) {
+  const db = getDb();
+  const row = await getMarkPaidRequestRow(id);
+  if (!row) {
+    throw new Error('Mark paid request not found');
+  }
+  if (row.status !== 'Pending') {
+    throw new Error(`Request is already ${row.status}`);
+  }
+
+  await db.query(
+    `UPDATE invoice_mark_paid_requests
+     SET status = 'Rejected',
+         reviewed_at = NOW(),
+         reviewed_by_admin_id = $1,
+         reviewed_by_label = $2,
+         review_notes = COALESCE($3, review_notes)
+     WHERE id = $4`,
+    [adminPayload?.adminId || null, actor.actor_label, stampBoardNote(body.review_notes || body.notes || 'Rejected by board', actor.actor_label), id]
+  );
+
+  await logActivity(db, {
+    ...actor,
+    member_id: row.member_id,
+    action: 'invoice.mark_paid_rejected',
+    entity_type: 'invoice_mark_paid_requests',
+    table_name: 'invoice_mark_paid_requests',
+    record_id: id,
+    summary: `Mark paid request rejected for Invoice #${row.invoice_number}`,
+  });
+
+  const summary = await getMarkPaidRequestRow(id);
+  return buildMarkPaidRequestSummary(summary);
 }
 
 exports.handler = async (event) => {
@@ -629,6 +1128,24 @@ exports.handler = async (event) => {
   }
 
   try {
+    if (event.httpMethod === 'GET' && (path === '/events' || path === '/deceased-members')) {
+      const [events, memberStats] = await Promise.all([
+        getEdirEvents(),
+        getPublicMemberStats().catch(() => null),
+      ]);
+      const payload = { events, deceased_members: events };
+      if (memberStats) {
+        payload.active_count = memberStats.active_count;
+        payload.member_cap = memberStats.member_cap;
+      }
+      return jsonResponse(200, payload);
+    }
+
+    if (event.httpMethod === 'GET' && (path === '/member-stats' || path === '/stats')) {
+      const stats = await getPublicMemberStats();
+      return jsonResponse(200, stats);
+    }
+
     const adminPayload = verifyAdminRequest(event);
     const memberPayload = verifyMemberRequest(event);
 
@@ -639,11 +1156,11 @@ exports.handler = async (event) => {
         if (memberId !== memberPayload.memberId) {
           return jsonResponse(403, { error: 'Forbidden' });
         }
-        const invoices = await getInvoices({
+        const invoices = dedupeInvoicesByEvent(await getInvoices({
           memberId,
           status: query.status,
-          limit: query.limit ? Number(query.limit) : 50,
-        });
+          limit: query.limit ? Number(query.limit) : 500,
+        }));
         return jsonResponse(200, { invoices });
       }
 
@@ -662,11 +1179,6 @@ exports.handler = async (event) => {
           limit: query.limit ? Number(query.limit) : 50,
         });
         return jsonResponse(200, { activity });
-      }
-
-      if (event.httpMethod === 'GET' && path === '/events') {
-        const events = await getEdirEvents();
-        return jsonResponse(200, { events });
       }
 
       if (event.httpMethod === 'PATCH' && path === '/profile') {
@@ -704,8 +1216,19 @@ exports.handler = async (event) => {
       return jsonResponse(200, { members });
     }
 
+    if (event.httpMethod === 'GET' && path === '/invoice-stats') {
+      const stats = await getInvoiceStats();
+      return jsonResponse(200, { stats });
+    }
+
     if (event.httpMethod === 'GET' && path === '/invoices') {
-      const invoices = await getInvoices({ memberId: query.memberId ? Number(query.memberId) : undefined, email: query.email, status: query.status, limit: query.limit ? Number(query.limit) : undefined });
+      const invoices = await getInvoices({
+        memberId: query.memberId ? Number(query.memberId) : undefined,
+        email: query.email,
+        status: query.status,
+        limit: query.limit ? Number(query.limit) : undefined,
+        activeOnly: query.activeOnly === '1' || query.activeOnly === 'true',
+      });
       return jsonResponse(200, { invoices });
     }
 
@@ -738,8 +1261,45 @@ exports.handler = async (event) => {
       return jsonResponse(200, { member: updated });
     }
 
+    if (event.httpMethod === 'GET' && path === '/mark-paid-requests') {
+      const requests = await listMarkPaidRequests(query);
+      return jsonResponse(200, { requests });
+    }
+
+    const markPaidDetailMatch = path.match(/^\/mark-paid-requests\/(\d+)$/);
+    if (event.httpMethod === 'GET' && markPaidDetailMatch) {
+      const row = await getMarkPaidRequestRow(Number(markPaidDetailMatch[1]));
+      if (!row) {
+        return jsonResponse(404, { error: 'Mark paid request not found' });
+      }
+      return jsonResponse(200, { application: buildMarkPaidRequestSummary(row) });
+    }
+
+    if (event.httpMethod === 'POST' && path === '/mark-paid-request') {
+      const actor = await resolveAdminActor(adminPayload);
+      const request = await createMarkPaidRequest(body, actor, adminPayload);
+      return jsonResponse(201, { request, message: 'Submitted for board approval. Another board member must approve in Admin → Approval.' });
+    }
+
+    const markPaidActionMatch = path.match(/^\/mark-paid-requests\/(\d+)\/(approve|reject)$/);
+    if (event.httpMethod === 'POST' && markPaidActionMatch) {
+      const actor = await resolveAdminActor(adminPayload);
+      const reqId = Number(markPaidActionMatch[1]);
+      if (markPaidActionMatch[2] === 'approve') {
+        const result = await approveMarkPaidRequest(reqId, body, actor, adminPayload);
+        return jsonResponse(200, result);
+      }
+      const request = await rejectMarkPaidRequest(reqId, body, actor, adminPayload);
+      return jsonResponse(200, { request });
+    }
+
     if (event.httpMethod === 'POST' && path === '/invoice') {
       const actor = await resolveAdminActor(adminPayload);
+      if (body.status === 'Paid' && !body.approved_mark_paid_request_id) {
+        return jsonResponse(400, {
+          error: 'Manual mark paid requires board approval. Use Mark Paid on the invoice to submit a request.',
+        });
+      }
       const updatedInvoice = await updateInvoice(body, actor);
       if (!updatedInvoice) {
         return jsonResponse(400, { error: 'Unable to update invoice' });

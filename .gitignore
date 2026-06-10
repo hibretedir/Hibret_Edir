@@ -10,6 +10,9 @@ __pycache__/
 
 # Node modules (for future backend)
 node_modules/
+node_modules.trash-*/
+.hibret-temp-node-modules
+node_modules.gdrive-backup/
 npm-debug.log*
 
 # OS files

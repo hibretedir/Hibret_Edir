@@ -15,6 +15,7 @@
     "build:invoice-snapshot": "python scripts/build_invoice_snapshot.py",
     "build:members-snapshot": "python scripts/build_members_snapshot.py",
     "db:migrate": "node scripts/run_schema.js",
+    "sync:paypal": "node scripts/sync_paypal.js",
     "test": "echo \"No tests configured\" && exit 0"
   },
   "dependencies": {

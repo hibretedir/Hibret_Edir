@@ -21,6 +21,8 @@ const {
   buildActorFromAdmin,
   buildSystemActor,
 } = require('./admin-auth');
+const { stampBoardNote, mergeBoardNotes } = require('./board-notes');
+const { invalidateInvoiceStatsCache } = require('./invoice-stats-cache');
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -192,8 +194,74 @@ async function verifyApproved(body) {
   });
 }
 
+async function getWaitingListAddedThrough(db) {
+  const res = await db.query(`
+    WITH ordered AS (
+      SELECT status,
+             ROW_NUMBER() OVER (ORDER BY applied_at ASC NULLS LAST, id ASC) AS position
+      FROM waiting_list
+      WHERE status NOT IN ('Rejected', 'Canceled')
+    )
+    SELECT COALESCE(MAX(position), 0)::int AS added_through
+    FROM ordered
+    WHERE status = 'Added as Member'
+  `);
+  const n = Number(res.rows[0]?.added_through || 0);
+  return n > 0 ? n : ADDED_THROUGH_POSITION;
+}
+
+function parseEventNotes(notes) {
+  if (!notes || typeof notes !== 'string') return {};
+  const trimmed = notes.trim();
+  if (!trimmed.startsWith('{')) return {};
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return {};
+  }
+}
+
+async function getCurrentAnnouncementFromDb() {
+  const db = getDb();
+  const result = await db.query(`
+    SELECT event_number, deceased_name, event_date, amount_per_member, payout_amount, notes, status
+    FROM events
+    WHERE deceased_name IS NOT NULL AND TRIM(deceased_name) <> ''
+    ORDER BY event_number DESC NULLS LAST
+    LIMIT 1
+  `);
+  const row = result.rows[0];
+  if (!row) return null;
+  const meta = parseEventNotes(row.notes);
+  const eventDate = row.event_date
+    ? new Date(row.event_date).toLocaleDateString('en-US', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        timeZone: 'America/Los_Angeles',
+      })
+    : null;
+  return {
+    event_number: row.event_number,
+    deceased_name: String(row.deceased_name || '').trim(),
+    event_date: row.event_date,
+    event_date_text: eventDate,
+    amount_per_member: Number(row.amount_per_member || process.env.AMOUNT_PER_MEMBER || 110),
+    payout_amount: Number(row.payout_amount || process.env.PAYOUT_AMOUNT || 15000),
+    collect_dues: meta.collect_dues !== false && meta.waive_dues !== true,
+    prayer_venue: meta.prayer_venue || null,
+    prayer_address: meta.prayer_address || null,
+    prayer_datetime: meta.prayer_datetime || null,
+    burial_venue: meta.burial_venue || null,
+    burial_address: meta.burial_address || null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
 async function getWaitingListStatusFromDb() {
   const db = getDb();
+  const addedThrough = await getWaitingListAddedThrough(db);
   const result = await db.query(
     `SELECT full_name, first_name, last_name, status, applied_at
      FROM waiting_list
@@ -204,7 +272,7 @@ async function getWaitingListStatusFromDb() {
   }
 
   const hidden = new Set(['Rejected', 'Canceled']);
-  return result.rows
+  const entries = result.rows
     .map((row, idx) => ({
       row,
       queuePosition: idx + 1,
@@ -221,24 +289,33 @@ async function getWaitingListStatusFromDb() {
             timeZone: 'America/Los_Angeles',
           })
         : null,
-      added: queuePosition <= ADDED_THROUGH_POSITION,
+      added: row.status === 'Added as Member' || queuePosition <= addedThrough,
     }));
+
+  return { entries, addedThrough };
 }
 
 async function getWaitingListStatus() {
   const fromDb = await getWaitingListStatusFromDb();
-  if (!fromDb?.length) {
+  if (!fromDb?.entries?.length) {
     return json(503, {
       error: 'Waiting list has not been loaded yet. Contact the board at (424) 547-5594.',
     });
   }
 
+  const nextPosition = fromDb.entries.find((e) => !e.added)?.position;
+  const updatedNote = nextPosition
+    ? `Places 1–${fromDb.addedThrough} have been added as members. #${nextPosition} is next in line.`
+    : `Places 1–${fromDb.addedThrough} have been added as members.`;
+
   return json(200, {
     ok: true,
     source: 'database',
-    count: fromDb.length,
-    updated_note: `Places 1–${ADDED_THROUGH_POSITION} have been added as members. #12 is next in line.`,
-    entries: fromDb,
+    count: fromDb.entries.length,
+    added_through_position: fromDb.addedThrough,
+    updated_note: updatedNote,
+    updated_at: new Date().toISOString(),
+    entries: fromDb.entries,
   });
 }
 
@@ -493,7 +570,10 @@ async function updateApplicationReview(id, body, actor) {
   };
   const registrationFeePaid = reviewChecklist.fee_paid;
   const status = body.status || 'Under Review';
-  const notes = body.notes != null ? String(body.notes).trim() : null;
+  const prevNotes = await db.query(`SELECT notes FROM membership_applications WHERE id = $1 LIMIT 1`, [id]);
+  const notes = body.notes != null
+    ? mergeBoardNotes(prevNotes.rows[0]?.notes, body.notes, actor?.actor_label || 'Board')
+    : null;
 
   await db.query(
     `UPDATE membership_applications
@@ -602,6 +682,7 @@ async function approveApplication(id, body, actor) {
     ]
   );
   const member = memberInsert.rows[0];
+  invalidateInvoiceStatsCache();
 
   const beneficiary = parseJsonField(row.beneficiary_member, null);
   if (beneficiary?.name) {
@@ -665,7 +746,10 @@ async function approveApplication(id, body, actor) {
 
 async function rejectApplication(id, body, actor) {
   const db = getDb();
-  const notes = body.notes?.trim() || 'Application rejected by board review.';
+  const notes = stampBoardNote(
+    body.notes?.trim() || 'Application rejected by board review.',
+    actor?.actor_label || 'Board'
+  );
   const result = await db.query(
     `UPDATE membership_applications
      SET status = 'Rejected', notes = $1, reviewed_at = NOW()
@@ -949,13 +1033,13 @@ async function rejectChangeRequest(id, body, actor) {
      SET status = 'Rejected', reviewed_at = NOW(), reviewed_by = $1, notes = COALESCE($2, notes)
      WHERE id = $3
      RETURNING id`,
-    [actor?.actor_label || 'Board', body.notes || null, id]
+    [actor?.actor_label || 'Board', body.notes ? mergeBoardNotes(row.notes, body.notes, actor?.actor_label || 'Board') : null, id]
   );
   if (!result.rows.length) return json(404, { error: 'Change request not found.' });
   try {
     const member = await fetchMemberForNotify(db, row.member_id);
     if (member) {
-      await notifyBeneficiaryChangeRejected(db, member, payload, body.notes || row.notes || null);
+      await notifyBeneficiaryChangeRejected(db, member, payload, body.notes ? mergeBoardNotes(row.notes, body.notes, actor?.actor_label || 'Board') : row.notes || null);
     }
   } catch (notifyErr) {
     console.error('Beneficiary reject notification failed:', notifyErr);
@@ -1139,6 +1223,57 @@ exports.handler = async (event) => {
   }
 
   if (event.httpMethod === 'GET') {
+    if (path === '/site-stats' || path === '/site-stats/') {
+      try {
+        const db = getDb();
+        const [memberRes, eventRes] = await Promise.all([
+          db.query(`
+            SELECT
+              COUNT(*)::int AS total_count,
+              COUNT(*) FILTER (WHERE LOWER(COALESCE(status, '')) = 'active')::int AS active_count
+            FROM members
+          `),
+          db.query(`
+            SELECT amount_per_member, payout_amount
+            FROM events
+            WHERE deceased_name IS NOT NULL AND TRIM(deceased_name) <> ''
+            ORDER BY event_number DESC NULLS LAST
+            LIMIT 1
+          `),
+        ]);
+        const row = memberRes.rows[0] || {};
+        const ev = eventRes.rows[0] || {};
+        return json(200, {
+          active_count: Number(row.active_count || 0),
+          total_count: Number(row.total_count || 0),
+          member_cap: Number(process.env.MEMBER_CAP || 200),
+          amount_per_member: Number(ev.amount_per_member || process.env.AMOUNT_PER_MEMBER || 110),
+          payout_amount: Number(ev.payout_amount || process.env.PAYOUT_AMOUNT || 15000),
+          updated_at: new Date().toISOString(),
+        });
+      } catch (err) {
+        console.error('site-stats error:', err);
+        if (err.message?.includes('DATABASE_URL')) {
+          return json(503, { error: 'Database is not configured.' });
+        }
+        return json(503, { error: 'Could not load site stats.' });
+      }
+    }
+    if (path === '/current-announcement' || path === '/current-announcement/') {
+      try {
+        const announcement = await getCurrentAnnouncementFromDb();
+        if (!announcement) {
+          return json(404, { error: 'No current announcement.' });
+        }
+        return json(200, { announcement });
+      } catch (err) {
+        console.error('current-announcement error:', err);
+        if (err.message?.includes('DATABASE_URL')) {
+          return json(503, { error: 'Database is not configured.' });
+        }
+        return json(503, { error: 'Could not load announcement.' });
+      }
+    }
     if (path === '/waiting-list/status' || path === '/waiting-list/status/') {
       try {
         return await getWaitingListStatus();

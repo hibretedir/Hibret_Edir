@@ -1,5 +1,8 @@
 let pool;
 
+const CONNECT_TIMEOUT_MS = 10000;
+const QUERY_TIMEOUT_MS = 30000;
+
 function getDb() {
   if (!pool) {
     const connectionString = process.env.DATABASE_URL;
@@ -12,6 +15,11 @@ function getDb() {
     pool = new Pool({
       connectionString,
       ssl: useSsl ? { rejectUnauthorized: false } : false,
+      max: 3,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
+      query_timeout: QUERY_TIMEOUT_MS,
+      statement_timeout: QUERY_TIMEOUT_MS,
     });
   }
   return pool;

@@ -4,6 +4,7 @@ const {
   verifyAdminRequest,
   buildActorFromAdmin,
 } = require('./admin-auth');
+const { stampBoardNote, mergeBoardNotes } = require('./board-notes');
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -139,9 +140,6 @@ function stripDocumentData(documents) {
       size: doc.size,
       uploaded_at: doc.uploaded_at,
       has_data: !!(doc.data || doc.filename),
-      preview: doc.mime_type?.startsWith('image/') && doc.data
-        ? `data:${doc.mime_type};base64,${doc.data}`
-        : null,
     };
   }
   return out;
@@ -196,12 +194,30 @@ async function resolveAdminActor(adminPayload) {
   return buildActorFromAdmin(adminPayload, result.rows[0]);
 }
 
-const PAYOUT_SELECT = `
+const PAYOUT_FROM = `
+  FROM event_payouts p
+  LEFT JOIN members m ON p.member_id = m.id
+`;
+
+const PAYOUT_LIST_SELECT = `
+  SELECT p.id, p.event_id, p.event_label, p.member_id, p.deceased_name, p.deceased_relationship,
+    p.beneficiary_name, p.beneficiary_phone, p.beneficiary_relationship, p.payout_amount, p.status,
+    p.review_checklist, p.board_approvals, p.payout_method, p.payout_reference, p.payout_sent_at,
+    p.notes, p.created_at, p.updated_at,
+    CASE WHEN p.documents IS NULL THEN '{}'::jsonb ELSE (
+      SELECT COALESCE(jsonb_object_agg(e.key, e.value - 'data'), '{}'::jsonb)
+      FROM jsonb_each(p.documents) AS e(key, value)
+    ) END AS documents,
+    m.full_name AS member_name,
+    m.member_number
+  ${PAYOUT_FROM}
+`;
+
+const PAYOUT_DETAIL_SELECT = `
   SELECT p.*,
     m.full_name AS member_name,
     m.member_number
-  FROM event_payouts p
-  LEFT JOIN members m ON p.member_id = m.id
+  ${PAYOUT_FROM}
 `;
 
 async function listPayouts(query = {}) {
@@ -220,7 +236,7 @@ async function listPayouts(query = {}) {
   const limit = Math.min(Number(query.limit) || 100, 200);
 
   const result = await db.query(
-    `${PAYOUT_SELECT} ${where} ORDER BY p.created_at DESC LIMIT ${limit}`,
+    `${PAYOUT_LIST_SELECT} ${where} ORDER BY p.created_at DESC LIMIT ${limit}`,
     values
   );
   return json(200, {
@@ -230,7 +246,7 @@ async function listPayouts(query = {}) {
 
 async function getPayout(id, includeDocData = false) {
   const db = getDb();
-  const result = await db.query(`${PAYOUT_SELECT} WHERE p.id = $1 LIMIT 1`, [id]);
+  const result = await db.query(`${PAYOUT_DETAIL_SELECT} WHERE p.id = $1 LIMIT 1`, [id]);
   if (!result.rows[0]) return json(404, { error: 'Payout case not found.' });
   return json(200, { payout: buildPayoutSummary(result.rows[0], includeDocData) });
 }
@@ -276,7 +292,7 @@ async function createPayout(body, actor) {
     new_value: { deceased_name, event_label: row.event_label },
   });
 
-  const joined = await db.query(`${PAYOUT_SELECT} WHERE p.id = $1`, [row.id]);
+  const joined = await db.query(`${PAYOUT_DETAIL_SELECT} WHERE p.id = $1`, [row.id]);
   return json(201, { payout: buildPayoutSummary(joined.rows[0]) });
 }
 
@@ -318,7 +334,10 @@ async function updatePayout(id, body, actor) {
   if (body.deceased_relationship !== undefined) {
     setField('deceased_relationship', String(body.deceased_relationship || '').slice(0, 100) || null);
   }
-  if (body.notes !== undefined) setField('notes', String(body.notes || '').slice(0, 4000) || null);
+  if (body.notes !== undefined) {
+    const merged = mergeBoardNotes(row.notes, body.notes, actor?.actor_label || 'Board');
+    setField('notes', String(merged || '').slice(0, 4000) || null);
+  }
   if (body.payout_method !== undefined) setField('payout_method', String(body.payout_method || '').slice(0, 50) || null);
   if (body.payout_reference !== undefined) setField('payout_reference', String(body.payout_reference || '').slice(0, 500) || null);
   if (body.documents) setField('documents', JSON.stringify(documents));

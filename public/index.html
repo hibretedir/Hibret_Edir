@@ -6,7 +6,7 @@
 <title>Hibret Edir Association — Ethiopian Mutual Assistance</title>
 <link rel="stylesheet" href="/css/hibret.css?v=nav1">
 <link rel="stylesheet" href="/css/compat.css?v=nav1">
-<link rel="stylesheet" href="/css/public-pages.css?v=pubfix11">
+<link rel="stylesheet" href="/css/public-pages.css?v=pubfix17">
 </head>
 <body class="site-public">
 
@@ -49,7 +49,6 @@
     <div class="mmenu-list">
       <a href="#" onclick="return goSection('home')"><span class="en">Home</span><span class="am">መነሻ</span></a>
       <a href="#announcement" onclick="return goSection('announcement')"><span class="en">Announcement</span><span class="am">ማስታወቂያ</span></a>
-      <a href="#remembrance" onclick="return goSection('remembrance')"><span class="en">In Remembrance</span><span class="am">የማዘን ዝርዝር</span></a>
       <a href="#about" onclick="return goSection('about')"><span class="en">About Us</span><span class="am">ስለ እኛ</span></a>
       <a href="#howitworks" onclick="return goSection('howitworks')"><span class="en">How It Works</span><span class="am">እንዴት ይሰራል</span></a>
       <a href="#payment" onclick="return goSection('payment')"><span class="en">Make a Payment</span><span class="am">ክፍያ ያድርጉ</span></a>
@@ -78,17 +77,17 @@
     <p class="hero-desc fade-up am">የሎስ አንጀለስ ኢትዮጵያዊ ማህበረሰብን አንድ ላይ አምጥቶ ቤተሰቦችን ድጋፍ ለማድረግ።</p>
     <div class="hero-stats fade-up">
       <div class="hstat">
-        <div class="hstat-val" data-active-count>197</div>
+        <div class="hstat-val" data-active-count>—</div>
         <div class="hstat-lbl en">Active Members</div>
         <div class="hstat-lbl am">ንቁ አባላት</div>
       </div>
       <div class="hstat">
-        <div class="hstat-val">$15,000</div>
+        <div class="hstat-val" data-payout-amount>$15,000</div>
         <div class="hstat-lbl en">Funeral Support</div>
         <div class="hstat-lbl am">የቀብር ድጋፍ</div>
       </div>
       <div class="hstat">
-        <div class="hstat-val">$110</div>
+        <div class="hstat-val" data-amount-per-member>$110</div>
         <div class="hstat-lbl en">Per Death</div>
         <div class="hstat-lbl am">በሞት</div>
       </div>
@@ -112,9 +111,6 @@
   <div class="sg-cards">
     <button class="sg-card sg-card-accent-red" onclick="goSection('announcement')">
       <span class="sg-icon">A</span><span class="en">Announcement</span><span class="am">ማስታወቂያ</span>
-    </button>
-    <button class="sg-card sg-card-accent-green" onclick="goSection('remembrance')">
-      <span class="sg-icon">🕊</span><span class="en">In Remembrance</span><span class="am">የማዘን ዝርዝር</span>
     </button>
     <button class="sg-card sg-card-accent-green" onclick="goSection('about')">
       <span class="sg-icon">i</span><span class="en">About Us</span><span class="am">ስለ እኛ</span>
@@ -149,27 +145,27 @@
 
     <!-- Memorial announcement template — automation fills data-ann-* fields per event -->
     <article class="ann-letter fade-up" id="annMemorial" data-announcement-template="memorial-v1"
-      data-ann-deceased-name="Ato Brook Zewdie"
-      data-ann-event-number="30"
+      data-ann-deceased-name=""
+      data-ann-event-number=""
       data-ann-collect-dues="true">
       <div class="ann-letter-icon" aria-hidden="true">🕊️</div>
       <div class="ann-letter-body">
         <p class="ann-letter-opening">
           It is with deep sorrow that we share the passing of our beloved Hibret Edir member,
-          <strong data-ann-field="deceased_name">Ato Brook Zewdie</strong>.
+          <strong data-ann-field="deceased_name">—</strong>.
         </p>
 
-        <div class="ann-service-block">
+        <div class="ann-service-block" data-ann-block="prayer">
           <p class="ann-service-label">A prayer service will be held at:</p>
-          <p class="ann-service-venue" data-ann-field="prayer_venue">St. Mary’s Ethiopian Orthodox Tewahedo Church</p>
-          <p class="ann-service-address" data-ann-field="prayer_address">5505 West Slauson Ave, Los Angeles, CA 90056</p>
-          <p class="ann-service-datetime" data-ann-field="prayer_datetime">Thursday, April 23 at 10:00 AM</p>
+          <p class="ann-service-venue" data-ann-field="prayer_venue">—</p>
+          <p class="ann-service-address" data-ann-field="prayer_address">—</p>
+          <p class="ann-service-datetime" data-ann-field="prayer_datetime">—</p>
         </div>
 
-        <div class="ann-service-block">
+        <div class="ann-service-block" data-ann-block="burial">
           <p class="ann-service-label">A burial service will follow at:</p>
-          <p class="ann-service-venue" data-ann-field="burial_venue">Holy Cross Cemetery</p>
-          <p class="ann-service-address" data-ann-field="burial_address">5835 W Slauson Ave, Culver City, CA 90230</p>
+          <p class="ann-service-venue" data-ann-field="burial_venue">—</p>
+          <p class="ann-service-address" data-ann-field="burial_address">—</p>
         </div>
 
         <div class="ann-dues-block" data-ann-dues-section="collect">
@@ -193,39 +189,17 @@
       </div>
     </article>
 
-    <div class="ann-box fade-up">
+    <div class="ann-box fade-up" id="annSummaryBox">
       <div class="ann-icon">🕊️</div>
       <div style="flex:1">
-        <div class="ann-lbl en">Funeral Support · #30</div>
-        <div class="ann-lbl am">የቀብር ድጋፍ · #30</div>
-        <div class="ann-title en">Ato Brook Zewdie</div>
-        <div class="ann-title am">አቶ ብሩክ ዘውዴ</div>
-        <div class="ann-desc en">All active members are requested to make their $110 contribution within 3 days. PayPal invoices have been sent to all members. For assistance please contact (424) 547-5594.</div>
-        <div class="ann-desc am">ሁሉም ንቁ አባላት ክፍያቸውን $110 በ3 ቀናት ውስጥ እንዲፈጽሙ ይጠየቃሉ።</div>
+        <div class="ann-lbl en" id="annSummaryLblEn">Funeral Support</div>
+        <div class="ann-lbl am" id="annSummaryLblAm">የቀብር ድጋፍ</div>
+        <div class="ann-title en" id="annSummaryTitleEn">—</div>
+        <div class="ann-title am" id="annSummaryTitleAm">—</div>
+        <div class="ann-desc en" id="annSummaryDescEn">Loading current announcement…</div>
+        <div class="ann-desc am" id="annSummaryDescAm">ማስታወቂያ በመጫን ላይ…</div>
       </div>
       <a href="/portal/" class="ann-btn"><span class="en">Pay Now →</span><span class="am">አሁን ይክፈሉ →</span></a>
-    </div>
-  </div>
-</section>
-</div>
-
-<!-- ══ IN REMEMBRANCE ══ -->
-<div class="section-page" id="section-remembrance">
-<section class="sec sec-dark" id="remembrance">
-  <div class="sec-inner">
-    <div class="sec-tag en">Memorial Roll</div>
-    <div class="sec-tag am">የማዘን ዝርዝር</div>
-    <h2 class="sec-title en fade-up">In Remembrance</h2>
-    <h2 class="sec-title am fade-up">በזክሮች ውስጥ</h2>
-    <div class="sec-line"></div>
-    <p class="sec-sub en fade-up">Members and loved ones the Hibret Edir community has supported since our founding in 2011.</p>
-    <p class="sec-sub am fade-up">ከ2011 ጀምሮ ሕብረት እድር ያጠራቀመባቸው አባላትና ቤተሰቦች።</p>
-
-    <div class="memorial-card fade-up">
-      <div class="memorial-list" id="memorialList">
-        <p class="memorial-loading en">Loading memorial roll…</p>
-        <p class="memorial-loading am">ዝርዝር በመጫን ላይ…</p>
-      </div>
     </div>
   </div>
 </section>
@@ -254,7 +228,7 @@
         <div class="step-num">2</div>
         <h3 class="en">All Members Notified</h3>
         <h3 class="am">ሁሉም አባላት ይነገሯቸዋል</h3>
-        <p class="en">SMS, email, and WhatsApp sent to all <span data-active-count>197</span> active members with payment instructions and funeral details.</p>
+        <p class="en">SMS, email, and WhatsApp sent to all <span data-active-count>—</span> active members with payment instructions and funeral details.</p>
         <p class="am">SMS፣ ኢሜይል እና WhatsApp ለሁሉም አባላት ይላካል።</p>
       </div>
       <div class="step-card fade-up" style="animation-delay:.2s">
@@ -299,8 +273,8 @@
             <div class="val-icon">🤝</div>
             <h4 class="en">Community First</h4>
             <h4 class="am">ማህበረሰብ አስቀድሞ</h4>
-            <p class="en"><span data-active-count>197</span> members united in support</p>
-            <p class="am"><span data-active-count>197</span> አባላት በጋራ ድጋፍ</p>
+            <p class="en"><span data-active-count>—</span> members united in support</p>
+            <p class="am"><span data-active-count>—</span> አባላት በጋራ ድጋፍ</p>
           </div>
           <div class="val-card">
             <div class="val-icon">🔍</div>
@@ -677,8 +651,6 @@
         <h4 class="am">ክፍሎች</h4>
         <a href="#" onclick="return goSection('announcement')" class="en">Announcement</a>
         <a href="#" onclick="return goSection('announcement')" class="am">ማስታወቂያ</a>
-        <a href="#" onclick="return goSection('remembrance')" class="en">In Remembrance</a>
-        <a href="#" onclick="return goSection('remembrance')" class="am">የማዘን ዝርዝር</a>
         <a href="#" onclick="return goSection('about')" class="en">About Us</a>
         <a href="#" onclick="return goSection('about')" class="am">ስለ እኛ</a>
         <a href="#" onclick="return goSection('howitworks')" class="en">How It Works</a>
@@ -725,11 +697,10 @@
 </footer>
 
 <script>
-const NAV_SECTIONS = new Set(['announcement','remembrance','about','howitworks','payment','bylaws','apply','waitingliststatus','contact']);
+const NAV_SECTIONS = new Set(['announcement','about','howitworks','payment','bylaws','apply','waitingliststatus','contact']);
 let wlStatusEntries = [];
+let wlStatusMeta = {};
 let wlStatusLoaded = false;
-let memorialPeople = [];
-let memorialLoaded = false;
 
 function mob(){ return window.innerWidth <= 768; }
 
@@ -813,11 +784,11 @@ function goSection(id){
   if(NAV_SECTIONS.has(id)){
     history.replaceState(null,'','#'+id);
   }
-  if(id==='waitingliststatus' && !wlStatusLoaded){
+  if(id==='waitingliststatus'){
     loadWaitingListStatus();
   }
-  if(id==='remembrance' && !memorialLoaded){
-    loadMemorialRoll();
+  if(id==='announcement'){
+    loadCurrentAnnouncement();
   }
   return false;
 }
@@ -935,16 +906,11 @@ document.querySelectorAll('.fade-up').forEach(el=>obs.observe(el));
 
 const wlSec = document.getElementById('waitingliststatus');
 const applySec = document.getElementById('apply');
-const memorialSec = document.getElementById('remembrance');
 const wlStatusObserver = new IntersectionObserver((entries) => {
-  if (entries.some((e) => e.isIntersecting) && !wlStatusLoaded) loadWaitingListStatus();
-}, { threshold: 0.08 });
-const memorialObserver = new IntersectionObserver((entries) => {
-  if (entries.some((e) => e.isIntersecting) && !memorialLoaded) loadMemorialRoll();
+  if (entries.some((e) => e.isIntersecting)) loadWaitingListStatus();
 }, { threshold: 0.08 });
 if (wlSec) wlStatusObserver.observe(wlSec);
 if (applySec) wlStatusObserver.observe(applySec);
-if (memorialSec) memorialObserver.observe(memorialSec);
 
 // Nav shadow
 window.addEventListener('scroll',()=>{
@@ -1093,18 +1059,23 @@ const WL_STATUS_PANELS = [
 function renderWaitingListNextLine() {
   const el = document.getElementById('wlNextLine');
   if (!el) return;
+  const note = wlStatusMeta.updated_note;
   const waiting = wlStatusEntries
     .filter((e) => !e.added)
     .sort((a, b) => Number(a.position) - Number(b.position));
   const next3 = waiting.slice(0, 3);
   if (!next3.length) {
-    el.innerHTML = document.documentElement.lang === 'am'
-      ? '<p class="sec-sub am fade-up vis">ቀጣይ ስም አልተገኘም።</p>'
-      : '<p class="sec-sub en fade-up vis">No one is currently waiting.</p>';
+    el.innerHTML = note
+      ? `<p class="sec-sub en fade-up vis">${escapeWlHtml(note)}</p>`
+      : (document.documentElement.lang === 'am'
+        ? '<p class="sec-sub am fade-up vis">ቀጣይ ስም አልተገኘም።</p>'
+        : '<p class="sec-sub en fade-up vis">No one is currently waiting.</p>');
     return;
   }
   const names = next3.map((e) => escapeWlHtml(e.display_name || '—')).join(', ');
+  const noteHtml = note ? `<p class="sec-sub en fade-up vis">${escapeWlHtml(note)}</p>` : '';
   el.innerHTML = `
+    ${noteHtml}
     <p class="sec-sub en fade-up vis"><strong>Next on the list:</strong> ${names}</p>
     <p class="sec-sub am fade-up vis"><strong>ቀጣይ በዝርዝሩ:</strong> ${names}</p>`;
 }
@@ -1185,6 +1156,10 @@ async function loadWaitingListStatus() {
 
   async function applyPayload(data) {
     const through = data.added_through_position || 11;
+    wlStatusMeta = {
+      updated_note: data.updated_note || '',
+      added_through_position: through,
+    };
     wlStatusEntries = (data.entries || []).map((e) => ({
       ...e,
       added: e.added ?? Number(e.position) <= through,
@@ -1195,7 +1170,7 @@ async function loadWaitingListStatus() {
   }
 
   try {
-    const res = await fetch(APPLY_API + '/waiting-list/status');
+    const res = await fetch(APPLY_API + '/waiting-list/status?_=' + Date.now());
     const data = await res.json();
     if (res.ok) {
       await applyPayload(data);
@@ -1220,71 +1195,155 @@ async function loadWaitingListStatus() {
 if ((location.hash || '').replace(/^#/, '') === 'waitingliststatus') {
   loadWaitingListStatus();
 }
-if ((location.hash || '').replace(/^#/, '') === 'remembrance') {
-  loadMemorialRoll();
+
+function fmtSiteMoney(n) {
+  const v = Number(n);
+  if (!Number.isFinite(v)) return null;
+  return '$' + v.toLocaleString('en-US', { maximumFractionDigits: 0 });
 }
 
-function escHtml(s) {
-  return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
-}
-
-function renderMemorialRoll() {
-  const list = document.getElementById('memorialList');
-  if (!list) return;
-  if (!memorialPeople.length) {
-    list.innerHTML = '<p class="memorial-empty en">Memorial roll will be updated soon.</p><p class="memorial-empty am">የማዘን ዝርዝር በቅርቡ ይዘመናል።</p>';
-    return;
+function applyMemberStats(data) {
+  if (!data) return;
+  const active = data.active_count;
+  const cap = data.member_cap;
+  if (active != null) {
+    document.querySelectorAll('[data-active-count]').forEach((el) => {
+      el.textContent = active;
+    });
   }
-  const sorted = [...memorialPeople].sort((a, b) => {
-    const yA = parseInt(a.year, 10) || 0;
-    const yB = parseInt(b.year, 10) || 0;
-    if (yB !== yA) return yB - yA;
-    return (a.name || '').localeCompare(b.name || '');
-  });
-  list.innerHTML = sorted.map((p) => `
-    <div class="memorial-name">
-      <span class="memorial-name-text">${escHtml(p.name)}</span>
-      ${p.year ? `<span class="memorial-name-year">${escHtml(p.year)}</span>` : ''}
-    </div>`).join('');
+  if (cap != null) {
+    document.querySelectorAll('[data-member-cap]').forEach((el) => {
+      el.textContent = cap;
+    });
+  }
+  const perDeath = fmtSiteMoney(data.amount_per_member);
+  if (perDeath) {
+    document.querySelectorAll('[data-amount-per-member]').forEach((el) => {
+      el.textContent = perDeath;
+    });
+  }
+  const payout = fmtSiteMoney(data.payout_amount);
+  if (payout) {
+    document.querySelectorAll('[data-payout-amount]').forEach((el) => {
+      el.textContent = payout;
+    });
+  }
 }
 
-async function loadMemorialRoll() {
-  const list = document.getElementById('memorialList');
+function applyAnnouncement(ann) {
+  if (!ann) return;
+  const memorial = document.getElementById('annMemorial');
+  if (memorial) {
+    memorial.dataset.annDeceasedName = ann.deceased_name || '';
+    memorial.dataset.annEventNumber = ann.event_number != null ? String(ann.event_number) : '';
+    memorial.dataset.annCollectDues = ann.collect_dues ? 'true' : 'false';
+
+    const setField = (field, val) => {
+      memorial.querySelectorAll(`[data-ann-field="${field}"]`).forEach((el) => {
+        el.textContent = val || '—';
+      });
+    };
+    setField('deceased_name', ann.deceased_name);
+    setField('prayer_venue', ann.prayer_venue);
+    setField('prayer_address', ann.prayer_address);
+    setField('prayer_datetime', ann.prayer_datetime);
+    setField('burial_venue', ann.burial_venue);
+    setField('burial_address', ann.burial_address);
+
+    const prayerBlock = memorial.querySelector('[data-ann-block="prayer"]');
+    const burialBlock = memorial.querySelector('[data-ann-block="burial"]');
+    const hasPrayer = !!(ann.prayer_venue || ann.prayer_address || ann.prayer_datetime);
+    const hasBurial = !!(ann.burial_venue || ann.burial_address);
+    if (prayerBlock) prayerBlock.style.display = hasPrayer ? '' : 'none';
+    if (burialBlock) burialBlock.style.display = hasBurial ? '' : 'none';
+
+    const collectBlock = memorial.querySelector('[data-ann-dues-section="collect"]');
+    const waivedBlock = memorial.querySelector('[data-ann-dues-section="waived"]');
+    if (collectBlock) collectBlock.style.display = ann.collect_dues ? '' : 'none';
+    if (waivedBlock) waivedBlock.style.display = ann.collect_dues ? 'none' : '';
+  }
+
+  const evNum = ann.event_number != null ? `#${ann.event_number}` : '';
+  const amt = fmtSiteMoney(ann.amount_per_member) || '$110';
+  const name = ann.deceased_name || '—';
+  const lblEn = document.getElementById('annSummaryLblEn');
+  const lblAm = document.getElementById('annSummaryLblAm');
+  if (lblEn) lblEn.textContent = evNum ? `Funeral Support · ${evNum}` : 'Funeral Support';
+  if (lblAm) lblAm.textContent = evNum ? `የቀብር ድጋፍ · ${evNum}` : 'የቀብር ድጋፍ';
+  const titleEn = document.getElementById('annSummaryTitleEn');
+  const titleAm = document.getElementById('annSummaryTitleAm');
+  if (titleEn) titleEn.textContent = name;
+  if (titleAm) titleAm.textContent = name;
+  const descEn = document.getElementById('annSummaryDescEn');
+  const descAm = document.getElementById('annSummaryDescAm');
+  if (descEn) {
+    descEn.textContent = ann.collect_dues
+      ? `All active members are requested to make their ${amt} contribution within 3 days. PayPal invoices have been sent to all members. For assistance please contact (424) 547-5594.`
+      : 'No member contribution is required for this memorial. Sufficient funds are available in the Edir account to support the family at this time.';
+  }
+  if (descAm) {
+    descAm.textContent = ann.collect_dues
+      ? `ሁሉም ንቁ አባላት ክፍያቸውን ${amt} በ3 ቀናት ውስጥ እንዲፈጽሙ ይጠየቃሉ።`
+      : 'ለዚህ ቀብር ክፍያ አያስፈልግም። በእድር ሂሳብ ውስጥ በቂ ገንዘብ አለ።';
+  }
+}
+
+async function loadCurrentAnnouncement() {
   try {
-    const res = await fetch('/data/memorial.json?v=2');
+    const res = await fetch(APPLY_API + '/current-announcement?_=' + Date.now());
+    if (!res.ok) return;
     const data = await res.json();
-    if (!res.ok) throw new Error('Could not load memorial roll');
-    memorialPeople = Array.isArray(data.people) ? data.people.filter(p => p && p.name) : [];
-    memorialLoaded = true;
-    renderMemorialRoll();
-  } catch {
-    if (list) {
-      list.innerHTML = '<p class="memorial-empty en">Could not load the memorial roll. Please try again later.</p><p class="memorial-empty am">ዝርዝሩ አልተጫነም። ቆይተው ይሞክሩ።</p>';
-    }
+    if (data.announcement) applyAnnouncement(data.announcement);
+  } catch (err) {
+    console.warn('Could not load current announcement:', err);
   }
 }
 
 async function loadMemberStats() {
+  const sources = [
+    '/.netlify/functions/apply/site-stats',
+    '/.netlify/functions/portal/member-stats',
+    '/.netlify/functions/portal/stats',
+    '/.netlify/functions/portal/events',
+    '/.netlify/functions/portal/invoice-stats',
+  ];
+  for (const url of sources) {
+    try {
+      const res = await fetch(url + (url.includes('?') ? '&' : '?') + '_=' + Date.now());
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data.active_count == null && data.stats?.active_members != null) {
+        data.active_count = data.stats.active_members;
+      }
+      if (data.active_count != null || data.amount_per_member != null || data.payout_amount != null) {
+        applyMemberStats(data);
+        if (data.active_count != null) return;
+      }
+    } catch {
+      /* try next source */
+    }
+  }
   try {
-    const res = await fetch('/member-stats.json');
-    if (!res.ok) return;
-    const data = await res.json();
-    const active = data.active_count;
-    const cap = data.member_cap;
-    if (active) {
-      document.querySelectorAll('[data-active-count]').forEach((el) => {
-        el.textContent = active;
-      });
+    const res = await fetch('/member-stats.json?_=' + Date.now());
+    if (res.ok) {
+      const data = await res.json();
+      applyMemberStats(data);
     }
-    if (cap) {
-      document.querySelectorAll('[data-member-cap]').forEach((el) => {
-        el.textContent = cap;
-      });
-    }
-  } catch {}
+  } catch {
+    /* offline fallback only */
+  }
 }
 
 loadMemberStats();
+loadCurrentAnnouncement();
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    loadMemberStats();
+    if ((location.hash || '').replace(/^#/, '') === 'announcement') loadCurrentAnnouncement();
+    if ((location.hash || '').replace(/^#/, '') === 'waitingliststatus') loadWaitingListStatus();
+  }
+});
 </script>
 </body>
 </html>

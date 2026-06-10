@@ -87,7 +87,6 @@ async function syncMemberFromAdminUpdate(db, memberId, oldRow, newRow, actor) {
   });
   if (!Object.keys(changes).length) return;
 
-  await syncMemberContactToWaitingList(db, memberId, newRow);
   await syncApplicationContactFromMember(db, memberId);
 
   const summary = Object.entries(changes)
@@ -108,7 +107,6 @@ async function syncMemberFromAdminUpdate(db, memberId, oldRow, newRow, actor) {
 }
 
 async function syncMemberSelfUpdate(db, memberId, oldRow, newRow, actor, fieldChanges) {
-  await syncMemberContactToWaitingList(db, memberId, newRow);
   await syncApplicationContactFromMember(db, memberId);
 
   const summary = Object.entries(fieldChanges)
@@ -151,8 +149,12 @@ async function syncBeneficiaryUpdate(db, memberId, beneficiary, isNew, actor, op
   );
 }
 
-async function syncInvoiceStatusChange(db, invoice, oldStatus, newStatus, actor, memberId) {
-  const summary = `Invoice #${invoice.invoice_number}: ${oldStatus || 'Unknown'} → ${newStatus}`;
+async function syncInvoiceStatusChange(db, invoice, oldStatus, newStatus, actor, memberId, options = {}) {
+  const paidNote = String(options.paid_note || invoice.paid_note || '').trim();
+  let summary = `Invoice #${invoice.invoice_number}: ${oldStatus || 'Unknown'} → ${newStatus}`;
+  if (newStatus === 'Paid' && paidNote) {
+    summary += ` — ${paidNote}`;
+  }
   await logActivity(db, {
     ...actor,
     member_id: memberId || null,
@@ -161,12 +163,19 @@ async function syncInvoiceStatusChange(db, invoice, oldStatus, newStatus, actor,
     table_name: 'invoices',
     record_id: invoice.id,
     old_value: { status: oldStatus },
-    new_value: { status: newStatus, invoice_number: invoice.invoice_number },
+    new_value: {
+      status: newStatus,
+      invoice_number: invoice.invoice_number,
+      paid_note: paidNote || null,
+    },
     summary,
   });
 
   if (memberId && newStatus === 'Paid') {
-    await appendMemberNote(db, memberId, summary, actor.actor_label);
+    const memberSummary = paidNote
+      ? `Invoice #${invoice.invoice_number} marked paid: ${paidNote}`
+      : summary;
+    await appendMemberNote(db, memberId, memberSummary, actor.actor_label);
   }
 
   if (memberId && newStatus !== 'Paid' && invoice.sent_date) {

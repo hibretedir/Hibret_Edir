@@ -2,6 +2,21 @@
   publish = "public"
   functions = "netlify/functions"
 
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["pg", "bcryptjs", "jsonwebtoken", "dotenv", "node-fetch"]
+
+[functions."paypal-sync"]
+  timeout = 60
+
+# Hourly check; runs full sync at 9:00 AM & 6:00 PM America/Los_Angeles (see paypal-sync-scheduled.js)
+[functions."paypal-sync-scheduled"]
+  schedule = "0 * * * *"
+  timeout = 30
+
+[functions."paypal-sync-background"]
+  timeout = 900
+
 # Redirect rules
 [[redirects]]
   from = "/portal"
