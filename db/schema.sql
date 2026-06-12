@@ -199,6 +199,11 @@ CREATE TABLE IF NOT EXISTS membership_applications (
 -- ALTER TABLE membership_applications ADD COLUMN IF NOT EXISTS id_documents JSONB DEFAULT '{}';
 -- ALTER TABLE membership_applications ADD COLUMN IF NOT EXISTS review_checklist JSONB NOT NULL DEFAULT '{"name_match":false,"fields_complete":false,"id_uploaded":false,"fee_paid":false}';
 -- ALTER TABLE membership_applications ADD COLUMN IF NOT EXISTS registration_fee_paid BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE waiting_list ADD COLUMN IF NOT EXISTS invited_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE invoices ADD COLUMN IF NOT EXISTS membership_application_id INTEGER REFERENCES membership_applications(id);
+ALTER TABLE membership_applications ADD COLUMN IF NOT EXISTS registration_invoice_id INTEGER REFERENCES invoices(id);
+CREATE INDEX IF NOT EXISTS idx_invoices_membership_application ON invoices(membership_application_id);
+CREATE INDEX IF NOT EXISTS idx_membership_applications_reg_invoice ON membership_applications(registration_invoice_id);
 -- Audit log migration (existing databases):
 -- ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS member_id INTEGER REFERENCES members(id);
 -- ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS actor_type VARCHAR(20) NOT NULL DEFAULT 'system';

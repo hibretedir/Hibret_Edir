@@ -4,9 +4,10 @@
 
 const { getDb } = require('./db');
 const { invalidateInvoiceStatsCache } = require('./invoice-stats-cache');
-const { paymentMethodFromPaypalStatus } = require('./payment-methods');
+const { paymentMethodFromPaypalStatus, SYNC_PROTECT_LOCAL_PAID_SQL } = require('./payment-methods');
 const { verifyAdminRequest } = require('./admin-auth');
 const { loadLocalEnv, paypalApiBase } = require('./paypal-env');
+const { getPayPalAccessToken, fetchPayPalInvoiceDetail } = require('./paypal-client');
 
 loadLocalEnv();
 
@@ -20,27 +21,7 @@ function json(statusCode, payload) {
   return { statusCode, headers, body: JSON.stringify(payload) };
 }
 
-async function getAccessToken() {
-  const clientId = process.env.PAYPAL_CLIENT_ID;
-  const secret = process.env.PAYPAL_SECRET;
-  if (!clientId || !secret) {
-    throw new Error('PayPal credentials not configured. Add PAYPAL_CLIENT_ID and PAYPAL_SECRET to .env');
-  }
-
-  const authResponse = await fetch(`${paypalApiBase()}/v1/oauth2/token`, {
-    method: 'POST',
-    headers: {
-      Authorization: 'Basic ' + Buffer.from(`${clientId}:${secret}`).toString('base64'),
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: 'grant_type=client_credentials',
-  });
-  const authData = await authResponse.json();
-  if (!authData.access_token) {
-    throw new Error(authData.error_description || authData.error || 'PayPal authentication failed');
-  }
-  return authData.access_token;
-}
+const getAccessToken = getPayPalAccessToken;
 
 async function fetchPayPalBalance(accessToken, currencyCode = 'USD') {
   const base = paypalApiBase();
@@ -91,20 +72,7 @@ async function fetchInvoiceSummaries(accessToken) {
   return all;
 }
 
-async function fetchInvoiceDetail(accessToken, invoiceId) {
-  const base = paypalApiBase();
-  const res = await fetch(`${base}/v2/invoicing/invoices/${encodeURIComponent(invoiceId)}`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.message || data.error || `PayPal invoice detail failed for ${invoiceId}`);
-  }
-  return data;
-}
+const fetchInvoiceDetail = fetchPayPalInvoiceDetail;
 
 /** Fetch full invoice details for a batch of PayPal invoice IDs. */
 async function fetchPaypalDetailsByIds(accessToken, ids) {
@@ -236,14 +204,30 @@ async function upsertInvoiceBatch(client, rows) {
        invoice_number = COALESCE(EXCLUDED.invoice_number, invoices.invoice_number),
        member_id = COALESCE(EXCLUDED.member_id, invoices.member_id),
        event_id = COALESCE(EXCLUDED.event_id, invoices.event_id),
-       status = EXCLUDED.status,
+       status = CASE
+         WHEN EXCLUDED.status IN ('Paid', 'Cancelled') THEN EXCLUDED.status
+         WHEN ${SYNC_PROTECT_LOCAL_PAID_SQL} AND EXCLUDED.status = 'Unpaid' THEN invoices.status
+         ELSE EXCLUDED.status
+       END,
        amount = EXCLUDED.amount,
-       amount_due = EXCLUDED.amount_due,
+       amount_due = CASE
+         WHEN EXCLUDED.status IN ('Paid', 'Cancelled') THEN EXCLUDED.amount_due
+         WHEN ${SYNC_PROTECT_LOCAL_PAID_SQL} AND EXCLUDED.status = 'Unpaid'
+           AND LOWER(TRIM(COALESCE(invoices.status, ''))) = 'paid' THEN 0
+         ELSE EXCLUDED.amount_due
+       END,
        sent_date = COALESCE(EXCLUDED.sent_date, invoices.sent_date),
-       paid_date = COALESCE(EXCLUDED.paid_date, invoices.paid_date),
+       paid_date = CASE
+         WHEN EXCLUDED.status = 'Paid' THEN COALESCE(EXCLUDED.paid_date, invoices.paid_date)
+         WHEN ${SYNC_PROTECT_LOCAL_PAID_SQL} AND EXCLUDED.status = 'Unpaid'
+           AND LOWER(TRIM(COALESCE(invoices.status, ''))) = 'paid' THEN invoices.paid_date
+         ELSE COALESCE(EXCLUDED.paid_date, invoices.paid_date)
+       END,
        payment_method = CASE
          WHEN EXCLUDED.payment_method = 'Zelle & BofA' THEN 'Zelle & BofA'
          WHEN LOWER(COALESCE(invoices.payment_method, '')) IN ('zelle', 'bofa') THEN invoices.payment_method
+         WHEN ${SYNC_PROTECT_LOCAL_PAID_SQL} AND EXCLUDED.status = 'Unpaid'
+           AND invoices.payment_method IS NOT NULL THEN invoices.payment_method
          WHEN EXCLUDED.payment_method IS NOT NULL THEN EXCLUDED.payment_method
          ELSE invoices.payment_method
        END,
@@ -325,6 +309,14 @@ async function syncInvoicesToDb(paypalItems) {
   const paid = paypalItems.filter((item) => mapPaypalStatus(item.status) === 'Paid').length;
   const withEvent = paypalItems.filter((item) => extractEventFromItems(item).event_number).length;
 
+  let membership_completed = [];
+  try {
+    const { processPaidRegistrationInvoices } = require('./membership-completion');
+    membership_completed = await processPaidRegistrationInvoices(db, { source: 'PayPal sync' });
+  } catch (err) {
+    console.error('Registration membership completion after sync failed:', err);
+  }
+
   return {
     ok: true,
     paypal_total: paypalItems.length,
@@ -335,6 +327,7 @@ async function syncInvoicesToDb(paypalItems) {
     with_event: withEvent,
     paid_on_paypal: paid,
     unpaid_on_paypal: paypalItems.length - paid,
+    membership_completed,
     synced_at: new Date().toISOString(),
   };
 }

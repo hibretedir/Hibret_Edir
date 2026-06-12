@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Automated Membership Onboarding — Hibret Edir Platform</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f1419;
+      --surface: #1a2332;
+      --text: #e8ecf1;
+      --muted: #8b9cb3;
+      --gold: #d4a853;
+      --gold-dim: rgba(212, 168, 83, 0.15);
+      --green: #3dd68c;
+      --line: #2a3544;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+    .hero {
+      padding: 56px 24px 48px;
+      text-align: center;
+      background: linear-gradient(180deg, #1a2332 0%, var(--bg) 100%);
+      border-bottom: 1px solid var(--line);
+    }
+    .hero h1 {
+      font-size: clamp(1.75rem, 4vw, 2.5rem);
+      font-weight: 700;
+      margin: 0 0 12px;
+      letter-spacing: -0.02em;
+    }
+    .hero p {
+      max-width: 640px;
+      margin: 0 auto;
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+    .badge {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--gold);
+      background: var(--gold-dim);
+      padding: 6px 14px;
+      border-radius: 999px;
+      margin-bottom: 20px;
+    }
+    main { max-width: 960px; margin: 0 auto; padding: 40px 24px 80px; }
+    section { margin-bottom: 48px; }
+    h2 {
+      font-size: 1.25rem;
+      color: var(--gold);
+      margin: 0 0 20px;
+      font-weight: 600;
+    }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 20px 22px;
+    }
+    .card h3 { margin: 0 0 8px; font-size: 1rem; }
+    .card p { margin: 0; font-size: 0.9rem; color: var(--muted); }
+    .diagram {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 24px 16px;
+      overflow-x: auto;
+    }
+    .diagram h3 {
+      margin: 0 0 16px;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      padding: 0 8px;
+    }
+    .trigger {
+      border-left: 3px solid var(--gold);
+      padding-left: 16px;
+      margin-bottom: 28px;
+    }
+    .trigger-title { font-weight: 600; margin-bottom: 4px; }
+    .trigger-desc { color: var(--muted); font-size: 0.9rem; margin-bottom: 12px; }
+    ul.auto { margin: 0; padding-left: 1.2rem; color: var(--muted); font-size: 0.9rem; }
+    ul.auto li { margin-bottom: 6px; }
+    ul.auto li::marker { color: var(--green); }
+    .stack {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 24px;
+    }
+    .stack span {
+      font-size: 0.78rem;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      padding: 6px 12px;
+      border-radius: 6px;
+      color: var(--muted);
+    }
+    footer {
+      text-align: center;
+      padding: 32px 24px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    .mermaid { background: transparent !important; }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="badge">Case study · Mutual-assistance platform</div>
+    <h1>End-to-end membership onboarding automation</h1>
+    <p>
+      A 200-member Edir organization replaced spreadsheets and manual tracking with a single pipeline —
+      waiting list through paid membership — with full audit logging at every step.
+    </p>
+  </header>
+
+  <main>
+    <section>
+      <h2>What the platform automates</h2>
+      <div class="cards">
+        <div class="card">
+          <h3>Fair queue &amp; cap</h3>
+          <p>Ordered waiting list with live slot math against a 200-member cap — no over-inviting.</p>
+        </div>
+        <div class="card">
+          <h3>Vet before billing</h3>
+          <p>Board reviews name, application, and ID before any PayPal invoice is sent.</p>
+        </div>
+        <div class="card">
+          <h3>Pay to activate</h3>
+          <p>$200 registration invoice via PayPal; active member record created only when paid.</p>
+        </div>
+        <div class="card">
+          <h3>Full audit trail</h3>
+          <p>Every invite, submission, review, invoice, and approval logged for board governance.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Pipeline overview</h2>
+      <div class="diagram">
+        <pre class="mermaid">
+flowchart LR
+  A[Waiting list] --> B[Board invite]
+  B --> C[Application form]
+  C --> D[Board review]
+  D --> E[PayPal $200]
+  E --> F[Active member]
+  F --> G[Audit log]
+        </pre>
+      </div>
+    </section>
+
+    <section>
+      <h2>Automation by trigger</h2>
+
+      <div class="trigger">
+        <div class="trigger-title">1 · Public waiting list signup</div>
+        <div class="trigger-desc">Applicant submits name, email, phone on the public site.</div>
+        <ul class="auto">
+          <li>Validates and stores queue position</li>
+          <li>Updates public waiting list status</li>
+          <li>Writes audit log entry</li>
+        </ul>
+      </div>
+
+      <div class="trigger">
+        <div class="trigger-title">2 · Board sends invitation</div>
+        <div class="trigger-desc">Board clicks Send Invitation when a membership slot is open.</div>
+        <ul class="auto">
+          <li>Verifies slot availability (cap − active − in pipeline)</li>
+          <li>Emails application link via SendGrid</li>
+          <li>Status → Invited to Apply; holds slot</li>
+        </ul>
+      </div>
+
+      <div class="trigger">
+        <div class="trigger-title">3 · Application submitted</div>
+        <div class="trigger-desc">Invited applicant completes form + ID upload at /application/.</div>
+        <ul class="auto">
+          <li>Creates membership_applications record</li>
+          <li>Notifies board (email/SMS when configured)</li>
+          <li>Appears in Applications → Pending</li>
+        </ul>
+      </div>
+
+      <div class="trigger">
+        <div class="trigger-title">4 · Board approves &amp; sends invoice</div>
+        <div class="trigger-desc">After name, fields, and ID checks — Approve &amp; Send Invoice.</div>
+        <ul class="auto">
+          <li>Creates &amp; sends $200 PayPal registration invoice</li>
+          <li>Status → Awaiting Payment</li>
+          <li>Applicant notified with payment link</li>
+        </ul>
+      </div>
+
+      <div class="trigger">
+        <div class="trigger-title">5 · Payment received</div>
+        <div class="trigger-desc">PayPal sync (9 AM &amp; 6 PM Pacific) or board Mark Registration Paid.</div>
+        <ul class="auto">
+          <li>Creates Active member + beneficiary in CRM</li>
+          <li>Records $200 payment; links application</li>
+          <li>Waiting list → Added as Member; welcome notification</li>
+        </ul>
+      </div>
+    </section>
+
+    <section>
+      <h2>Invite → invoice sequence</h2>
+      <div class="diagram">
+        <pre class="mermaid">
+sequenceDiagram
+  participant B as Board
+  participant P as Platform
+  participant PP as PayPal
+  participant A as Applicant
+
+  A->>P: Submit application
+  P->>B: Notify board
+  B->>P: Approve and send invoice
+  P->>PP: Create and send $200 invoice
+  PP->>A: Email payment link
+  A->>PP: Pay
+  PP->>P: Paid status on sync
+  P->>P: Create active member
+        </pre>
+      </div>
+    </section>
+
+    <section>
+      <h2>Technical stack</h2>
+      <div class="stack">
+        <span>Netlify Functions</span>
+        <span>PostgreSQL</span>
+        <span>PayPal Invoicing API</span>
+        <span>SendGrid / Twilio</span>
+        <span>Vanilla JS admin</span>
+        <span>JWT board auth</span>
+        <span>Scheduled PayPal sync</span>
+        <span>Audit log</span>
+      </div>
+    </section>
+
+    <section>
+      <h2>Result</h2>
+      <p style="color:var(--muted);max-width:720px">
+        The board spends time on <strong style="color:var(--text)">decisions</strong>, not spreadsheets.
+        Applicants get a clear path from waiting list to membership.
+        Every step is traceable for governance — and the same platform handles $110 event invoices,
+        member portal, and $15,000 payout workflows.
+      </p>
+    </section>
+  </main>
+
+  <footer>
+    Hibret Edir · Built 2025–2026 ·
+    <a href="board-meeting-handout.html" style="color:var(--gold)">Board handout</a> ·
+    <a href="membership-onboarding-workflow.md" style="color:var(--gold)">Full workflow doc</a>
+  </footer>
+
+  <script>
+    mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: {
+      primaryColor: '#1a2332',
+      primaryTextColor: '#e8ecf1',
+      primaryBorderColor: '#d4a853',
+      lineColor: '#8b9cb3',
+      secondaryColor: '#0f1419',
+      tertiaryColor: '#2a3544'
+    }});
+  </script>
+</body>
+</html>

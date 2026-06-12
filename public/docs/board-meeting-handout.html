@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hibret Edir — New Member Onboarding (Board Handout)</title>
+  <style>
+    :root {
+      --ink: #1a1a2e;
+      --muted: #5c5c7a;
+      --accent: #b8860b;
+      --accent-soft: #fdf6e3;
+      --line: #e8e4dc;
+      --green: #1b6b4a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: Georgia, 'Times New Roman', serif;
+      color: var(--ink);
+      line-height: 1.55;
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 40px 28px 60px;
+      background: #faf9f7;
+    }
+    h1 { font-size: 1.75rem; margin: 0 0 6px; color: var(--ink); }
+    .sub { color: var(--muted); font-size: 0.95rem; margin-bottom: 28px; }
+    h2 {
+      font-size: 1.1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--accent);
+      border-bottom: 2px solid var(--accent);
+      padding-bottom: 6px;
+      margin: 32px 0 16px;
+    }
+    ol.steps { padding-left: 1.25rem; margin: 0; }
+    ol.steps li { margin-bottom: 14px; padding-left: 4px; }
+    ol.steps strong { color: var(--ink); }
+    .where {
+      display: inline-block;
+      font-family: system-ui, sans-serif;
+      font-size: 0.78rem;
+      background: var(--accent-soft);
+      color: #7a5c00;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-top: 4px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: system-ui, sans-serif;
+      font-size: 0.88rem;
+      margin-top: 12px;
+    }
+    th, td { border: 1px solid var(--line); padding: 10px 12px; text-align: left; }
+    th { background: var(--accent-soft); font-weight: 600; }
+    .callout {
+      background: #eef8f2;
+      border-left: 4px solid var(--green);
+      padding: 14px 16px;
+      margin: 20px 0;
+      font-size: 0.95rem;
+    }
+    .flow {
+      font-family: system-ui, sans-serif;
+      font-size: 0.85rem;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px 20px;
+      text-align: center;
+      line-height: 2;
+    }
+    .flow span { color: var(--muted); }
+    @media print {
+      body { background: #fff; padding: 20px; }
+      .no-print { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <p class="no-print" style="font-family:system-ui,sans-serif;font-size:0.85rem;color:var(--muted)">
+    Print this page (Ctrl+P) for board meetings · Full technical doc: <code>docs/membership-onboarding-workflow.md</code>
+  </p>
+
+  <h1>How a New Family Joins Hibret Edir</h1>
+  <p class="sub">Board handout — automated waiting list &amp; membership pipeline · June 2026</p>
+
+  <div class="flow">
+    Waiting list → <strong>Invite</strong> <span>→</span> Application → <strong>Board review</strong> <span>→</span> PayPal $200 <span>→</span> <strong>Active member</strong>
+  </div>
+
+  <h2>The seven steps</h2>
+  <ol class="steps">
+    <li><strong>Waiting list</strong> — Families sign up on the public website. They appear in queue order (first applied, first invited when a slot opens).<br>
+      <span class="where">Admin → Approval → Waiting List → All</span></li>
+    <li><strong>Send invitation</strong> — When we have an open slot (cap 200 active), click <em>Send Invitation →</em> on eligible rows at the top of the list. They receive an email to apply.<br>
+      <span class="where">Waiting List → All (invite button) or Invited tab</span></li>
+    <li><strong>Application</strong> — The family completes the full form and uploads California ID. Status moves to In Progress.<br>
+      <span class="where">Waiting List → In Progress · Applications → Pending</span></li>
+    <li><strong>Board review</strong> — Open Review and confirm: name matches waiting list, all fields complete, ID acceptable. Save progress if needed.<br>
+      <span class="where">Applications → Pending → Review</span></li>
+    <li><strong>Approve &amp; send invoice</strong> — When all three checks pass, click <em>Approve &amp; Send Invoice</em>. PayPal emails the <strong>$200 registration fee</strong>. We do <em>not</em> charge before vetting.<br>
+      <span class="where">Application review modal</span></li>
+    <li><strong>Payment</strong> — Applicant pays via PayPal. The system adds them as an <strong>active member</strong> automatically (sync runs 9 AM &amp; 6 PM Pacific). For Zelle/BofA, use <em>Mark Registration Paid</em>.<br>
+      <span class="where">Applications → Awaiting Payment</span></li>
+    <li><strong>Portal access</strong> — New member sets up phone + PIN on the member portal and receives event invoices like other members.<br>
+      <span class="where">hibretedir.com/portal</span></li>
+  </ol>
+
+  <div class="callout">
+    <strong>Board responsibility:</strong> Invite the right people, review carefully, approve when vetted. The platform handles queue order, PayPal invoices, payment tracking, member records, and audit logging.
+  </div>
+
+  <h2>Status quick reference</h2>
+  <table>
+    <thead>
+      <tr><th>Stage</th><th>What it means</th><th>Where in admin</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>In queue</td><td>Waiting for a slot</td><td>Waiting List → All</td></tr>
+      <tr><td>Invited to Apply</td><td>Invitation sent, form not yet submitted</td><td>Waiting List → Invited</td></tr>
+      <tr><td>Application Submitted</td><td>Form received, needs review</td><td>In Progress · Applications → Pending</td></tr>
+      <tr><td>Awaiting Payment</td><td>Board approved; $200 invoice sent</td><td>Applications → Pending</td></tr>
+      <tr><td>Added as Member</td><td>Paid and active in CRM</td><td>Members · Waiting List (collapsed)</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Open slots</h2>
+  <p style="margin:0;font-size:0.95rem">
+    Open invite slots = 200 cap − active members − families already invited or applying.
+    The green banner on Waiting List shows how many spots are open and who is next in line.
+  </p>
+
+  <p style="margin-top:40px;font-size:0.8rem;color:var(--muted);font-family:system-ui,sans-serif">
+    Hibret Edir · hibretedir.com · Questions: (424) 547-5594
+  </p>
+</body>
+</html>

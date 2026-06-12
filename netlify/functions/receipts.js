@@ -1,5 +1,7 @@
 const { getDb } = require('./db');
-const { verifyAdminRequest, verifyMemberRequest } = require('./admin-auth');
+const { verifyAdminRequest, verifyMemberRequest, buildActorFromAdmin } = require('./admin-auth');
+const { logActivity } = require('./audit');
+const { invalidateInvoiceStatsCache } = require('./invoice-stats-cache');
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -199,16 +201,61 @@ async function updateReceiptStatus(id, status, adminPayload) {
     [status, adminPayload?.adminId || null, id]
   );
 
+  let paypal = null;
   if (status === 'Approved' && row.invoice_id) {
+    const method = row.payment_method || 'Zelle';
+    const paidNote = `Receipt approved — ${method}${row.notes ? `: ${String(row.notes).trim().slice(0, 500)}` : ''}`;
     await db.query(
-      `UPDATE invoices SET status = 'Paid', paid_date = COALESCE(paid_date, CURRENT_DATE), payment_method = COALESCE(payment_method, $2)
+      `UPDATE invoices
+       SET status = 'Paid',
+           paid_date = COALESCE(paid_date, CURRENT_DATE),
+           payment_method = COALESCE(NULLIF(TRIM($2), ''), payment_method, 'Zelle'),
+           paid_note = COALESCE(paid_note, $3),
+           updated_at = NOW()
        WHERE id = $1 AND status IS DISTINCT FROM 'Paid'`,
-      [row.invoice_id, row.payment_method]
+      [row.invoice_id, method, paidNote]
     );
+    invalidateInvoiceStatsCache();
+
+    const actor = buildActorFromAdmin(adminPayload, adminPayload?.adminRow);
+    try {
+      const { recordPayPalPaymentForInvoice } = require('./paypal-invoice-actions');
+      paypal = await recordPayPalPaymentForInvoice(db, { invoiceId: row.invoice_id }, {
+        paymentMethod: method,
+        note: paidNote,
+        source: `receipt #${id}`,
+        approvedBy: actor.actor_label,
+      });
+      if (paypal?.ok && !paypal?.skipped) {
+        await logActivity(db, {
+          ...actor,
+          member_id: row.member_id,
+          action: 'invoice.paypal_marked_paid',
+          entity_type: 'invoices',
+          record_id: row.invoice_id,
+          summary: `PayPal invoice updated after receipt #${id} approval`,
+          new_value: { receipt_id: id, paypal_invoice_id: paypal.paypal_invoice_id },
+        });
+      }
+    } catch (err) {
+      console.error('PayPal mark paid after receipt failed:', err.message);
+      paypal = { ok: false, error: err.message };
+      await logActivity(db, {
+        ...actor,
+        member_id: row.member_id,
+        action: 'invoice.paypal_mark_paid_failed',
+        entity_type: 'invoices',
+        record_id: row.invoice_id,
+        summary: `PayPal update failed after receipt #${id}: ${err.message}`,
+      });
+    }
   }
 
   const detail = await db.query(`${RECEIPT_DETAIL_SELECT} WHERE r.id = $1 LIMIT 1`, [id]);
-  return json(200, { receipt: mapReceiptRow(detail.rows[0] || row, { includePreview: false }) });
+  return json(200, {
+    receipt: mapReceiptRow(detail.rows[0] || row, { includePreview: false }),
+    paypal,
+  });
 }
 
 exports.handler = async (event) => {

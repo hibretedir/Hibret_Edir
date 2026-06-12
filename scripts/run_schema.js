@@ -8,7 +8,9 @@ const path = require('path');
 const ROOT = path.join(__dirname, '..');
 const ENV_PATH = path.join(ROOT, '.env');
 const SCHEMA_PATH = path.join(ROOT, 'db', 'schema.sql');
-const CONNECT_TIMEOUT_MS = 15000;
+const CONNECT_TIMEOUT_MS = 60000;
+const QUERY_TIMEOUT_MS = 120000;
+const MAX_CONNECT_ATTEMPTS = 3;
 
 function loadEnvFile(filePath) {
   if (!fs.existsSync(filePath)) return;
@@ -99,11 +101,28 @@ async function main() {
     connectionString,
     ssl: needsSsl(connectionString) ? { rejectUnauthorized: false } : false,
     connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
-    query_timeout: CONNECT_TIMEOUT_MS,
+    query_timeout: QUERY_TIMEOUT_MS,
+    statement_timeout: QUERY_TIMEOUT_MS,
   });
 
   console.log('Connecting to database…');
-  await client.connect();
+  let lastConnectErr;
+  for (let attempt = 1; attempt <= MAX_CONNECT_ATTEMPTS; attempt += 1) {
+    try {
+      await client.connect();
+      lastConnectErr = null;
+      break;
+    } catch (err) {
+      lastConnectErr = err;
+      if (attempt < MAX_CONNECT_ATTEMPTS) {
+        console.warn(`Connect attempt ${attempt} failed (${err.message}). Retrying…`);
+        await new Promise((r) => setTimeout(r, 2000 * attempt));
+      }
+    }
+  }
+  if (lastConnectErr) {
+    throw lastConnectErr;
+  }
   console.log('Running db/schema.sql…');
 
   try {

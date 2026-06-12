@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/css/admin-tracker.css?v=admin27">
+<link rel="stylesheet" href="/css/admin-tracker.css?v=admin30">
 </head>
 <body class="app-admin tracker">
 
@@ -219,7 +219,8 @@
       <button class="btn danger" type="button" onclick="rejectApplicationReview()">Reject</button>
       <button class="btn" type="button" onclick="closeModal('applicationModal')">Close</button>
       <button class="btn" type="button" onclick="saveApplicationReview()">Save Review</button>
-      <button class="btn primary" type="button" id="appApproveBtn" onclick="approveApplicationReview()">Approve &amp; Add to CRM</button>
+      <button class="btn" type="button" id="appMarkPaidBtn" onclick="completeRegistrationReview()" style="display:none">Mark Registration Paid</button>
+      <button class="btn primary" type="button" id="appApproveBtn" onclick="approveApplicationReview()">Approve &amp; Send Invoice</button>
     </div>
   </div>
 </div>
@@ -387,6 +388,8 @@
 const MEMBERS = [];
 const INVOICES = [];
 const APPLICATIONS = [];
+const WAITING_LIST = [];
+let MEMBERSHIP_SLOTS = null;
 const CONTACT_MESSAGES = [];
 const PIN_RESET_REQUESTS = [];
 const RECEIPTS = [];
@@ -434,6 +437,9 @@ let reviewingApplicationId = null;
 let reviewingPayoutId = null;
 let reviewingReceiptId = null;
 let payoutFilter = 'open';
+let appSection = 'waiting-list';
+let wlFilter = 'all';
+let wlShowAdded = false;
 let appFilter = 'pending';
 let receiptFilter = 'pending';
 let messagesFilter = 'contact';
@@ -513,6 +519,15 @@ function boardNoteStampPrefix() {
     hour: 'numeric', minute: '2-digit', hour12: true,
   });
   return `[${dt} — ${boardActorLabel()}]`;
+}
+
+function paypalSyncHint(paypal) {
+  if (!paypal) return '';
+  if (paypal.skipped && paypal.reason === 'already_closed_on_paypal') return ' PayPal was already marked paid.';
+  if (paypal.ok && !paypal.skipped) return ' PayPal invoice updated.';
+  if (paypal.skipped && paypal.reason === 'no_paypal_id') return ' No PayPal ID on file — update PayPal manually if needed.';
+  if (paypal.error) return ` PayPal warning: ${paypal.error}`;
+  return '';
 }
 
 function stampBoardNote(text) {
@@ -1355,6 +1370,50 @@ async function fetchMarkPaidRequests() {
   }
 }
 
+function isWlQueueAwaiting(status) {
+  return status === 'Pending' || status === 'Registered';
+}
+
+function normalizeWaitingListRows(rows, slots) {
+  if (!rows.length) return rows;
+  let rank = 0;
+  const remaining = slots?.invite_slots_remaining;
+  return rows.map((row) => {
+    const copy = { ...row };
+    if (!isWlQueueAwaiting(copy.status)) return copy;
+    rank += 1;
+    if (copy.pending_rank == null) copy.pending_rank = rank;
+    if (remaining != null) {
+      copy.eligible_for_invite = copy.pending_rank <= remaining;
+    } else if (copy.eligible_for_invite == null) {
+      copy.eligible_for_invite = false;
+    }
+    return copy;
+  });
+}
+
+async function fetchWaitingList() {
+  try {
+    const res = await apiGet('apply/waiting-list');
+    MEMBERSHIP_SLOTS = res?.slots || null;
+    WAITING_LIST.splice(
+      0,
+      WAITING_LIST.length,
+      ...normalizeWaitingListRows(res?.waiting_list || [], MEMBERSHIP_SLOTS)
+    );
+    return res?.stats || null;
+  } catch (e) {
+    console.warn('Waiting list API failed:', e.message || e);
+    WAITING_LIST.splice(0, WAITING_LIST.length);
+    MEMBERSHIP_SLOTS = null;
+    return null;
+  }
+}
+
+async function fetchApprovalData() {
+  await Promise.all([fetchWaitingList(), fetchApplications()]);
+}
+
 async function fetchApplications() {
   try {
     const [appsRes, markPaidRequests] = await Promise.all([
@@ -1461,7 +1520,7 @@ async function fetchPayoutsList() {
 
 async function fetchAdminSecondary() {
   const tasks = [];
-  if (!adminSectionsLoaded.applications) tasks.push(fetchApplications());
+  if (!adminSectionsLoaded.applications) tasks.push(fetchApprovalData());
   if (!adminSectionsLoaded.receipts) tasks.push(fetchReceiptsList());
   if (!adminSectionsLoaded.inbox) tasks.push(fetchInbox());
   if (tasks.length) await Promise.all(tasks);
@@ -1489,7 +1548,7 @@ async function refreshAdminSections(sections = []) {
   } else if (want.has('stats')) {
     tasks.push(refreshInvoiceStatsOnly());
   }
-  if (want.has('applications')) tasks.push(fetchApplications());
+  if (want.has('applications')) tasks.push(fetchApprovalData());
   if (want.has('receipts')) tasks.push(fetchReceiptsList());
   if (want.has('inbox') || want.has('messages')) tasks.push(fetchInbox());
   if (want.has('payouts')) tasks.push(fetchPayoutsList());
@@ -1605,7 +1664,12 @@ function trackerHeaderHtml(stats) {
     : 'Invoice Payment Tracker';
   const showOutstanding = currentView === 'invoices';
   const subtitle = currentView === 'members' ? `${MEMBERS.length} members on file`
-    : currentView === 'applications' ? `${APPLICATIONS.filter(a => a.status === 'Submitted' || a.status === 'Under Review' || a.status === 'Pending').length} pending review`
+    : currentView === 'applications' ? (() => {
+      const ready = WAITING_LIST.filter(w => w.eligible_for_invite).length;
+      const apps = APPLICATIONS.filter(a => a.status === 'Submitted' || a.status === 'Under Review' || a.status === 'Pending').length;
+      if (ready) return `${ready} ready to invite · ${apps} apps pending`;
+      return `${apps} apps pending review`;
+    })()
     : currentView === 'receipts' ? `${RECEIPTS.filter(r => r.status === 'Pending').length} pending review`
     : currentView === 'messages' ? `${PIN_RESET_REQUESTS.filter(r => r.status === 'Pending').length} PIN resets · ${CONTACT_MESSAGES.length} contact`
     : currentView === 'events' ? `${stats.events} passed away · ${stats.total} active member invoices`
@@ -1681,11 +1745,14 @@ function updateSidebar() {
   const mobMembers = document.getElementById('mob-sb-members');
   if (mobUnpaid) mobUnpaid.textContent = unpaidCount;
   if (mobMembers) mobMembers.textContent = membersCount;
+  const wlReady = WAITING_LIST.filter(w => w.eligible_for_invite).length;
+  const wlPending = WAITING_LIST.filter(w => isWlQueueAwaiting(w.status)).length;
+  const appsPending = APPLICATIONS.filter(a => ['Submitted', 'Under Review', 'Pending'].includes(a.status)).length;
+  const appsBadge = (wlReady || wlPending) + appsPending;
   const appsEl = document.getElementById('sb-applications');
-  const appsCount = APPLICATIONS.filter(a => ['Submitted', 'Under Review', 'Pending'].includes(a.status)).length || '—';
-  if (appsEl) appsEl.textContent = appsCount;
+  if (appsEl) appsEl.textContent = appsBadge || '—';
   const mobApps = document.getElementById('mob-sb-applications');
-  if (mobApps) mobApps.textContent = appsCount;
+  if (mobApps) mobApps.textContent = appsBadge || '—';
   const recEl = document.getElementById('sb-receipts');
   const recCount = RECEIPTS.filter(r => r.status === 'Pending').length || '—';
   if (recEl) recEl.textContent = recCount;
@@ -1812,8 +1879,9 @@ async function switchView(v) {
     showMainLoading('Loading messages…');
     await fetchInbox();
   } else if (v === 'applications' && !adminSectionsLoaded.applications) {
-    showMainLoading('Loading applications…');
-    await fetchApplications();
+    showMainLoading('Loading approval queue…');
+    await fetchApprovalData();
+    adminSectionsLoaded.applications = true;
   }
   render();
 }
@@ -1834,12 +1902,169 @@ function scheduleMemberSearchUpdate() {
   memberSearchTimer = setTimeout(updateMembersList, 200);
 }
 
+function switchAppSection(section) {
+  appSection = section;
+  document.querySelectorAll('.tracker-tab[data-app-section]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.appSection === section);
+  });
+  document.querySelectorAll('.tracker-subtabs').forEach(el => {
+    el.style.display = el.dataset.appSection === section ? '' : 'none';
+  });
+  updateApplicationsList();
+}
+
+function switchWlFilter(f) {
+  wlFilter = f;
+  if (f !== 'all') wlShowAdded = false;
+  document.querySelectorAll('.tracker-tab[data-wl-filter]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.wlFilter === f);
+  });
+  updateApplicationsList();
+}
+
 function switchAppFilter(f) {
   appFilter = f;
   document.querySelectorAll('.tracker-tab[data-app-filter]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.appFilter === f);
   });
   updateApplicationsList();
+}
+
+function isWlInProgress(status) {
+  return status === 'Application Submitted';
+}
+
+function getWaitingListFiltered() {
+  return WAITING_LIST.filter(w => {
+    if (wlFilter === 'invited' && w.status !== 'Invited to Apply') return false;
+    if (wlFilter === 'active' && !isWlInProgress(w.status)) return false;
+    return true;
+  });
+}
+
+function renderMembershipSlotsBannerHtml() {
+  const s = MEMBERSHIP_SLOTS;
+  if (!s) return '';
+  const ready = WAITING_LIST.filter(w => w.eligible_for_invite);
+  const names = ready.slice(0, 5).map(w => esc(w.full_name || w.email || 'Applicant')).join(', ');
+  if (s.invite_slots_remaining <= 0) {
+    return `<div class="tracker-banner" role="status"><strong>${s.active_count} / ${s.member_cap} active members</strong> — no open slots right now.${
+      s.in_pipeline ? ` ${s.in_pipeline} already invited or applying.` : ''
+    } Raise <code>MEMBER_CAP</code> when the board approves more members.</div>`;
+  }
+  return `<div class="tracker-banner wl-slots-banner" role="status"><strong>${s.active_count} / ${s.member_cap} active</strong> — <strong>${s.invite_slots_remaining}</strong> spot${s.invite_slots_remaining === 1 ? '' : 's'} open.${
+    s.in_pipeline ? ` (${s.in_pipeline} already invited or applying.)` : ''
+  }${
+    names ? ` Next in line: ${names}${ready.length > 5 ? ` +${ready.length - 5} more` : ''}.` : ' Waiting list is empty.'
+  }</div>`;
+}
+
+function toggleWlShowAdded() {
+  wlShowAdded = !wlShowAdded;
+  updateApplicationsList();
+}
+
+function renderReadyToInviteCardsHtml(entries) {
+  if (!entries.length) {
+    return '<div class="tracker-empty">No one is ready to invite right now. Check back when a slot opens or view <strong>All</strong>.</div>';
+  }
+  return `<div class="wl-ready-cards">${entries.map(w => `
+    <div class="wl-ready-card">
+      <div class="wl-ready-card-body">
+        <div class="wl-ready-card-rank">#${w.pending_rank || w.queue_position || w.id}</div>
+        <div class="wl-ready-card-info">
+          <div class="wl-ready-card-name">${esc(w.full_name || '—')}</div>
+          <div class="wl-ready-card-meta">${esc(w.email || '—')}${w.phone ? ` · ${esc(w.phone)}` : ''}</div>
+          <div class="wl-ready-card-date">Applied ${esc(fmtDate(w.applied_at))}</div>
+        </div>
+      </div>
+      <button type="button" class="wl-invite-btn" onclick="inviteWaitingListEntry(${w.id})">Send Invitation →</button>
+    </div>
+  `).join('')}</div>`;
+}
+
+function renderWaitingListRow(w, muted) {
+  const statusClass = w.status === 'Invited to Apply' ? 'paid'
+    : w.eligible_for_invite ? 'warn'
+    : w.status === 'Pending' ? 'warn'
+    : w.status === 'Added as Member' ? 'paid'
+    : w.status === 'Rejected' ? 'unpaid' : '';
+  const canInvite = isWlQueueAwaiting(w.status) && w.eligible_for_invite;
+  const canReject = !['Added as Member', 'Rejected'].includes(w.status);
+  const statusLabel = w.eligible_for_invite ? 'Ready to Invite' : w.status;
+  return `<tr class="data-row${w.eligible_for_invite ? ' wl-eligible-row' : ''}${muted ? ' wl-added-row' : ''}">
+    <td><span class="tracker-inv-num">#${w.pending_rank || w.queue_position || w.id}</span></td>
+    <td><div class="tracker-member-name">${esc(w.full_name || '—')}</div><div class="tracker-member-email">${esc(w.email || '—')}</div></td>
+    <td>${esc(w.phone || '—')}</td>
+    <td><span class="tracker-date">${esc(fmtDate(w.applied_at))}</span></td>
+    <td><span class="tracker-status ${statusClass}"><span class="tracker-status-dot"></span>${esc(statusLabel)}</span></td>
+    <td class="wl-invite-cell">${canInvite
+      ? `<button type="button" class="wl-invite-btn wl-invite-btn-compact" onclick="inviteWaitingListEntry(${w.id})">Send Invitation →</button>`
+      : w.status === 'Invited to Apply' ? '<span class="tracker-mark-done">Invited</span>'
+      : isWlQueueAwaiting(w.status) ? '<span class="tracker-mark-done" style="opacity:.55">Waiting for slot</span>' : '—'}</td>
+    <td>${canReject
+      ? `<button type="button" class="tracker-mark-btn" style="opacity:.85" onclick="rejectWaitingListEntry(${w.id})">Remove</button>`
+      : '—'}</td>
+  </tr>`;
+}
+
+function renderWaitingListTableHtml(filtered) {
+  const collapseAdded = wlFilter === 'all';
+  const added = collapseAdded ? filtered.filter(w => w.status === 'Added as Member') : [];
+  const main = collapseAdded ? filtered.filter(w => w.status !== 'Added as Member') : filtered;
+
+  const tableHead = `<thead><tr><th>#</th><th>Name</th><th>Phone</th><th>Applied</th><th>Status</th><th>Invite</th><th></th></tr></thead>`;
+
+  let html = '';
+  if (main.length) {
+    html += `<table class="tracker-table">${tableHead}<tbody>${main.map(w => renderWaitingListRow(w, false)).join('')}</tbody></table>`;
+  } else if (!added.length) {
+    html += '<div class="tracker-empty">No waiting list entries in this filter.</div>';
+  }
+
+  if (added.length && collapseAdded) {
+    html += `<button type="button" class="wl-added-toggle" onclick="toggleWlShowAdded()" aria-expanded="${wlShowAdded}">
+      <span class="wl-added-toggle-icon">${wlShowAdded ? '▾' : '▸'}</span>
+      Already added as members <span class="wl-added-toggle-count">(${added.length})</span>
+    </button>`;
+    if (wlShowAdded) {
+      html += `<div class="wl-added-section"><table class="tracker-table">${tableHead}<tbody>${added.map(w => renderWaitingListRow(w, true)).join('')}</tbody></table></div>`;
+    }
+  }
+
+  return html || '<div class="tracker-empty">No waiting list entries in this filter</div>';
+}
+
+async function inviteWaitingListEntry(id) {
+  const w = WAITING_LIST.find(x => Number(x.id) === Number(id));
+  const label = w?.full_name || 'this applicant';
+  if (!confirm(`Invite ${label} to complete the membership application? They will receive an email with a link to /application/.`)) return;
+  try {
+    await apiPost('apply/waiting-list/' + id + '/invite', {});
+    await fetchApprovalData();
+    if (currentView === 'applications') renderApplicationsView();
+    updateSidebar();
+    showAdminToast('Invitation sent to ' + label, 'ok');
+  } catch (e) {
+    alert(e.message || 'Could not send invitation.');
+  }
+}
+
+async function rejectWaitingListEntry(id) {
+  const w = WAITING_LIST.find(x => Number(x.id) === Number(id));
+  const label = w?.full_name || 'this entry';
+  const reason = prompt('Optional note for removing ' + label + ' from the waiting list:');
+  if (reason === null) return;
+  if (!confirm('Remove ' + label + ' from the waiting list?')) return;
+  try {
+    await apiPost('apply/waiting-list/' + id + '/reject', { notes: reason });
+    await fetchApprovalData();
+    if (currentView === 'applications') renderApplicationsView();
+    updateSidebar();
+    showAdminToast('Removed from waiting list.', 'ok');
+  } catch (e) {
+    alert(e.message || 'Could not remove entry.');
+  }
 }
 
 function switchReceiptFilter(f) {
@@ -2151,23 +2376,23 @@ function renderMembersView() {
 
 function getApplicationsFiltered() {
   return APPLICATIONS.filter(a => {
-    if (appFilter === 'pending' && !['Submitted', 'Under Review', 'Pending'].includes(a.status)) return false;
+    if (appFilter === 'pending' && !['Submitted', 'Under Review', 'Pending', 'Awaiting Payment'].includes(a.status)) return false;
     if (appFilter === 'approved' && a.status !== 'Approved') return false;
     if (appFilter === 'rejected' && a.status !== 'Rejected') return false;
     return true;
   });
 }
 
-function checklistCount(c) {
+function vettingChecklistCount(c) {
   const cl = c?.review_checklist || c || {};
-  return ['name_match', 'fields_complete', 'id_uploaded', 'fee_paid'].filter(k => cl[k]).length;
+  return ['name_match', 'fields_complete', 'id_uploaded'].filter(k => cl[k]).length;
 }
 
 function renderApplicationsTableHtml(filtered) {
   const rows = filtered.length ? filtered.map(a => {
     const isMarkPaid = a.kind === 'mark_paid';
     const isBen = a.kind === 'beneficiary_change';
-    const done = isMarkPaid ? '—' : isBen ? (a.status === 'Approved' ? 1 : 0) : checklistCount(a);
+    const done = isMarkPaid ? '—' : isBen ? (a.status === 'Approved' ? 1 : 0) : a.status === 'Awaiting Payment' ? 'Pay' : `${vettingChecklistCount(a)}/3`;
     const statusClass = a.status === 'Approved' ? 'paid' : a.status === 'Rejected' ? 'unpaid' : 'warn';
     const secondCol = isMarkPaid
       ? `<div class="tracker-member-name">Invoice #${esc(a.invoice_num)}</div><div class="tracker-member-email">${a.amount_due != null ? fmtMoney(a.amount_due) + ' due' : '—'}${a.deceased_name ? ' · ' + esc(a.deceased_name) : ''}</div>`
@@ -2195,34 +2420,56 @@ function renderApplicationsTableHtml(filtered) {
 
 function updateApplicationsList() {
   if (currentView !== 'applications') return;
-  const wrap = document.querySelector('#mainArea .tracker-table-wrap');
-  if (wrap) wrap.innerHTML = renderApplicationsTableHtml(getApplicationsFiltered());
+  const wrap = document.querySelector('#applicationsTableWrap');
+  if (!wrap) return;
+  if (appSection === 'waiting-list') {
+    wrap.innerHTML = renderWaitingListTableHtml(getWaitingListFiltered());
+  } else {
+    wrap.innerHTML = renderApplicationsTableHtml(getApplicationsFiltered());
+  }
 }
 
 function renderApplicationsView() {
   const stats = getStats();
-  const filtered = getApplicationsFiltered();
-  const pending = APPLICATIONS.filter(a => ['Submitted', 'Under Review', 'Pending'].includes(a.status)).length;
+  const wlReady = WAITING_LIST.filter(w => w.eligible_for_invite).length;
+  const wlPending = WAITING_LIST.filter(w => isWlQueueAwaiting(w.status)).length;
+  const wlInvited = WAITING_LIST.filter(w => w.status === 'Invited to Apply').length;
+  const wlInProgress = WAITING_LIST.filter(w => isWlInProgress(w.status)).length;
+  const slotsOpen = MEMBERSHIP_SLOTS?.invite_slots_remaining ?? 0;
+  const pending = APPLICATIONS.filter(a => ['Submitted', 'Under Review', 'Pending', 'Awaiting Payment'].includes(a.status)).length;
+  const awaitingPay = APPLICATIONS.filter(a => a.status === 'Awaiting Payment').length;
   const approved = APPLICATIONS.filter(a => a.status === 'Approved').length;
   const rejected = APPLICATIONS.filter(a => a.status === 'Rejected').length;
+  const wlFiltered = getWaitingListFiltered();
+  const wlActive = WAITING_LIST.filter(w => w.status !== 'Added as Member').length;
+  const appFiltered = getApplicationsFiltered();
 
   document.getElementById('mainArea').innerHTML = `
     ${trackerHeaderHtml(stats)}
     <div class="tracker-stats">
-      <div class="tracker-stat"><div class="tracker-stat-lbl">Pending Review</div><div class="tracker-stat-val orange">${pending}</div></div>
-      <div class="tracker-stat"><div class="tracker-stat-lbl">Approved</div><div class="tracker-stat-val green">${approved}</div></div>
-      <div class="tracker-stat"><div class="tracker-stat-lbl">Rejected</div><div class="tracker-stat-val">${rejected}</div></div>
-      <div class="tracker-stat"><div class="tracker-stat-lbl">Total</div><div class="tracker-stat-val">${APPLICATIONS.length}</div></div>
+      <div class="tracker-stat"><div class="tracker-stat-lbl">Open Slots</div><div class="tracker-stat-val${slotsOpen ? ' orange' : ''}">${slotsOpen}</div></div>
+      <div class="tracker-stat"><div class="tracker-stat-lbl">In Queue</div><div class="tracker-stat-val orange">${wlReady}</div></div>
+      <div class="tracker-stat"><div class="tracker-stat-lbl">Invited to Apply</div><div class="tracker-stat-val">${wlInvited}</div></div>
+      <div class="tracker-stat"><div class="tracker-stat-lbl">Awaiting Payment</div><div class="tracker-stat-val orange">${awaitingPay}</div></div>
     </div>
     <nav class="tracker-tabs">
+      <button type="button" class="tracker-tab${appSection === 'waiting-list' ? ' active' : ''}" data-app-section="waiting-list" onclick="switchAppSection('waiting-list')">Waiting List${wlReady ? ` (${wlReady} ready)` : wlPending ? ` (${wlPending})` : ''}</button>
+      <button type="button" class="tracker-tab${appSection === 'applications' ? ' active' : ''}" data-app-section="applications" onclick="switchAppSection('applications')">Applications${pending ? ` (${pending})` : ''}</button>
+    </nav>
+    <nav class="tracker-tabs tracker-subtabs" data-app-section="waiting-list" style="display:${appSection === 'waiting-list' ? '' : 'none'}">
+      <button type="button" class="tracker-tab${wlFilter === 'all' ? ' active' : ''}" data-wl-filter="all" onclick="switchWlFilter('all')">All${wlActive ? ` (${wlActive})` : ''}</button>
+      <button type="button" class="tracker-tab${wlFilter === 'invited' ? ' active' : ''}" data-wl-filter="invited" onclick="switchWlFilter('invited')">Invited</button>
+      <button type="button" class="tracker-tab${wlFilter === 'active' ? ' active' : ''}" data-wl-filter="active" onclick="switchWlFilter('active')">In Progress${wlInProgress ? ` (${wlInProgress})` : ''}</button>
+    </nav>
+    <nav class="tracker-tabs tracker-subtabs" data-app-section="applications" style="display:${appSection === 'applications' ? '' : 'none'}">
       <button type="button" class="tracker-tab${appFilter === 'pending' ? ' active' : ''}" data-app-filter="pending" onclick="switchAppFilter('pending')">Pending</button>
       <button type="button" class="tracker-tab${appFilter === 'approved' ? ' active' : ''}" data-app-filter="approved" onclick="switchAppFilter('approved')">Approved</button>
       <button type="button" class="tracker-tab${appFilter === 'rejected' ? ' active' : ''}" data-app-filter="rejected" onclick="switchAppFilter('rejected')">Rejected</button>
       <button type="button" class="tracker-tab${appFilter === 'all' ? ' active' : ''}" data-app-filter="all" onclick="switchAppFilter('all')">All</button>
     </nav>
-    <div class="tracker-banner tracker-intro-banner">Membership applications, <strong>mark-paid requests</strong> (dual board approval), and beneficiary changes appear here.</div>
-    <div class="tracker-table-wrap">
-      ${renderApplicationsTableHtml(filtered)}
+    ${appSection === 'waiting-list' ? renderMembershipSlotsBannerHtml() : ''}
+    <div class="tracker-table-wrap" id="applicationsTableWrap">
+      ${appSection === 'waiting-list' ? renderWaitingListTableHtml(wlFiltered) : renderApplicationsTableHtml(appFiltered)}
     </div>`;
 }
 
@@ -2249,8 +2496,19 @@ function updateApproveButtonState() {
     btn.disabled = app.status === 'Approved' || app.status === 'Rejected';
     return;
   }
-  const all = ['chk_name_match', 'chk_fields_complete', 'chk_id_uploaded', 'chk_fee_paid'].every(id => document.getElementById(id)?.checked);
-  btn.disabled = !all;
+  const markPaidBtn = document.getElementById('appMarkPaidBtn');
+  if (app?.status === 'Awaiting Payment') {
+    btn.style.display = 'none';
+    if (markPaidBtn) {
+      markPaidBtn.style.display = '';
+      markPaidBtn.disabled = false;
+    }
+    return;
+  }
+  if (markPaidBtn) markPaidBtn.style.display = 'none';
+  btn.style.display = app.status === 'Approved' || app.status === 'Rejected' ? 'none' : '';
+  const all = ['chk_name_match', 'chk_fields_complete', 'chk_id_uploaded'].every(id => document.getElementById(id)?.checked);
+  btn.disabled = !all || app?.status === 'Awaiting Payment';
 }
 
 function changeRequestApiId(appOrId) {
@@ -2371,9 +2629,19 @@ async function openApplicationReview(id) {
     ? `<img src="${idDocs.member.preview}" alt="Member ID" class="review-id-thumb">`
     : (idDocs.member?.filename ? `<span class="review-id-file">📄 ${esc(idDocs.member.filename)}</span>` : '<span class="review-auto">No ID on file</span>');
 
+  const awaitingPay = app.status === 'Awaiting Payment';
+  const regInv = app.registration_invoice || {};
+  const invoiceBlock = awaitingPay ? `
+    <div class="tracker-banner wl-slots-banner" style="margin-top:12px" role="status">
+      <strong>Awaiting $200 registration payment.</strong>
+      ${regInv.paypal_link ? ` <a href="${esc(regInv.paypal_link)}" target="_blank" rel="noopener">Open PayPal invoice</a>.` : ' PayPal invoice on file.'}
+      Member is added automatically when PayPal confirms payment (or use Mark Registration Paid for Zelle/BofA).
+    </div>` : '';
+
   document.getElementById('appModalTitle').textContent = app.member_full_name || 'Application';
   document.getElementById('appModalSub').textContent = `Submitted ${fmtDate(app.submitted_at)} · Status: ${app.status}`;
   document.getElementById('applicationModalBody').innerHTML = `
+    ${invoiceBlock}
     <div class="review-grid">
       <div class="review-panel">
         <h4>Waiting List Record</h4>
@@ -2393,11 +2661,10 @@ async function openApplicationReview(id) {
     </div>
     <div class="review-checklist">
       <h4>Board Review Checklist</h4>
-      <p class="review-checklist-sub">Confirm each item before approving. The applicant is added to Members CRM only when all four are checked.</p>
+      <p class="review-checklist-sub">Confirm each item, then click <strong>Approve &amp; Send Invoice</strong>. The $200 PayPal invoice is sent after vetting. Membership activates when payment is received.</p>
       ${reviewCheckRow('chk_name_match', 'Name matches waiting list record', auto.name_match ? 'Names appear to match' : 'Compare names side by side', cl.name_match, auto.name_match)}
       ${reviewCheckRow('chk_fields_complete', 'Application has full name, phone, address, and beneficiary', auto.fields_complete ? 'All required fields present' : 'Missing required fields', cl.fields_complete, auto.fields_complete)}
       ${reviewCheckRow('chk_id_uploaded', 'California ID uploaded', auto.id_uploaded ? 'ID file on file' : 'No ID uploaded yet', cl.id_uploaded, auto.id_uploaded)}
-      ${reviewCheckRow('chk_fee_paid', '$200 registration fee paid', '', cl.fee_paid, false)}
     </div>
     <div class="fg" style="margin-top:16px">
       <label style="font-size:11px;color:var(--tk-muted)">Board notes</label>
@@ -2406,8 +2673,20 @@ async function openApplicationReview(id) {
     </div>`;
 
   const approveBtn = document.getElementById('appApproveBtn');
-  approveBtn.disabled = app.status === 'Approved' || !['chk_name_match', 'chk_fields_complete', 'chk_id_uploaded', 'chk_fee_paid'].every(cid => document.getElementById(cid)?.checked);
-  approveBtn.style.display = app.status === 'Approved' ? 'none' : '';
+  const markPaidBtn = document.getElementById('appMarkPaidBtn');
+  ['chk_name_match', 'chk_fields_complete', 'chk_id_uploaded'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = awaitingPay || app.status === 'Approved' || app.status === 'Rejected';
+  });
+  if (awaitingPay) {
+    approveBtn.style.display = 'none';
+    if (markPaidBtn) markPaidBtn.style.display = '';
+  } else {
+    if (markPaidBtn) markPaidBtn.style.display = 'none';
+    approveBtn.style.display = app.status === 'Approved' || app.status === 'Rejected' ? 'none' : '';
+    approveBtn.disabled = app.status === 'Approved' || app.status === 'Rejected';
+  }
+  updateApproveButtonState();
 
   appReviewNotesBaseline = String(app.notes || '');
   openModal('applicationModal');
@@ -2418,12 +2697,17 @@ function getReviewChecklistFromModal() {
     name_match: document.getElementById('chk_name_match')?.checked === true,
     fields_complete: document.getElementById('chk_fields_complete')?.checked === true,
     id_uploaded: document.getElementById('chk_id_uploaded')?.checked === true,
-    fee_paid: document.getElementById('chk_fee_paid')?.checked === true,
+    fee_paid: false,
   };
 }
 
 async function saveApplicationReview() {
   if (!reviewingApplicationId) return;
+  const app = APPLICATIONS.find(a => a.id === reviewingApplicationId);
+  if (app?.status === 'Awaiting Payment') {
+    alert('Application is awaiting payment. Use Mark Registration Paid when fee is received.');
+    return;
+  }
   try {
     const res = await apiPatch('apply/applications/' + reviewingApplicationId, {
       review_checklist: getReviewChecklistFromModal(),
@@ -2449,14 +2733,15 @@ async function approveApplicationReview() {
     if (!confirm(`Approve and mark Invoice #${app.invoice_num} as paid for ${app.member_full_name || 'this member'}?`)) return;
     try {
       const notes = readBoardNotesField('appReviewNotes', appReviewNotesBaseline).trim();
-      await apiPost('portal/mark-paid-requests/' + markPaidRequestApiId(app) + '/approve', { notes });
+      const res = await apiPost('portal/mark-paid-requests/' + markPaidRequestApiId(app) + '/approve', { notes });
       closeModal('applicationModal');
       pendingMarkPaidByInvoice.delete(Number(app.invoice_num));
       await refreshAdminSections(['applications', 'stats', 'invoices']);
       if (currentView === 'applications') updateApplicationsList();
       else if (currentView === 'invoices') updateInvoicesList();
       updateSidebar();
-      showAdminToast(`✓ Invoice #${app.invoice_num} marked paid`, 'success');
+      const ppHint = paypalSyncHint(res?.paypal);
+      showAdminToast(`✓ Invoice #${app.invoice_num} marked paid.${ppHint}`, res?.paypal?.error ? 'warn' : 'success');
     } catch (e) {
       alert(e.message || 'Could not approve mark-paid request.');
     }
@@ -2477,24 +2762,43 @@ async function approveApplicationReview() {
     return;
   }
   const checklist = getReviewChecklistFromModal();
-  if (!['name_match', 'fields_complete', 'id_uploaded', 'fee_paid'].every(k => checklist[k])) {
-    alert('Check all four review items before approving.');
+  if (!['name_match', 'fields_complete', 'id_uploaded'].every(k => checklist[k])) {
+    alert('Check all three review items before sending the registration invoice.');
     return;
   }
-  if (!confirm('Approve this application and add the member to the CRM?')) return;
+  if (!confirm('Approve this application and send the $200 PayPal registration invoice?')) return;
   try {
     await apiPatch('apply/applications/' + reviewingApplicationId, {
       review_checklist: checklist,
       notes: readBoardNotesField('appReviewNotes', appReviewNotesBaseline),
       status: 'Under Review',
     });
-    const res = await apiPost('apply/applications/' + reviewingApplicationId + '/approve', { review_checklist: checklist });
-    alert(res.message || 'Member approved.');
+    const res = await apiPost('apply/applications/' + reviewingApplicationId + '/approve-for-payment', { review_checklist: checklist });
+    showAdminToast(res.message || 'Registration invoice sent.', 'success');
+    closeModal('applicationModal');
+    await refreshAdminSections(['applications', 'members', 'stats', 'invoices']);
+    render();
+  } catch (e) {
+    alert(e.message || 'Could not send registration invoice. Check PayPal credentials and applicant email.');
+  }
+}
+
+async function completeRegistrationReview() {
+  if (!reviewingApplicationId) return;
+  const app = APPLICATIONS.find(a => a.id === reviewingApplicationId);
+  if (app?.status !== 'Awaiting Payment') return;
+  if (!confirm(`Mark $200 registration fee paid and add ${app.member_full_name || 'this applicant'} to active members?`)) return;
+  try {
+    const res = await apiPost('apply/applications/' + reviewingApplicationId + '/complete', {
+      payment_method: 'Zelle & BofA',
+      notes: readBoardNotesField('appReviewNotes', appReviewNotesBaseline),
+    });
+    showAdminToast(res.message || 'Member added.', 'success');
     closeModal('applicationModal');
     await refreshAdminSections(['applications', 'members', 'stats']);
     render();
   } catch (e) {
-    alert('Approval failed. Ensure DATABASE_URL is configured and all checklist items are complete.');
+    alert(e.message || 'Could not complete membership.');
   }
 }
 
@@ -3001,13 +3305,16 @@ async function loadReceiptReviewDetail(id, base) {
 async function approveReceiptReview() {
   if (!reviewingReceiptId) return;
   try {
-    await apiPost('receipts/' + reviewingReceiptId + '/approve');
+    const res = await apiPost('receipts/' + reviewingReceiptId + '/approve');
     closeModal('receiptModal');
-    await refreshAdminSections(['receipts', 'stats']);
+    await refreshAdminSections(['receipts', 'stats', 'invoices']);
     if (currentView === 'receipts') renderReceiptsView();
+    else if (currentView === 'invoices') updateInvoicesList();
     else updateSidebar();
-  } catch {
-    alert('Could not approve receipt.');
+    const ppHint = paypalSyncHint(res?.paypal);
+    showAdminToast(`✓ Receipt approved and invoice marked paid.${ppHint}`, res?.paypal?.error ? 'warn' : 'success');
+  } catch (e) {
+    alert(e.message || 'Could not approve receipt.');
   }
 }
 

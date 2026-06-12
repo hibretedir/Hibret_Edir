@@ -27,6 +27,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "data"
+ENV_PATH = ROOT / ".env"
 WAITING_LIST_XLSX = DATA / "Hibret Waiting list.xlsx"
 WIX_URL = "https://www.hibretedir.com/yourwaitinglist"
 CONNECT_TIMEOUT_SEC = 10
@@ -34,6 +35,20 @@ USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
+
+
+def load_env_file() -> None:
+    if not ENV_PATH.exists():
+        return
+    for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
 
 
 def require_openpyxl():
@@ -72,6 +87,25 @@ def normalize_name_key(name: str | None) -> str:
     text = re.sub(r"\([^)]*\)", "", text)
     text = re.sub(r"[^a-z0-9]+", " ", text)
     return re.sub(r"\s+", " ", text).strip()
+
+
+# Legacy canceled entries — excluded from import and marked rejected if present.
+EXCLUDED_NAME_KEYS = frozenset({
+    normalize_name_key("Senait Teklehaimanot"),
+    normalize_name_key("Kidus Brook"),
+})
+
+
+def filter_excluded_entries(entries: list[dict]) -> tuple[list[dict], list[str]]:
+    kept: list[dict] = []
+    skipped: list[str] = []
+    for entry in entries:
+        name = entry.get("full_name") or entry.get("display_name") or ""
+        if normalize_name_key(name) in EXCLUDED_NAME_KEYS:
+            skipped.append(name)
+            continue
+        kept.append(entry)
+    return kept, skipped
 
 
 def normalize_phone(value) -> str | None:
@@ -270,18 +304,31 @@ ADDED_THROUGH_POSITION = 11
 
 
 def export_public_entries(entries: list[dict]) -> list[dict]:
-    """Public queue: place #, name, date applied only (no email/phone/status)."""
+    """Public queue with status labels; added only when status is Added as Member."""
+    status_labels = {
+        "Added as Member": ("Added", "ተጨምሯል"),
+        "Invited to Apply": ("Invitation Sent", "ግብአት ተላልፏል"),
+        "Application Submitted": ("Invitation Sent", "ግብአት ተላልፏል"),
+        "Registered": ("Registered", "ተመዝግቧል"),
+        "Pending": ("Pending", "በመጠባበቅ ላይ"),
+    }
     public: list[dict] = []
     for entry in entries:
-        if (entry.get("status") or "Pending") in HIDDEN_PUBLIC_STATUSES:
+        status = entry.get("status") or "Pending"
+        if status in HIDDEN_PUBLIC_STATUSES:
             continue
-        pos = entry.get("position")
+        label_en, label_am = status_labels.get(status, ("Pending", "በመጠባበቅ ላይ"))
+        added = status == "Added as Member"
         public.append(
             {
-                "position": pos,
-                "display_name": entry.get("display_name"),
+                "position": entry.get("position"),
+                "display_name": entry.get("display_name") or entry.get("full_name"),
                 "applied_date_text": entry.get("applied_date_text"),
-                "added": isinstance(pos, int) and pos <= ADDED_THROUGH_POSITION,
+                "status": status,
+                "status_label": label_en,
+                "status_label_en": label_en,
+                "status_label_am": label_am,
+                "added": added,
             }
         )
     return public
@@ -289,11 +336,19 @@ def export_public_entries(entries: list[dict]) -> list[dict]:
 
 def write_public_json(entries: list[dict]) -> Path:
     public = export_public_entries(entries)
+    added_count = sum(1 for e in public if e.get("added"))
+    next_position = next((e["position"] for e in public if not e.get("added")), None)
+    note = (
+        f"{added_count} member{'s' if added_count != 1 else ''} added so far. #{next_position} is next in line."
+        if next_position
+        else f"{added_count} member{'s' if added_count != 1 else ''} added so far."
+    )
     payload = {
         "updated_at": datetime.utcnow().isoformat() + "Z",
-        "added_through_position": ADDED_THROUGH_POSITION,
+        "added_through_position": added_count,
+        "added_count": added_count,
         "count": len(public),
-        "note": f"Places 1–{ADDED_THROUGH_POSITION} have been added as members. #12 is next in line.",
+        "note": note,
         "entries": public,
     }
     PUBLIC_WAITING_LIST_JSON.parent.mkdir(parents=True, exist_ok=True)
@@ -315,12 +370,14 @@ def upsert_waiting_list(conn, rows: list[dict], dry_run: bool) -> tuple[int, int
           %(referred_by)s, %(applicant_role)s, %(status)s,
           COALESCE(%(applied_at)s::date, CURRENT_DATE), %(notes)s
         )
+        RETURNING id
     """
     update_sql = """
         UPDATE waiting_list SET
           first_name = %(first_name)s,
           last_name = %(last_name)s,
           full_name = %(full_name)s,
+          email = %(email)s,
           phone = %(phone)s,
           address = %(address)s,
           referred_by = %(referred_by)s,
@@ -340,8 +397,20 @@ def upsert_waiting_list(conn, rows: list[dict], dry_run: bool) -> tuple[int, int
            )
         LIMIT 1
     """
+    find_by_name_sql = """
+        SELECT id, full_name FROM waiting_list
+        WHERE full_name IS NOT NULL
+        ORDER BY id ASC
+    """
 
     with conn.cursor() as cur:
+        name_index: dict[str, int] = {}
+        cur.execute(find_by_name_sql)
+        for row_id, full_name in cur.fetchall():
+            key = normalize_name_key(full_name)
+            if key and key not in name_index:
+                name_index[key] = row_id
+
         for row in rows:
             payload = normalize_for_db(row)
             if not payload.get("email") and not payload.get("phone"):
@@ -350,8 +419,20 @@ def upsert_waiting_list(conn, rows: list[dict], dry_run: bool) -> tuple[int, int
                     print(f"[dry-run skip] #{payload['queue_position']} {payload.get('full_name')} (no email/phone)")
                 continue
 
-            cur.execute(find_sql, {"email": payload.get("email"), "phone": payload.get("phone")})
-            existing = cur.fetchone()
+            name_key = normalize_name_key(payload.get("full_name"))
+            matched_id = name_index.get(name_key) if name_key else None
+            if matched_id:
+                existing = (matched_id,)
+            else:
+                cur.execute(find_sql, {"email": payload.get("email"), "phone": payload.get("phone")})
+                existing = cur.fetchone()
+                if existing and name_key:
+                    cur.execute("SELECT full_name, email FROM waiting_list WHERE id = %s", (existing[0],))
+                    found = cur.fetchone()
+                    found_name = normalize_name_key(found[0] if found else None)
+                    found_email = str(found[1] or "") if found else ""
+                    if found_name and found_name != name_key and not found_email.endswith("@import.local"):
+                        existing = None
 
             if dry_run:
                 action = "update" if existing else "insert"
@@ -369,16 +450,82 @@ def upsert_waiting_list(conn, rows: list[dict], dry_run: bool) -> tuple[int, int
                 payload["id"] = existing[0]
                 cur.execute(update_sql, payload)
                 updated += 1
+                if name_key:
+                    name_index[name_key] = existing[0]
             else:
                 cur.execute(insert_sql, payload)
+                new_id = cur.fetchone()[0]
                 inserted += 1
+                if name_key and new_id:
+                    name_index[name_key] = new_id
 
         if not dry_run:
             conn.commit()
     return inserted, updated, skipped
 
 
+def reject_excluded_waiting_list(conn) -> int:
+    if not EXCLUDED_NAME_KEYS:
+        return 0
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, full_name FROM waiting_list")
+        rejected = 0
+        for row_id, full_name in cur.fetchall():
+            if normalize_name_key(full_name) in EXCLUDED_NAME_KEYS:
+                cur.execute(
+                    "UPDATE waiting_list SET status = 'Rejected', notes = COALESCE(notes, '') "
+                    "|| ' Canceled — excluded from active waiting list import.' "
+                    "WHERE id = %s AND status NOT IN ('Added as Member')",
+                    (row_id,),
+                )
+                rejected += cur.rowcount
+        conn.commit()
+    return rejected
+
+
+def dedupe_waiting_list_by_name(conn) -> int:
+    """Remove duplicate queue rows for the same person; keep the best contact record."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, full_name, email, phone, status, applied_at "
+            "FROM waiting_list ORDER BY applied_at ASC NULLS LAST, id ASC"
+        )
+        rows = cur.fetchall()
+        groups: dict[str, list[tuple]] = {}
+        for row in rows:
+            key = normalize_name_key(row[1])
+            if not key:
+                continue
+            groups.setdefault(key, []).append(row)
+
+        deleted = 0
+        for key, items in groups.items():
+            if len(items) < 2:
+                continue
+
+            def score(item):
+                _id, _name, email, phone, status, _applied = item
+                real_email = email and not str(email).endswith("@import.local")
+                real_phone = phone and "(000) 000-" not in str(phone)
+                return (
+                    1 if real_email else 0,
+                    1 if real_phone else 0,
+                    0 if status in ("Rejected", "Canceled") else 1,
+                    -_id,
+                )
+
+            keep = max(items, key=score)
+            for item in items:
+                if item[0] == keep[0]:
+                    continue
+                cur.execute("DELETE FROM waiting_list WHERE id = %s", (item[0],))
+                deleted += cur.rowcount
+        conn.commit()
+    return deleted
+
+
 def main():
+    load_env_file()
     parser = argparse.ArgumentParser(description="Import waiting list from local Excel export")
     parser.add_argument(
         "--file",
@@ -406,6 +553,10 @@ def main():
     except FileNotFoundError as err:
         print(err)
         sys.exit(1)
+
+    entries, excluded = filter_excluded_entries(entries)
+    if excluded:
+        print(f"Excluded canceled entries: {', '.join(excluded)}")
 
     print(f"Parsed {len(entries)} waiting list entries.")
     with_email = sum(1 for e in entries if e.get("email"))
@@ -441,13 +592,19 @@ def main():
         psycopg2 = require_psycopg()
         conn = psycopg2.connect(db_url, connect_timeout=CONNECT_TIMEOUT_SEC)
         try:
+            rejected = reject_excluded_waiting_list(conn)
+            if rejected:
+                print(f"Marked rejected (canceled): {rejected}")
             inserted, updated, skipped = upsert_waiting_list(
                 conn, entries, dry_run=args.dry_run and not args.seed
             )
             if args.dry_run and not args.seed:
                 print(f"Would insert: {inserted}; would update: {updated}; skipped: {skipped}")
             else:
+                deduped = dedupe_waiting_list_by_name(conn)
                 print(f"Inserted: {inserted}; updated: {updated}; skipped: {skipped}")
+                if deduped:
+                    print(f"Removed duplicate queue rows: {deduped}")
         finally:
             conn.close()
     elif args.seed:

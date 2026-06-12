@@ -26,8 +26,24 @@ const ZELLE_BOFA_SQL = `(
   OR LOWER(COALESCE(invoices.payment_method, '')) LIKE '%bank%'
 )`;
 
+/** Do not let PayPal sync downgrade board-approved / pending local payment state. */
+const SYNC_PROTECT_LOCAL_PAID_SQL = `(
+  EXISTS (
+    SELECT 1 FROM invoice_mark_paid_requests r
+    WHERE r.invoice_id = invoices.id AND r.status = 'Pending'
+  )
+  OR (
+    LOWER(TRIM(COALESCE(invoices.status, ''))) = 'paid'
+    AND (
+      NULLIF(TRIM(COALESCE(invoices.paid_note, '')), '') IS NOT NULL
+      OR ${ZELLE_BOFA_SQL}
+    )
+  )
+)`;
+
 module.exports = {
   isZelleBofaPaymentMethod,
   paymentMethodFromPaypalStatus,
   ZELLE_BOFA_SQL,
+  SYNC_PROTECT_LOCAL_PAID_SQL,
 };

@@ -1,6 +1,6 @@
 # Hibret Edir — Agent Context & Handoff
 
-**Last updated:** June 2026 (post `8e86532`)  
+**Last updated:** June 11, 2026 (membership onboarding workflow + waiting list public status fix)  
 **Purpose:** Onboard a new Cursor agent quickly. Read this file first, then `HIBRET_EDIR_PROJECT_HANDOFF (1).md` for deeper business rules and by-laws.
 
 ---
@@ -40,7 +40,9 @@ hibretedir/
 │   ├── portal/index.html          # Member portal (live invoices, Deaths Paid)
 │   ├── admin/index.html           # Board Admin Page (CRM)
 │   ├── application/index.html     # Full membership application (step 2)
-│   ├── waiting-list-public.json   # Static fallback for public waiting list (offline only)
+│   ├── waiting-list-public.json   # Static fallback for public waiting list (regenerate from DB)
+│   ├── waiting-list-status/       # Full public queue page with Status column
+│   ├── docs/                      # Board handout + automation showcase (also in docs/)
 │   ├── member-stats.json          # Static fallback for hero active count (offline only)
 │   ├── css/
 │   │   ├── public-pages.css
@@ -54,6 +56,8 @@ hibretedir/
 │   ├── admin-auth.js              # Shared JWT verify helpers
 │   ├── portal.js                  # Members, invoices, profile, stats, activity
 │   ├── apply.js                   # Waiting list, applications, site-stats, announcement
+│   ├── membership-completion.js   # Create active member after registration payment
+│   ├── paypal-registration-invoice.js  # $200 PayPal invoice on board approve
 │   ├── receipts.js                # Member receipt upload + admin review
 │   ├── payouts.js                 # $15K payout document workflow
 │   ├── notify.js                  # SendGrid + Twilio
@@ -71,14 +75,20 @@ hibretedir/
 │   └── member-snapshot.js         # Static member export + dev PIN file
 ├── db/schema.sql                  # PostgreSQL schema + idempotent migrations
 ├── docs/
-│   └── scheduled-paypal-sync.md   # Why Netlify shows "Every hour" but syncs twice daily
+│   ├── membership-onboarding-workflow.md
+│   ├── board-meeting-handout.html
+│   ├── automation-showcase.html
+│   └── scheduled-paypal-sync.md
 ├── scripts/
 │   ├── start-dev.js               # Dev entry (delegates to dev-local.js)
 │   ├── dev-local.js               # Local server: public/ + functions (no Netlify CLI cache)
 │   ├── sync_paypal.js             # Full PayPal sync from terminal (no 60s limit)
 │   ├── run_schema.js              # npm run db:migrate
 │   ├── seed_from_exports.py
-│   ├── import_waiting_list.py
+│   ├── import_waiting_list.py     # Excel import + public JSON export
+│   ├── mark_added_waiting_list_members.py
+│   ├── mark_invitations_sent.py
+│   ├── seed_waiting_list_public.py
 │   ├── build_invoice_snapshot.py
 │   └── build_members_snapshot.py
 │   └── (many compare/audit scripts for ops — optional)
@@ -157,8 +167,9 @@ Notifications **skip gracefully** when SendGrid/Twilio are unset.
 | `events` | Funeral events (deceased name, event #, amount, notes JSON for announcement venues) |
 | `invoices` | PayPal-linked invoices; `recipient_name`, `paid_note` |
 | `receipts` | Zelle/BofA receipt uploads (base64; approve → mark invoice Paid) |
-| `waiting_list` | Public waiting list queue |
-| `membership_applications` | Step-2 application + ID docs (JSONB) |
+| `waiting_list` | Public waiting list queue (`invited_at`, statuses below) |
+| `membership_applications` | Step-2 application + ID docs; `registration_invoice_id`, `registration_fee_paid` |
+| `invoices` | PayPal-linked; `membership_application_id` for $200 registration invoices |
 | `member_change_requests` | Beneficiary changes pending board approval |
 | `invoice_mark_paid_requests` | Board dual-control before manual mark-paid |
 | `contact_messages` | Public Contact Us form inbox |
@@ -168,14 +179,28 @@ Notifications **skip gracefully** when SendGrid/Twilio are unset.
 | `board_members` | Board login accounts |
 | `notifications` | Email/SMS send log |
 
-**Recent schema additions:** performance indexes on invoices/members/receipts; `invoices.paid_note`; `invoice_mark_paid_requests`.
+**Recent schema additions:** performance indexes; `invoices.paid_note`, `invoice_mark_paid_requests`; `waiting_list.invited_at`; `invoices.membership_application_id`; `membership_applications.registration_invoice_id`.
 
-**Seeding:**
+**Waiting list statuses (admin + DB):**
+
+| Status | Meaning |
+|--------|---------|
+| `Pending` / `Registered` | In queue |
+| `Invited to Apply` | Board sent invite |
+| `Application Submitted` | Form received |
+| `Added as Member` | Paid and in CRM |
+| `Rejected` | Removed from queue (Remove button) |
+
+**Public waiting list labels:** Only `Added as Member` shows **Added**. `Invited to Apply` and `Application Submitted` show **Invitation Sent** (not position-based — do not use “places 1–11” heuristic).
+
+**Seeding / waiting list ops:**
 
 ```bash
-npm run seed
-npm run import:waiting-list:seed
-npm run build:invoice-snapshot
+npm run db:migrate
+npm run import:waiting-list:seed          # if DB empty
+python scripts/import_waiting_list.py --file "data/waiting list with phone and email.xlsx" --seed
+python scripts/mark_added_waiting_list_members.py   # marks known members + refreshes public JSON
+python scripts/mark_invitations_sent.py             # one-off status updates
 ```
 
 ---
@@ -215,14 +240,26 @@ Base URL: `/.netlify/functions/<name>`
 
 **Recipient matching:** Many invoices were bulk-imported with wrong `member_id` but correct PayPal `recipient_name`. Portal matches by member's `paypal_name` / `full_name` so counts stay accurate (~21 active members affected).
 
-### `apply.js` (public highlights)
+### `apply.js` (public + admin highlights)
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/site-stats` | `active_count`, `amount_per_member`, `payout_amount` |
-| GET | `/current-announcement` | Latest event from DB (deceased name, venues in event `notes` JSON) |
-| GET | `/waiting-list/status` | Live queue + `added_through_position` |
-| POST | `/waiting-list`, `/membership`, `/contact` | Forms |
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/site-stats` | — | `active_count`, `amount_per_member`, `payout_amount` |
+| GET | `/current-announcement` | — | Latest event from DB |
+| GET | `/waiting-list/status` | — | Live queue; `added` only if `Added as Member` |
+| POST | `/waiting-list`, `/contact` | — | Public forms |
+| POST | `/verify`, `/membership` | — | Application gate (must be `Invited to Apply`) |
+| GET | `/waiting-list` | Admin | Full queue + slot math |
+| POST | `/waiting-list/:id/invite` | Admin | Send invitation |
+| POST | `/waiting-list/:id/reject` | Admin | Remove → status `Rejected` |
+| GET/PATCH | `/applications/:id` | Admin | List / save review checklist |
+| POST | `/applications/:id/approve-for-payment` | Admin | Vet + send $200 PayPal invoice → `Awaiting Payment` |
+| POST | `/applications/:id/complete` | Admin | Mark registration paid (Zelle) → create member |
+| POST | `/applications/:id/reject` | Admin | Reject application |
+
+**Membership onboarding (live):** invite → apply → board review (3 checks) → **Approve & Send Invoice** → PayPal $200 → member created on payment (PayPal sync or **Mark Registration Paid**). See **`docs/membership-onboarding-workflow.md`**.
+
+**Registration payment completion:** `paypal-sync.js` calls `processPaidRegistrationInvoices()` after sync. Core logic in `membership-completion.js`.
 
 ### PayPal sync
 
@@ -256,9 +293,10 @@ Hash routing (`#announcement`, `#apply`, etc.). English + Amharic.
 
 - Hero **active member count**, per-death amount, payout amount → `apply/site-stats`
 - **Current announcement** → `apply/current-announcement` (memorial letter + summary box)
-- **Waiting list status** → refetch on section open, refresh, tab visible
+- **Waiting list status** → `apply/waiting-list/status` (DB first, `waiting-list-public.json` fallback)
+- Public labels: **Added** only for members; **Invitation Sent** for invited / in-progress applicants
 
-Placeholders show `—` until API loads. Static fallbacks (`member-stats.json`, `waiting-list-public.json`) only if API fails.
+Placeholders show `—` until API loads. Regenerate static JSON: `python scripts/mark_added_waiting_list_members.py` (runs export at end) or import script.
 
 **Removed:** In Remembrance section and `memorial.json`.
 
@@ -290,11 +328,27 @@ Placeholders show `—` until API loads. Static fallbacks (`member-stats.json`, 
 
 **PayPal:** **Sync PayPal** on Invoices tab (batched POST). Stats cache invalidated after sync and member changes.
 
+**Approval view (Waiting List + Applications):**
+
+| Waiting List tabs | All · Invited · In Progress (no separate “Ready to Invite” — invite from **All**) |
+| Applications | Pending (incl. Awaiting Payment) · Approved · Rejected |
+| Invite | **Send Invitation →** on eligible rows in **All** only |
+| Review | 3 checks: name, fields, ID → **Approve & Send Invoice** |
+| Payment | **Mark Registration Paid** when status is Awaiting Payment (Zelle/BofA) |
+
+Slot math: `invite_slots_remaining = MEMBER_CAP − active − in_pipeline` (`Invited to Apply` + `Application Submitted`).
+
 **Data:** Live API + `invoices-snapshot.json` fallback when DB unavailable.
 
 ### Membership application (`public/application/index.html`)
 
-Waiting list verify gate → full form → `apply/membership`.
+Waiting list verify gate (email + phone, must be **Invited to Apply**) → full form → `POST apply/membership`.
+
+### Waiting list status page (`public/waiting-list-status/index.html`)
+
+Full queue table with **Status** column (same API as home page).
+
+**Docs (board + marketing):** `docs/membership-onboarding-workflow.md` · `docs/board-meeting-handout.html` · `docs/automation-showcase.html` · copies under `public/docs/` when deployed.
 
 ---
 
@@ -316,8 +370,18 @@ Auth, portal, admin CRM, applications, waiting list, notifications, audit, payou
 - [x] **Netlify deploy fix** — `SECRETS_SCAN_OMIT_KEYS` for `PAYPAL_ENV` false positives (`aria-live`, etc.)
 - [x] **Docs** — `docs/scheduled-paypal-sync.md`
 
+### June 2026 — Membership onboarding & waiting list (local; not necessarily deployed)
+
+- [x] **Onboarding pipeline** — vet → PayPal $200 on approve → member on payment (`membership-completion.js`, `paypal-registration-invoice.js`)
+- [x] **Admin Approval UI** — Approve & Send Invoice, Mark Registration Paid; removed Ready to Invite tab
+- [x] **Waiting list import** — Excel with email/phone (~98 rows); 9 marked `Added as Member`
+- [x] **Public waiting list fix** — “Added” only for actual members; **Invitation Sent** for invited/applicants (fixed position 1–11 bug)
+- [x] **Docs** — `membership-onboarding-workflow.md`, board handout, automation showcase
+- [x] **Ops scripts** — `mark_invitations_sent.py`, updated public JSON export
+
 ### Still partial / ops
 
+- [ ] **SendGrid / Twilio** — not configured yet; notifications skip gracefully (manual comms for invites)
 - [ ] Admin create event → bulk PayPal invoices via API
 - [ ] All members have portal PINs (ops)
 - [ ] Fix mislinked `member_id` on bulk-imported invoices (recipient match covers portal; admin may still show wrong owner on some rows)
@@ -333,11 +397,13 @@ Auth, portal, admin CRM, applications, waiting list, notifications, audit, payou
 | `events.js` | No admin “create event → auto ~197 invoices” via PayPal API |
 | Automated payment reminders | Not started |
 | Twilio SMS bot | Not started |
-| Registration fee PayPal ($200) after approval | Partial |
-| Welcome email + digital membership card | Not started |
+| Welcome email + digital membership card | Not started (approve notify exists; no card asset) |
 | 4-month waiting period tracking | Not started |
 | Reporting (event collection, delinquency) | Not started |
 | Receipt storage at scale | Base64 in Postgres OK for now |
+| End-to-end onboarding test | Mock user + $1 PayPal invoice planned; not run yet |
+
+**Done (June 2026):** Registration fee PayPal on board approve → member on payment — see `docs/membership-onboarding-workflow.md`.
 
 ---
 
@@ -346,7 +412,7 @@ Auth, portal, admin CRM, applications, waiting list, notifications, audit, payou
 From by-laws / handoff:
 
 - Ethiopian origin, **50 miles** of Downtown LA
-- **$200** one-time membership fee after waiting list invite
+- **$200** one-time registration fee — PayPal invoice **after** board approves application (not before vetting)
 - **$110** per event, due within 3 days
 - **4-month waiting period** for new members before benefits
 - **$15,000** payout; **2 board approvals** required
@@ -370,6 +436,16 @@ From by-laws / handoff:
 ---
 
 ## 12. Recent session changelog
+
+### June 11, 2026 — Membership onboarding + waiting list (local session)
+
+- Full onboarding workflow: invite → apply → review → PayPal $200 → active member on payment.
+- New functions: `membership-completion.js`, `paypal-registration-invoice.js`.
+- Admin: **Approve & Send Invoice**, **Mark Registration Paid**; removed **Ready to Invite** tab.
+- Public waiting list: fixed false “Added” for positions 1–11; **Invitation Sent** for invited/applicants.
+- Waiting list data: Excel import, 9 added members, Simon/Yohannes/Misrak marked invited/in progress.
+- Docs: workflow spec, board handout, automation showcase (`public/docs/` copies).
+- SendGrid/Twilio still unset — OK for local testing.
 
 ### June 2026 — `8a78e85` / `8e86532`
 
@@ -398,13 +474,18 @@ From by-laws / handoff:
 | `paypal-sync-scheduled` missing | Code not deployed — push latest `main` |
 | New function 404 locally | Restart `npm run dev` |
 | Receipts / PIN reset empty | Run `npm run db:migrate` |
-| Notifications not sending | SendGrid/Twilio unset (expected locally) |
+| Notifications not sending | SendGrid/Twilio unset (expected locally and until configured) |
+| Invited person shows “Added” on public list | Regenerate JSON; ensure API uses status not position — see `isWaitingListPublicAdded()` in `apply.js` |
+| PayPal registration invoice fails | Check `PAYPAL_CLIENT_ID`/`SECRET`; use **Mark Registration Paid** as fallback |
 | PayPal sync timeout on Netlify | Use Admin batched sync or `npm run sync:paypal`; background function for cron |
 
 ---
 
 ## 14. Related documents
 
+- **`docs/membership-onboarding-workflow.md`** — Full onboarding pipeline (board + dev spec).
+- **`docs/board-meeting-handout.html`** — Printable board summary (Ctrl+P).
+- **`docs/automation-showcase.html`** — Portfolio / case-study page with diagrams.
 - **`docs/scheduled-paypal-sync.md`** — PayPal cron schedule (why “Every hour” in Netlify UI).
 - **`HIBRET_EDIR_PROJECT_HANDOFF (1).md`** — Original handoff (business, SMS bot spec, roadmap).
 - **`README.md`** — Deploy overview.

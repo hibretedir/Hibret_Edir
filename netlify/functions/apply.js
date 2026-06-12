@@ -1,11 +1,14 @@
 // netlify/functions/apply.js — Waiting list & membership application submissions
 
+const fs = require('fs');
+const path = require('path');
 const { getDb } = require('./db');
 const { checkAddressRadius } = require('./geo');
 const {
+  notifyWaitingListInvited,
   notifyApplicationSubmitted,
-  notifyApplicationApproved,
   notifyApplicationRejected,
+  notifyRegistrationInvoiceSent,
   notifyBoard,
   notifyMember,
   notifyBeneficiaryChangeApproved,
@@ -25,6 +28,21 @@ const {
 const { stampBoardNote, mergeBoardNotes } = require('./board-notes');
 const { invalidateInvoiceStatsCache } = require('./invoice-stats-cache');
 const { logActivity } = require('./audit');
+const { createAndSendRegistrationInvoice } = require('./paypal-registration-invoice');
+const {
+  completeMembershipFromApplication,
+  fetchApplicationForCompletion,
+  REGISTRATION_FEE,
+} = require('./membership-completion');
+
+const MEMBER_CAP = Number(process.env.MEMBER_CAP || 200);
+const WAITING_LIST_PIPELINE_STATUSES = ['Invited to Apply', 'Application Submitted'];
+// Imported rows may use Registered; new sign-ups use Pending — both are in the queue.
+const WAITING_LIST_QUEUE_STATUSES = ['Pending', 'Registered'];
+
+function isWaitingListQueueAwaiting(status) {
+  return WAITING_LIST_QUEUE_STATUSES.includes(status);
+}
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -54,11 +72,61 @@ function getPath(event) {
 // Queue places 1–11 have joined as members (through Martha Mekonnen).
 const ADDED_THROUGH_POSITION = 11;
 
+function publicWaitingListStatusLabel(status) {
+  const labels = publicWaitingListStatusLabels(status);
+  return labels.en;
+}
+
+function publicWaitingListStatusLabels(status) {
+  if (status === 'Added as Member') return { en: 'Added', am: 'ተጨምሯል' };
+  if (status === 'Registered') return { en: 'Registered', am: 'ተመዝግቧል' };
+  if (status === 'Invited to Apply') return { en: 'Invitation Sent', am: 'ግብአት ተላልፏል' };
+  if (status === 'Application Submitted') return { en: 'Invitation Sent', am: 'ግብአት ተላልፏል' };
+  if (status === 'Canceled') return { en: 'Canceled', am: 'ተሰርዟል' };
+  if (status === 'Rejected') return { en: 'Removed', am: 'ተወግዷል' };
+  return { en: 'Pending', am: 'በመጠባበቅ ላይ' };
+}
+
+function isWaitingListPublicAdded(row) {
+  return row.status === 'Added as Member';
+}
+
 function markAddedEntries(entries) {
-  return (entries || []).map((entry) => ({
-    ...entry,
-    added: Number(entry.position) <= ADDED_THROUGH_POSITION,
-  }));
+  return (entries || []).map((entry) => {
+    const added = entry.status
+      ? entry.status === 'Added as Member'
+      : entry.added === true;
+    const labels = entry.status
+      ? publicWaitingListStatusLabels(entry.status)
+      : { en: added ? 'Added' : 'Pending', am: added ? 'ተጨምሯል' : 'በመጠባበቅ ላይ' };
+    return {
+      ...entry,
+      added,
+      status: entry.status || (added ? 'Added as Member' : 'Pending'),
+      status_label: labels.en,
+      status_label_en: labels.en,
+      status_label_am: labels.am,
+    };
+  });
+}
+
+function loadStaticWaitingListStatus() {
+  try {
+    const filePath = path.join(__dirname, '../../public/waiting-list-public.json');
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    if (!data?.entries?.length) return null;
+    const addedThrough = data.added_through_position ?? 0;
+    return {
+      entries: markAddedEntries(data.entries),
+      addedThrough,
+      updatedNote: data.note || data.updated_note || '',
+      count: data.count || data.entries.length,
+      updatedAt: data.updated_at || new Date().toISOString(),
+      source: 'static',
+    };
+  } catch {
+    return null;
+  }
 }
 
 function parseBody(event) {
@@ -183,6 +251,16 @@ async function verifyApproved(body) {
   if (row.has_application) {
     return json(409, { error: 'A membership application has already been submitted for this waiting list entry.' });
   }
+  if (isWaitingListQueueAwaiting(row.status)) {
+    return json(403, {
+      error: 'The board has not invited you to apply yet. You will receive an email when it is your turn.',
+    });
+  }
+  if (row.status !== 'Invited to Apply') {
+    return json(403, {
+      error: 'Your waiting list entry is not open for application. Contact the board at (424) 547-5594.',
+    });
+  }
 
   return json(200, {
     ok: true,
@@ -209,7 +287,14 @@ async function getWaitingListAddedThrough(db) {
     WHERE status = 'Added as Member'
   `);
   const n = Number(res.rows[0]?.added_through || 0);
-  return n > 0 ? n : ADDED_THROUGH_POSITION;
+  return n;
+}
+
+async function getWaitingListAddedCount(db) {
+  const res = await db.query(
+    `SELECT COUNT(*)::int AS c FROM waiting_list WHERE status = 'Added as Member'`
+  );
+  return Number(res.rows[0]?.c || 0);
 }
 
 function parseEventNotes(notes) {
@@ -263,9 +348,12 @@ async function getCurrentAnnouncementFromDb() {
 
 async function getWaitingListStatusFromDb() {
   const db = getDb();
-  const addedThrough = await getWaitingListAddedThrough(db);
+  const [joinedThrough, addedCount] = await Promise.all([
+    getWaitingListAddedThrough(db),
+    getWaitingListAddedCount(db),
+  ]);
   const result = await db.query(
-    `SELECT full_name, first_name, last_name, status, applied_at
+    `SELECT full_name, first_name, last_name, email, status, applied_at
      FROM waiting_list
      ORDER BY applied_at ASC NULLS LAST, id ASC`
   );
@@ -280,44 +368,78 @@ async function getWaitingListStatusFromDb() {
       queuePosition: idx + 1,
     }))
     .filter(({ row }) => !hidden.has(row.status))
-    .map(({ row, queuePosition }) => ({
-      position: queuePosition,
-      display_name: row.full_name || `${row.first_name || ''} ${row.last_name || ''}`.trim(),
-      applied_date_text: row.applied_at
-        ? new Date(row.applied_at).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            timeZone: 'America/Los_Angeles',
-          })
-        : null,
-      added: row.status === 'Added as Member' || queuePosition <= addedThrough,
-    }));
-
-  return { entries, addedThrough };
-}
-
-async function getWaitingListStatus() {
-  const fromDb = await getWaitingListStatusFromDb();
-  if (!fromDb?.entries?.length) {
-    return json(503, {
-      error: 'Waiting list has not been loaded yet. Contact the board at (424) 547-5594.',
+    .map(({ row, queuePosition }) => {
+      const labels = publicWaitingListStatusLabels(row.status);
+      return {
+        position: queuePosition,
+        display_name: row.full_name
+          || `${row.first_name || ''} ${row.last_name || ''}`.trim()
+          || row.email
+          || '—',
+        applied_date_text: row.applied_at
+          ? new Date(row.applied_at).toLocaleDateString('en-US', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+              timeZone: 'America/Los_Angeles',
+            })
+          : null,
+        status: row.status,
+        status_label: labels.en,
+        status_label_en: labels.en,
+        status_label_am: labels.am,
+        added: isWaitingListPublicAdded(row),
+      };
     });
+
+  if (!entries.length) {
+    return null;
   }
 
-  const nextPosition = fromDb.entries.find((e) => !e.added)?.position;
-  const updatedNote = nextPosition
-    ? `Places 1–${fromDb.addedThrough} have been added as members. #${nextPosition} is next in line.`
-    : `Places 1–${fromDb.addedThrough} have been added as members.`;
+  return { entries, addedThrough: joinedThrough, addedCount };
+}
+
+function buildWaitingListStatusPayload(source, fromData) {
+  const nextEntry = fromData.entries.find((e) => !e.added);
+  const nextPosition = nextEntry?.position;
+  const addedCount = fromData.addedCount ?? fromData.entries.filter((e) => e.added).length;
+  const updatedNote = fromData.updatedNote
+    || (nextPosition
+      ? `${addedCount} member${addedCount === 1 ? '' : 's'} added so far. #${nextPosition} is next in line.`
+      : `${addedCount} member${addedCount === 1 ? '' : 's'} added so far.`);
 
   return json(200, {
     ok: true,
-    source: 'database',
-    count: fromDb.entries.length,
-    added_through_position: fromDb.addedThrough,
+    source,
+    count: fromData.count ?? fromData.entries.length,
+    added_through_position: fromData.addedThrough ?? addedCount,
+    added_count: addedCount,
     updated_note: updatedNote,
-    updated_at: new Date().toISOString(),
-    entries: fromDb.entries,
+    updated_at: fromData.updatedAt || new Date().toISOString(),
+    entries: fromData.entries,
+  });
+}
+
+async function getWaitingListStatus() {
+  try {
+    const fromDb = await getWaitingListStatusFromDb();
+    if (fromDb?.entries?.length) {
+      return buildWaitingListStatusPayload('database', {
+        ...fromDb,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+  } catch (err) {
+    console.error('waiting list status DB read failed:', err.message || err);
+  }
+
+  const fromStatic = loadStaticWaitingListStatus();
+  if (fromStatic?.entries?.length) {
+    return buildWaitingListStatusPayload(fromStatic.source || 'static', fromStatic);
+  }
+
+  return json(503, {
+    error: 'Waiting list has not been loaded yet. Contact the board at (424) 547-5594.',
   });
 }
 
@@ -423,8 +545,12 @@ function mergeChecklist(stored, auto) {
   };
 }
 
+function checklistCompleteForVetting(checklist) {
+  return checklist.name_match && checklist.fields_complete && checklist.id_uploaded;
+}
+
 function checklistComplete(checklist) {
-  return checklist.name_match && checklist.fields_complete && checklist.id_uploaded && checklist.fee_paid;
+  return checklistCompleteForVetting(checklist) && checklist.fee_paid;
 }
 
 function buildApplicationSummary(row, includeIdData = false) {
@@ -486,7 +612,16 @@ function buildApplicationSummary(row, includeIdData = false) {
       status: row.wl_status,
     },
     review_checklist: checklist,
-    checklist_complete: checklistComplete(checklist),
+    checklist_complete: checklistCompleteForVetting(checklist),
+    registration_invoice: row.reg_invoice_id
+      ? {
+          id: row.reg_invoice_id,
+          status: row.reg_invoice_status,
+          paypal_link: row.reg_paypal_link,
+          invoice_number: row.reg_invoice_number,
+          amount: row.reg_invoice_amount != null ? Number(row.reg_invoice_amount) : REGISTRATION_FEE,
+        }
+      : null,
     id_documents: idSummary,
   };
 }
@@ -500,9 +635,15 @@ async function listApplications(query) {
       wl.email AS wl_email,
       wl.phone AS wl_phone,
       wl.address AS wl_address,
-      wl.status AS wl_status
+      wl.status AS wl_status,
+      ri.id AS reg_invoice_id,
+      ri.status AS reg_invoice_status,
+      ri.paypal_link AS reg_paypal_link,
+      ri.invoice_number AS reg_invoice_number,
+      ri.amount AS reg_invoice_amount
     FROM membership_applications ma
     JOIN waiting_list wl ON wl.id = ma.waiting_list_id
+    LEFT JOIN invoices ri ON ri.id = ma.registration_invoice_id
   `;
   const values = [];
   if (status) {
@@ -537,9 +678,15 @@ async function getApplication(id) {
       wl.email AS wl_email,
       wl.phone AS wl_phone,
       wl.address AS wl_address,
-      wl.status AS wl_status
+      wl.status AS wl_status,
+      ri.id AS reg_invoice_id,
+      ri.status AS reg_invoice_status,
+      ri.paypal_link AS reg_paypal_link,
+      ri.invoice_number AS reg_invoice_number,
+      ri.amount AS reg_invoice_amount
      FROM membership_applications ma
      JOIN waiting_list wl ON wl.id = ma.waiting_list_id
+     LEFT JOIN invoices ri ON ri.id = ma.registration_invoice_id
      WHERE ma.id = $1
      LIMIT 1`,
     [id]
@@ -561,6 +708,9 @@ async function updateApplicationReview(id, body, actor) {
   }
   if (existing.rows[0].status === 'Approved' && existing.rows[0].member_id) {
     return json(409, { error: 'Application is already approved and linked to a member.' });
+  }
+  if (existing.rows[0].status === 'Awaiting Payment') {
+    return json(409, { error: 'Application is awaiting payment — use Mark Registration Paid after fee is received.' });
   }
 
   const checklist = body.review_checklist || {};
@@ -599,47 +749,20 @@ async function updateApplicationReview(id, body, actor) {
   return getApplication(id);
 }
 
-function splitMemberName(full) {
-  const text = String(full || '').trim();
-  if (!text) return { first_name: 'Member', last_name: 'Unknown', full_name: 'Member Unknown' };
-  const parts = text.split(/\s+/);
-  if (parts.length === 1) {
-    return { first_name: parts[0], last_name: parts[0], full_name: parts[0] };
-  }
-  return {
-    first_name: parts[0],
-    last_name: parts.slice(1).join(' '),
-    full_name: text,
-  };
-}
-
-function formatAddress(app) {
-  const parts = [app.address, app.city, app.state, app.zip].filter((p) => String(p || '').trim());
-  return parts.join(', ') || app.wl_address || null;
-}
-
-async function approveApplication(id, body, actor) {
+async function approveForPayment(id, body, actor) {
   const db = getDb();
-  const result = await db.query(
-    `SELECT ma.*,
-      wl.full_name AS wl_full_name,
-      wl.email AS wl_email,
-      wl.phone AS wl_phone,
-      wl.address AS wl_address,
-      wl.status AS wl_status
-     FROM membership_applications ma
-     JOIN waiting_list wl ON wl.id = ma.waiting_list_id
-     WHERE ma.id = $1
-     LIMIT 1`,
-    [id]
-  );
-  if (!result.rows.length) {
+  const row = await fetchApplicationForCompletion(db, id);
+  if (!row) {
     return json(404, { error: 'Application not found.' });
   }
-
-  const row = result.rows[0];
   if (row.status === 'Approved' && row.member_id) {
-    return json(409, { error: 'Application already approved.' });
+    return json(409, { error: 'Application already approved and linked to a member.' });
+  }
+  if (row.status === 'Awaiting Payment') {
+    return json(409, { error: 'Registration invoice already sent — awaiting payment.' });
+  }
+  if (row.status === 'Rejected') {
+    return json(409, { error: 'Cannot approve a rejected application.' });
   }
 
   const incoming = body.review_checklist || parseJsonField(row.review_checklist, DEFAULT_CHECKLIST);
@@ -647,101 +770,138 @@ async function approveApplication(id, body, actor) {
     name_match: incoming.name_match === true,
     fields_complete: incoming.fields_complete === true,
     id_uploaded: incoming.id_uploaded === true,
-    fee_paid: incoming.fee_paid === true,
+    fee_paid: false,
   };
-  if (!checklistComplete(checklist)) {
+  if (!checklistCompleteForVetting(checklist)) {
     return json(400, {
-      error: 'All review items must be checked before approval: name match, required fields, ID upload, and $200 fee.',
+      error: 'All review items must be checked before sending invoice: name match, required fields, and ID upload.',
       review_checklist: checklist,
     });
   }
 
-  const names = splitMemberName(row.member_full_name || row.wl_full_name);
-  const mobile = row.cell_phone || row.home_phone || row.wl_phone;
-  const email = (row.email || row.wl_email || '').trim().toLowerCase() || null;
-  const address = formatAddress(row);
-
-  const nextNum = await db.query(`SELECT COALESCE(MAX(member_number), 0) + 1 AS num FROM members`);
-  const memberNumber = nextNum.rows[0].num;
-
-  const memberInsert = await db.query(
-    `INSERT INTO members (
-      member_number, status, first_name, last_name, full_name, paypal_name,
-      email, mobile, home_phone, address, joined_date, notes
-    ) VALUES ($1, 'Active', $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_DATE, $10)
-    RETURNING id, member_number, first_name, last_name, full_name, email, mobile, home_phone, address, status`,
-    [
-      memberNumber,
-      names.first_name,
-      names.last_name,
-      row.member_full_name || names.full_name,
-      names.full_name,
-      email,
-      mobile,
-      row.home_phone || null,
-      address,
-      row.notes ? `Approved from application #${row.id}. ${row.notes}` : `Approved from application #${row.id}.`,
-    ]
-  );
-  const member = memberInsert.rows[0];
-  invalidateInvoiceStatsCache();
-
-  const beneficiary = parseJsonField(row.beneficiary_member, null);
-  if (beneficiary?.name) {
-    await db.query(
-      `INSERT INTO beneficiaries (member_id, name, phone, relationship, is_primary)
-       VALUES ($1, $2, $3, $4, true)`,
-      [member.id, beneficiary.name, beneficiary.phone || null, beneficiary.relationship || null]
-    );
+  let paypalResult;
+  try {
+    paypalResult = await createAndSendRegistrationInvoice(row);
+  } catch (err) {
+    console.error('Registration PayPal invoice failed:', err);
+    return json(502, {
+      error: `Could not send PayPal registration invoice: ${err.message}`,
+    });
   }
 
-  if (checklist.fee_paid) {
-    await db.query(
-      `INSERT INTO payments (member_id, amount, method, reference, notes)
-       VALUES ($1, 200.00, 'Registration', $2, 'Hibret Edir membership registration fee')`,
-      [member.id, `application-${row.id}`]
+  let invoiceId = row.registration_invoice_id || null;
+  if (!invoiceId) {
+    const invInsert = await db.query(
+      `INSERT INTO invoices (
+         paypal_invoice_id, invoice_number, membership_application_id,
+         status, amount, amount_due, sent_date, paypal_link, recipient_name
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING id`,
+      [
+        paypalResult.paypal_invoice_id || null,
+        paypalResult.invoice_number || null,
+        id,
+        paypalResult.status || 'Unpaid',
+        REGISTRATION_FEE,
+        REGISTRATION_FEE,
+        paypalResult.sent_date || new Date().toISOString().slice(0, 10),
+        paypalResult.paypal_link || null,
+        paypalResult.recipient_name || row.member_full_name,
+      ]
     );
+    invoiceId = invInsert.rows[0].id;
   }
 
   await db.query(
     `UPDATE membership_applications
-     SET status = 'Approved',
-         member_id = $1,
-         review_checklist = $2::jsonb,
-         registration_fee_paid = $3,
-         reviewed_at = NOW()
+     SET status = 'Awaiting Payment',
+         review_checklist = $1::jsonb,
+         registration_fee_paid = FALSE,
+         registration_invoice_id = $2,
+         reviewed_at = NOW(),
+         notes = CASE WHEN $3::text IS NOT NULL
+           THEN TRIM(BOTH FROM COALESCE(notes, '') || E'\n' || $3)
+           ELSE notes END
      WHERE id = $4`,
-    [member.id, JSON.stringify(checklist), checklist.fee_paid, id]
+    [
+      JSON.stringify(checklist),
+      invoiceId,
+      body.notes ? stampBoardNote(body.notes, actor?.actor_label) : null,
+      id,
+    ]
   );
 
-  await db.query(
-    `UPDATE waiting_list
-     SET status = 'Added as Member',
-         approved_at = NOW(),
-         reviewed_at = NOW(),
-         notes = COALESCE(notes || ' ', '') || 'Approved and added to member CRM.'
-     WHERE id = $1`,
-    [row.waiting_list_id]
-  );
+  invalidateInvoiceStatsCache();
 
   try {
-    await notifyApplicationApproved(db, row, member);
+    await notifyRegistrationInvoiceSent(db, row, paypalResult);
   } catch (notifyErr) {
-    console.error('Application approve notification failed:', notifyErr);
+    console.error('Registration invoice notification failed:', notifyErr);
   }
 
   if (actor) {
-    try {
-      await syncApplicationApproved(db, id, member.id, member.member_number, actor);
-    } catch (syncErr) {
-      console.error('Application approve sync failed:', syncErr);
-    }
+    await logActivity(db, {
+      ...actor,
+      action: 'application.invoice_sent',
+      entity_type: 'membership_applications',
+      table_name: 'membership_applications',
+      record_id: id,
+      new_value: {
+        invoice_id: invoiceId,
+        paypal_invoice_id: paypalResult.paypal_invoice_id || null,
+        amount: REGISTRATION_FEE,
+        paypal_skipped: paypalResult.skipped === true,
+      },
+      summary: `Registration invoice sent to ${row.member_full_name || 'applicant'} ($${REGISTRATION_FEE})`,
+    });
+  }
+
+  const message = paypalResult.skipped
+    ? `${row.member_full_name} approved for payment. PayPal is not configured — record the $${REGISTRATION_FEE} fee manually, then mark registration paid.`
+    : `$${REGISTRATION_FEE} PayPal registration invoice sent to ${paypalResult.recipient_email || row.email}. Member will be added automatically when payment is received.`;
+
+  return json(200, {
+    ok: true,
+    message,
+    application_id: id,
+    registration_invoice: {
+      id: invoiceId,
+      paypal_link: paypalResult.paypal_link || null,
+      paypal_configured: !paypalResult.skipped,
+    },
+  });
+}
+
+async function completeRegistrationApplication(id, body, actor) {
+  const db = getDb();
+  const row = await fetchApplicationForCompletion(db, id);
+  if (!row) {
+    return json(404, { error: 'Application not found.' });
+  }
+  if (row.status === 'Approved' && row.member_id) {
+    return json(409, { error: 'Application already approved.' });
+  }
+  if (row.status !== 'Awaiting Payment') {
+    return json(400, {
+      error: 'Application must be awaiting payment. Use Approve & Send Invoice after board review.',
+    });
+  }
+
+  const result = await completeMembershipFromApplication(db, id, actor, {
+    paymentMethod: body.payment_method || body.paymentMethod || 'Zelle & BofA',
+    paymentReference: body.payment_reference || `manual-application-${id}`,
+    source: actor?.actor_label || 'Board',
+    force: true,
+  });
+
+  if (!result.ok) {
+    return json(500, { error: 'Could not complete membership.' });
   }
 
   return json(200, {
     ok: true,
-    message: `${member.full_name} approved and added to Members CRM as #${member.member_number}.`,
-    member,
+    message: `${result.member.full_name} added to Members CRM as #${result.member.member_number}.`,
+    member: result.member,
     application_id: id,
   });
 }
@@ -824,6 +984,14 @@ async function submitMembership(body) {
   if (!wl.rows.length) {
     return json(403, { error: 'Waiting list entry not found.' });
   }
+  const wlRow = wl.rows[0];
+  if (wlRow.status !== 'Invited to Apply') {
+    return json(403, {
+      error: isWaitingListQueueAwaiting(wlRow.status)
+        ? 'You must be invited by the board before submitting the membership application.'
+        : 'This waiting list entry cannot accept a new application.',
+    });
+  }
 
   const existing = await db.query(
     `SELECT id FROM membership_applications WHERE waiting_list_id = $1 LIMIT 1`,
@@ -900,7 +1068,7 @@ async function submitMembership(body) {
 
   return json(201, {
     ok: true,
-    message: 'Membership application received. The board will review your information and contact you about the $200 registration fee.',
+    message: 'Membership application received. The board will review your information. If approved, you will receive a PayPal invoice for the $200 registration fee.',
     application_id: insertResult.rows[0].id,
   });
 }
@@ -1352,6 +1520,223 @@ function matchChangeRequestPath(path) {
   return { id, action };
 }
 
+function buildWaitingListRow(row, queuePosition, extras = {}) {
+  return {
+    id: row.id,
+    full_name: row.full_name || `${row.first_name || ''} ${row.last_name || ''}`.trim(),
+    first_name: row.first_name,
+    last_name: row.last_name,
+    email: row.email,
+    phone: row.phone,
+    address: row.address,
+    referred_by: row.referred_by,
+    status: row.status,
+    applied_at: row.applied_at,
+    invited_at: row.invited_at,
+    approved_at: row.approved_at,
+    reviewed_at: row.reviewed_at,
+    notes: row.notes,
+    queue_position: queuePosition,
+    has_application: row.has_application === true,
+    pending_rank: extras.pending_rank ?? null,
+    eligible_for_invite: extras.eligible_for_invite === true,
+  };
+}
+
+async function getMembershipSlots(db) {
+  const res = await db.query(
+    `SELECT
+       COUNT(*) FILTER (WHERE LOWER(COALESCE(status, '')) = 'active')::int AS active_count,
+       (SELECT COUNT(*)::int FROM waiting_list wl
+        WHERE wl.status = ANY($1::text[])) AS in_pipeline
+     FROM members`,
+    [WAITING_LIST_PIPELINE_STATUSES]
+  );
+  const row = res.rows[0] || {};
+  const active_count = Number(row.active_count || 0);
+  const in_pipeline = Number(row.in_pipeline || 0);
+  const slots_available = Math.max(0, MEMBER_CAP - active_count);
+  const invite_slots_remaining = Math.max(0, slots_available - in_pipeline);
+  return {
+    active_count,
+    member_cap: MEMBER_CAP,
+    slots_available,
+    in_pipeline,
+    invite_slots_remaining,
+  };
+}
+
+async function getWaitingListPendingRank(db, waitingListId) {
+  const res = await db.query(
+    `SELECT id FROM waiting_list
+     WHERE status = ANY($1::text[])
+     ORDER BY applied_at ASC NULLS LAST, id ASC`,
+    [WAITING_LIST_QUEUE_STATUSES]
+  );
+  const idx = res.rows.findIndex((r) => Number(r.id) === Number(waitingListId));
+  return idx >= 0 ? idx + 1 : null;
+}
+
+async function listWaitingListAdmin() {
+  const db = getDb();
+  const [result, slots] = await Promise.all([
+    db.query(
+      `SELECT wl.*,
+        EXISTS (SELECT 1 FROM membership_applications ma WHERE ma.waiting_list_id = wl.id) AS has_application
+       FROM waiting_list wl
+       ORDER BY wl.applied_at ASC NULLS LAST, wl.id ASC`
+    ),
+    getMembershipSlots(db),
+  ]);
+  let pendingRank = 0;
+  const rows = result.rows.map((row, idx) => {
+    const extras = { pending_rank: null, eligible_for_invite: false };
+    if (isWaitingListQueueAwaiting(row.status)) {
+      pendingRank += 1;
+      extras.pending_rank = pendingRank;
+      extras.eligible_for_invite = pendingRank <= slots.invite_slots_remaining;
+    }
+    return buildWaitingListRow(row, idx + 1, extras);
+  });
+  const pendingInvite = rows.filter((r) => isWaitingListQueueAwaiting(r.status)).length;
+  const invited = rows.filter((r) => r.status === 'Invited to Apply').length;
+  const eligible = rows.filter((r) => r.eligible_for_invite);
+  return json(200, {
+    waiting_list: rows,
+    slots,
+    next_to_invite: eligible.map((r) => ({
+      id: r.id,
+      full_name: r.full_name,
+      email: r.email,
+      pending_rank: r.pending_rank,
+    })),
+    stats: {
+      pending_invite: pendingInvite,
+      invited,
+      eligible_to_invite: eligible.length,
+      total: rows.length,
+    },
+  });
+}
+
+async function inviteWaitingListEntry(id, body, actor) {
+  const db = getDb();
+  const existing = await db.query(
+    `SELECT wl.*,
+      EXISTS (SELECT 1 FROM membership_applications ma WHERE ma.waiting_list_id = wl.id) AS has_application
+     FROM waiting_list wl WHERE wl.id = $1 LIMIT 1`,
+    [id]
+  );
+  const row = existing.rows[0];
+  if (!row) return json(404, { error: 'Waiting list entry not found.' });
+  if (row.status === 'Added as Member') {
+    return json(409, { error: 'This person is already a member.' });
+  }
+  if (row.status === 'Application Submitted' || row.has_application) {
+    return json(409, { error: 'Application already submitted — review in Applications tab.' });
+  }
+  if (row.status === 'Rejected') {
+    return json(409, { error: 'Rejected entries must be re-added from the public waiting list form.' });
+  }
+  if (row.status === 'Invited to Apply') {
+    return json(409, { error: 'Already invited to apply.' });
+  }
+  if (!isWaitingListQueueAwaiting(row.status)) {
+    return json(409, { error: 'This entry is not awaiting an invitation.' });
+  }
+
+  const [slots, pendingRank] = await Promise.all([
+    getMembershipSlots(db),
+    getWaitingListPendingRank(db, id),
+  ]);
+  if (!pendingRank || pendingRank > slots.invite_slots_remaining) {
+    return json(409, {
+      error: `No membership slots available (${slots.active_count}/${slots.member_cap} active${
+        slots.in_pipeline ? `, ${slots.in_pipeline} already invited or applying` : ''
+      }). Raise MEMBER_CAP or wait for a spot to open.`,
+    });
+  }
+
+  const note = body.notes ? stampBoardNote(body.notes, actor?.actor_label) : null;
+  await db.query(
+    `UPDATE waiting_list
+     SET status = 'Invited to Apply',
+         invited_at = NOW(),
+         reviewed_at = NOW(),
+         notes = CASE WHEN $2::text IS NOT NULL THEN TRIM(BOTH FROM COALESCE(notes, '') || E'\n' || $2) ELSE notes END
+     WHERE id = $1`,
+    [id, note]
+  );
+
+  const refreshed = await db.query(
+    `SELECT wl.*,
+      EXISTS (SELECT 1 FROM membership_applications ma WHERE ma.waiting_list_id = wl.id) AS has_application
+     FROM waiting_list wl WHERE wl.id = $1 LIMIT 1`,
+    [id]
+  );
+  const updated = refreshed.rows[0];
+
+  try {
+    await notifyWaitingListInvited(db, updated);
+  } catch (err) {
+    console.error('Waiting list invite notification failed:', err);
+  }
+
+  await logActivity(db, {
+    ...actor,
+    action: 'waiting_list.invite',
+    entity_type: 'waiting_list',
+    record_id: id,
+    summary: `Invited ${updated.full_name || 'applicant'} to apply for membership`,
+    new_value: { waiting_list_id: id, email: updated.email },
+  });
+
+  return json(200, {
+    ok: true,
+    message: 'Invitation sent. Applicant can verify at /application/.',
+    entry: buildWaitingListRow(updated, null),
+  });
+}
+
+async function rejectWaitingListEntry(id, body, actor) {
+  const db = getDb();
+  const existing = await db.query(`SELECT * FROM waiting_list WHERE id = $1 LIMIT 1`, [id]);
+  const row = existing.rows[0];
+  if (!row) return json(404, { error: 'Waiting list entry not found.' });
+  if (row.status === 'Added as Member') {
+    return json(409, { error: 'Cannot reject — already a member.' });
+  }
+
+  const note = stampBoardNote(body.notes || body.reason || 'Removed from waiting list', actor?.actor_label);
+  await db.query(
+    `UPDATE waiting_list
+     SET status = 'Rejected',
+         reviewed_at = NOW(),
+         notes = TRIM(BOTH FROM COALESCE(notes, '') || E'\n' || $2)
+     WHERE id = $1`,
+    [id, note]
+  );
+
+  await logActivity(db, {
+    ...actor,
+    action: 'waiting_list.reject',
+    entity_type: 'waiting_list',
+    record_id: id,
+    summary: `Rejected waiting list entry: ${row.full_name || row.email || id}`,
+  });
+
+  return json(200, { ok: true, message: 'Removed from waiting list.' });
+}
+
+function matchWaitingListAdminPath(path) {
+  const parts = path.replace(/\/$/, '').split('/').filter(Boolean);
+  if (parts[0] !== 'waiting-list') return null;
+  return {
+    id: parts[1] ? Number(parts[1]) : null,
+    action: parts[2] || null,
+  };
+}
+
 function matchApplicationPath(path) {
   const parts = path.replace(/\/$/, '').split('/').filter(Boolean);
   if (parts[0] !== 'applications') return null;
@@ -1367,6 +1752,7 @@ exports.handler = async (event) => {
 
   const path = getPath(event);
   const appPath = matchApplicationPath(path);
+  const wlPath = matchWaitingListAdminPath(path);
   const changePath = matchChangeRequestPath(path);
   const contactMsgPath = matchContactMessagesPath(path);
 
@@ -1440,6 +1826,33 @@ exports.handler = async (event) => {
     }
   }
 
+  if (wlPath && ['GET', 'POST'].includes(event.httpMethod)) {
+    const admin = verifyAdminRequest(event);
+    if (!admin) {
+      return json(401, { error: 'Admin authorization required. Please sign in.' });
+    }
+    const actor = await resolveAdminActor(admin);
+    try {
+      if (event.httpMethod === 'GET' && !wlPath.id) {
+        return await listWaitingListAdmin();
+      }
+      const body = parseBody(event);
+      if (event.httpMethod === 'POST' && wlPath.id && wlPath.action === 'invite') {
+        return await inviteWaitingListEntry(wlPath.id, body, actor);
+      }
+      if (event.httpMethod === 'POST' && wlPath.id && wlPath.action === 'reject') {
+        return await rejectWaitingListEntry(wlPath.id, body, actor);
+      }
+      return json(404, { error: 'Not found' });
+    } catch (err) {
+      console.error('waiting list admin error:', err);
+      if (err.message?.includes('DATABASE_URL')) {
+        return json(503, { error: 'Database is not configured.' });
+      }
+      return json(500, { error: 'Could not process waiting list action.' });
+    }
+  }
+
   if (appPath && ['GET', 'PATCH', 'POST'].includes(event.httpMethod)) {
     const admin = verifyAdminRequest(event);
     if (!admin) {
@@ -1460,8 +1873,14 @@ exports.handler = async (event) => {
       if (event.httpMethod === 'PATCH' && appPath.id && !appPath.action) {
         return await updateApplicationReview(appPath.id, body, actor);
       }
+      if (event.httpMethod === 'POST' && appPath.id && appPath.action === 'approve-for-payment') {
+        return await approveForPayment(appPath.id, body, actor);
+      }
+      if (event.httpMethod === 'POST' && appPath.id && appPath.action === 'complete') {
+        return await completeRegistrationApplication(appPath.id, body, actor);
+      }
       if (event.httpMethod === 'POST' && appPath.id && appPath.action === 'approve') {
-        return await approveApplication(appPath.id, body, actor);
+        return await approveForPayment(appPath.id, body, actor);
       }
       if (event.httpMethod === 'POST' && appPath.id && appPath.action === 'reject') {
         return await rejectApplication(appPath.id, body, actor);

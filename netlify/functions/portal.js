@@ -495,6 +495,11 @@ async function updateInvoice(data, actor) {
     values.push(data.paid_note);
     idx += 1;
   }
+  if (data.payment_method !== undefined) {
+    updates.push(`payment_method = $${idx}`);
+    values.push(data.payment_method);
+    idx += 1;
+  }
 
   if (!updates.length) return null;
   if (data.status === 'Paid') {
@@ -1088,7 +1093,12 @@ async function approveMarkPaidRequest(id, body, actor, adminPayload) {
   }
 
   const updatedInvoice = await updateInvoice(
-    { invoice_num: row.invoice_number, status: 'Paid', paid_note: row.reason },
+    {
+      invoice_num: row.invoice_number,
+      status: 'Paid',
+      paid_note: row.reason,
+      payment_method: 'Zelle & BofA',
+    },
     actor
   );
   if (!updatedInvoice) {
@@ -1106,8 +1116,41 @@ async function approveMarkPaidRequest(id, body, actor, adminPayload) {
     [adminPayload?.adminId || null, actor.actor_label, stampBoardNote(body.review_notes || body.notes || '', actor.actor_label) || null, id]
   );
 
+  let paypal = null;
+  try {
+    const { recordPayPalPaymentForInvoice } = require('./paypal-invoice-actions');
+    paypal = await recordPayPalPaymentForInvoice(db, { invoiceNum: row.invoice_number }, {
+      paymentMethod: 'Zelle & BofA',
+      note: row.reason,
+      source: 'board mark-paid',
+      approvedBy: actor.actor_label,
+    });
+    if (paypal?.ok && !paypal?.skipped) {
+      await logActivity(db, {
+        ...actor,
+        member_id: row.member_id,
+        action: 'invoice.paypal_marked_paid',
+        entity_type: 'invoices',
+        record_id: row.invoice_id,
+        summary: `PayPal invoice updated for #${row.invoice_number}`,
+        new_value: { paypal_invoice_id: paypal.paypal_invoice_id, payment_id: paypal.payment_id },
+      });
+    }
+  } catch (err) {
+    console.error('PayPal mark paid failed:', err.message);
+    paypal = { ok: false, error: err.message };
+    await logActivity(db, {
+      ...actor,
+      member_id: row.member_id,
+      action: 'invoice.paypal_mark_paid_failed',
+      entity_type: 'invoices',
+      record_id: row.invoice_id,
+      summary: `PayPal update failed for Invoice #${row.invoice_number}: ${err.message}`,
+    });
+  }
+
   const summary = await getMarkPaidRequestRow(id);
-  return { request: buildMarkPaidRequestSummary(summary), invoice: updatedInvoice };
+  return { request: buildMarkPaidRequestSummary(summary), invoice: updatedInvoice, paypal };
 }
 
 async function rejectMarkPaidRequest(id, body, actor, adminPayload) {

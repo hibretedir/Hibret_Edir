@@ -72,6 +72,8 @@ if (wlLang) setLang(wlLang);
 
 function statusClass(label) {
   const s = (label || '').toLowerCase();
+  if (s.includes('added')) return 'wl-badge wl-badge-added';
+  if (s.includes('invitation')) return 'wl-badge wl-badge-invited';
   if (s.includes('register')) return 'wl-badge wl-badge-reg';
   if (s.includes('cancel')) return 'wl-badge wl-badge-cancel';
   if (s.includes('approv')) return 'wl-badge wl-badge-approve';
@@ -123,14 +125,34 @@ async function loadStatus() {
   msg.className = 'form-msg';
   btn.disabled = true;
 
-  try {
-    const res = await fetch(STATUS_API);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Could not load list');
-
+  function showData(data) {
     renderTable(data);
-    const src = data.source === 'database' ? 'Hibret Edir records' : data.source;
-    meta.textContent = `${data.count} on list · updated just now · ${src}`;
+    const src = data.source === 'database'
+      ? 'Hibret Edir records'
+      : (data.source === 'static' ? 'board export' : (data.source || 'records'));
+    meta.textContent = `${data.count || data.entries.length} on list · updated just now · ${src}`;
+  }
+
+  try {
+    const res = await fetch(STATUS_API + '?_=' + Date.now());
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && Array.isArray(data.entries) && data.entries.length) {
+      showData(data);
+      return;
+    }
+  } catch {
+    /* try static file */
+  }
+
+  try {
+    const res = await fetch('/waiting-list-public.json?_=' + Date.now());
+    const data = await res.json();
+    if (!res.ok || !data.entries?.length) throw new Error('Could not load list');
+    showData({
+      ...data,
+      source: 'static',
+      count: data.count || data.entries.length,
+    });
   } catch (err) {
     msg.textContent = err.message || 'Could not load waiting list.';
     msg.classList.add('err');

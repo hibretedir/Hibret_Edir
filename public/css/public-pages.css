@@ -1879,6 +1879,33 @@ body.site-public .sg-card.sg-card-accent-red:active {
   color: var(--pub-text-muted);
 }
 
+.site-public .wl-pipeline-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #f6d365;
+  background: rgba(184, 134, 11, 0.22);
+  border-radius: 999px;
+}
+
+.site-public .wl-table tr.wl-invited td {
+  background: rgba(184, 134, 11, 0.06);
+}
+
+.site-public .wl-badge-invited {
+  color: #f6d365;
+  background: rgba(184, 134, 11, 0.22);
+}
+
+.site-public .wl-badge-added {
+  color: #9ae6b0;
+  background: rgba(7, 137, 48, 0.25);
+}
+
 .site-public .wl-table tbody tr:hover {
   background: rgba(255, 255, 255, 0.03);
 }

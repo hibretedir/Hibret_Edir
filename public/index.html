@@ -1098,10 +1098,19 @@ function renderWaitingListTable(entries, wrapId) {
     wrap.innerHTML = '<p class="en">No matching names. Try a different search or refresh the list.</p><p class="am">ምንም ስም አልተገኘም። ሌላ ፍለጋ ይሞክሩ ወይም ዝርዝሩን ያድሱ።</p>';
     return;
   }
+  function nameTags(e) {
+    if (e.added) {
+      return ' <span class="wl-added-tag en">Added</span><span class="wl-added-tag am">ተጨምሯል</span>';
+    }
+    const en = e.status_label_en || e.status_label || '';
+    const am = e.status_label_am || en;
+    if (!en || en === 'Pending' || en === 'Registered') return '';
+    return ` <span class="wl-pipeline-tag en">${escapeWlHtml(en)}</span><span class="wl-pipeline-tag am">${escapeWlHtml(am)}</span>`;
+  }
   const rows = entries.map((e) => `
-    <tr class="${e.added ? 'wl-added' : ''}">
+    <tr class="${e.added ? 'wl-added' : ''}${!e.added && (e.status_label_en || e.status_label || '').includes('Invitation') ? ' wl-invited' : ''}">
       <td data-label="Place in line"><span class="wl-place-num">${e.position}</span></td>
-      <td data-label="Name">${escapeWlHtml(e.display_name || '—')}${e.added ? ' <span class="wl-added-tag en">Added</span><span class="wl-added-tag am">ተጨምሯል</span>' : ''}</td>
+      <td data-label="Name">${escapeWlHtml(e.display_name || '—')}${nameTags(e)}</td>
       <td data-label="Date applied">${escapeWlHtml(e.applied_date_text || '—')}</td>
     </tr>
   `).join('');
@@ -1125,9 +1134,9 @@ function escapeWlHtml(text) {
 }
 
 function waitingListDisplayEntries(entries) {
-  let list = entries;
-  if (mob()) list = list.filter((e) => !e.added);
-  return list;
+  if (!mob()) return entries;
+  const waiting = entries.filter((e) => !e.added);
+  return waiting.length ? waiting : entries;
 }
 
 function filterWaitingListPanel(searchId, wrapId) {
@@ -1166,24 +1175,30 @@ async function loadWaitingListStatus() {
   }
 
   async function applyPayload(data) {
-    const through = data.added_through_position || 11;
     wlStatusMeta = {
-      updated_note: data.updated_note || '',
-      added_through_position: through,
+      updated_note: data.updated_note || data.note || '',
+      added_through_position: data.added_through_position ?? data.added_count ?? 0,
     };
     wlStatusEntries = (data.entries || []).map((e) => ({
       ...e,
-      added: e.added ?? Number(e.position) <= through,
+      added: e.added === true || e.status === 'Added as Member',
     }));
     wlStatusLoaded = true;
     renderWaitingListNextLine();
     filterWaitingList();
   }
 
+  async function loadStaticWaitingList() {
+    const res = await fetch('/waiting-list-public.json?_=' + Date.now());
+    const data = await res.json();
+    if (!res.ok || !data.entries?.length) throw new Error('Could not load list');
+    await applyPayload(data);
+  }
+
   try {
     const res = await fetch(APPLY_API + '/waiting-list/status?_=' + Date.now());
-    const data = await res.json();
-    if (res.ok) {
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && Array.isArray(data.entries) && data.entries.length) {
       await applyPayload(data);
       return;
     }
@@ -1192,10 +1207,7 @@ async function loadWaitingListStatus() {
   }
 
   try {
-    const res = await fetch('/waiting-list-public.json');
-    const data = await res.json();
-    if (!res.ok) throw new Error('Could not load list');
-    await applyPayload(data);
+    await loadStaticWaitingList();
   } catch (err) {
     showWlError(document.documentElement.lang === 'am'
       ? 'ዝርዝሩ አሁን አይገኝም። ቆይተው ይሞክሩ ወይም (424) 547-5594 ይደውሉ።'

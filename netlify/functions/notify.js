@@ -289,6 +289,34 @@ async function notifyBeneficiaryChangeRejected(db, member, beneficiary, notes) {
   });
 }
 
+async function notifyWaitingListInvited(db, row) {
+  const name = row.full_name || `${row.first_name || ''} ${row.last_name || ''}`.trim() || 'Applicant';
+  const siteUrl = (process.env.URL || 'https://hibretedir.com').replace(/\/$/, '');
+  const applyUrl = `${siteUrl}/application/`;
+  await notifyMember({
+    db,
+    memberId: null,
+    email: row.email,
+    phone: row.phone,
+    subject: 'Hibret Edir — invited to apply for membership',
+    text: [
+      `Hello ${name},`,
+      '',
+      'Great news — the Hibret Edir board has invited you to complete the full membership application.',
+      '',
+      `Apply here: ${applyUrl}`,
+      '',
+      'Use the same email and phone from your waiting list sign-up to verify your spot.',
+      '',
+      'After you submit the application, the board will review your information and California ID.',
+      'If approved, you will receive a PayPal invoice for the $200 registration fee. Membership activates when payment is received.',
+      '',
+      'Questions? Call (424) 547-5594.',
+    ].join('\n'),
+    smsText: `Hibret Edir: You're invited to apply for membership. Open ${applyUrl} and verify with your waiting list email/phone.`,
+  });
+}
+
 async function notifyApplicationSubmitted(db, app) {
   const name = app.member_full_name || 'Applicant';
   const adminUrl = process.env.ADMIN_SITE_URL || process.env.URL || '';
@@ -299,14 +327,40 @@ async function notifyApplicationSubmitted(db, app) {
     email: app.email,
     phone: app.cell_phone || app.home_phone,
     subject: 'Hibret Edir — application received',
-    text: `Hello ${name},\n\nWe received your Hibret Edir membership application. The board will review:\n- Name match with waiting list\n- Full application details\n- California ID\n- $200 registration fee\n\nYou will be contacted when review is complete.`,
-    smsText: `Hibret Edir: Application received for ${name}. Board review in progress — we'll contact you.`,
+    text: `Hello ${name},\n\nWe received your Hibret Edir membership application. The board will review:\n- Name match with waiting list\n- Full application details\n- California ID\n\nIf approved, you will receive a PayPal invoice for the $200 registration fee. Membership activates when payment is received.`,
+    smsText: `Hibret Edir: Application received for ${name}. Board review in progress.`,
   });
   await notifyBoard({
     db,
     subject: `New membership application — ${name}`,
     text: `A new membership application was submitted.\n\nApplicant: ${name}\nEmail: ${app.email || '—'}\nPhone: ${app.cell_phone || app.home_phone || '—'}\nApplication #${app.id}${reviewHint}`,
     smsText: `Hibret Edir: New application from ${name}. Review in Admin → Applications.`,
+  });
+}
+
+async function notifyRegistrationInvoiceSent(db, app, invoiceResult) {
+  const name = app.member_full_name || 'Applicant';
+  const amount = invoiceResult.amount || 200;
+  const link = invoiceResult.paypal_link;
+  const linkLine = link ? `\n\nPay your invoice: ${link}` : '';
+  const paypalNote = invoiceResult.skipped
+    ? '\n\nThe board will contact you with payment instructions.'
+    : `\n\nA $${amount} PayPal invoice has been sent to your email.${linkLine}\n\nYour membership activates automatically when payment is received.`;
+
+  await notifyMember({
+    db,
+    memberId: null,
+    email: app.email || invoiceResult.recipient_email,
+    phone: app.cell_phone || app.home_phone,
+    subject: 'Hibret Edir — registration fee invoice',
+    text: `Hello ${name},\n\nYour membership application was approved by the board.${paypalNote}`,
+    smsText: `Hibret Edir: Application approved for ${name}. Check email for $${amount} registration invoice.`,
+  });
+  await notifyBoard({
+    db,
+    subject: `Registration invoice sent — ${name}`,
+    text: `Board approved ${name}'s application and sent the $${amount} registration invoice.\n\nApplication #${app.id}${link ? `\nPayPal link: ${link}` : ''}\n\nMember will be added automatically when PayPal confirms payment.`,
+    smsText: `Hibret Edir: Registration invoice sent to ${name}.`,
   });
 }
 
@@ -347,7 +401,9 @@ module.exports = {
   notifyBeneficiaryChangeRequested,
   notifyBeneficiaryChangeApproved,
   notifyBeneficiaryChangeRejected,
+  notifyWaitingListInvited,
   notifyApplicationSubmitted,
+  notifyRegistrationInvoiceSent,
   notifyApplicationApproved,
   notifyApplicationRejected,
 };
