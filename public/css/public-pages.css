@@ -749,6 +749,22 @@
   line-height: 1.7;
 }
 
+.site-public .ann-full-text-block {
+  margin: 22px 0 20px;
+  padding: 16px;
+  border-radius: var(--radius-sm);
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.site-public .ann-full-text {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.75;
+}
+
 /* Announcement — payment summary card */
 .site-public .ann-box {
   border-radius: var(--radius);

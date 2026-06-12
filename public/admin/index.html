@@ -441,6 +441,7 @@ let appSection = 'waiting-list';
 let wlFilter = 'all';
 let wlShowAdded = false;
 let appFilter = 'pending';
+let boardOpsFilter = 'pending';
 let receiptFilter = 'pending';
 let messagesFilter = 'contact';
 let replyingMessageId = null;
@@ -1666,9 +1667,13 @@ function trackerHeaderHtml(stats) {
   const subtitle = currentView === 'members' ? `${MEMBERS.length} members on file`
     : currentView === 'applications' ? (() => {
       const ready = WAITING_LIST.filter(w => w.eligible_for_invite).length;
-      const apps = APPLICATIONS.filter(a => a.status === 'Submitted' || a.status === 'Under Review' || a.status === 'Pending').length;
-      if (ready) return `${ready} ready to invite · ${apps} apps pending`;
-      return `${apps} apps pending review`;
+      const memPending = APPLICATIONS.filter(a => isMembershipApplication(a) && ['Submitted', 'Under Review', 'Pending', 'Awaiting Payment'].includes(a.status)).length;
+      const opsPending = APPLICATIONS.filter(a => isBoardOpsRequest(a) && a.status === 'Pending').length;
+      const parts = [];
+      if (ready) parts.push(`${ready} ready to invite`);
+      if (memPending) parts.push(`${memPending} membership apps`);
+      if (opsPending) parts.push(`${opsPending} board requests`);
+      return parts.length ? parts.join(' · ') : 'Waiting list & approvals';
     })()
     : currentView === 'receipts' ? `${RECEIPTS.filter(r => r.status === 'Pending').length} pending review`
     : currentView === 'messages' ? `${PIN_RESET_REQUESTS.filter(r => r.status === 'Pending').length} PIN resets · ${CONTACT_MESSAGES.length} contact`
@@ -1747,8 +1752,9 @@ function updateSidebar() {
   if (mobMembers) mobMembers.textContent = membersCount;
   const wlReady = WAITING_LIST.filter(w => w.eligible_for_invite).length;
   const wlPending = WAITING_LIST.filter(w => isWlQueueAwaiting(w.status)).length;
-  const appsPending = APPLICATIONS.filter(a => ['Submitted', 'Under Review', 'Pending'].includes(a.status)).length;
-  const appsBadge = (wlReady || wlPending) + appsPending;
+  const appsPending = APPLICATIONS.filter(a => isMembershipApplication(a) && ['Submitted', 'Under Review', 'Pending', 'Awaiting Payment'].includes(a.status)).length;
+  const opsPending = APPLICATIONS.filter(a => isBoardOpsRequest(a) && a.status === 'Pending').length;
+  const appsBadge = (wlReady || wlPending) + appsPending + opsPending;
   const appsEl = document.getElementById('sb-applications');
   if (appsEl) appsEl.textContent = appsBadge || '—';
   const mobApps = document.getElementById('mob-sb-applications');
@@ -1902,6 +1908,14 @@ function scheduleMemberSearchUpdate() {
   memberSearchTimer = setTimeout(updateMembersList, 200);
 }
 
+function isMembershipApplication(a) {
+  return !a?.kind || (a.kind !== 'mark_paid' && a.kind !== 'beneficiary_change');
+}
+
+function isBoardOpsRequest(a) {
+  return a?.kind === 'mark_paid' || a?.kind === 'beneficiary_change';
+}
+
 function switchAppSection(section) {
   appSection = section;
   document.querySelectorAll('.tracker-tab[data-app-section]').forEach(btn => {
@@ -1910,7 +1924,14 @@ function switchAppSection(section) {
   document.querySelectorAll('.tracker-subtabs').forEach(el => {
     el.style.display = el.dataset.appSection === section ? '' : 'none';
   });
-  updateApplicationsList();
+  if (currentView === 'applications') render();
+  else updateApplicationsList();
+}
+
+function goToBoardOpsPending() {
+  appSection = 'board-ops';
+  boardOpsFilter = 'pending';
+  switchView('applications');
 }
 
 function switchWlFilter(f) {
@@ -1926,6 +1947,14 @@ function switchAppFilter(f) {
   appFilter = f;
   document.querySelectorAll('.tracker-tab[data-app-filter]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.appFilter === f);
+  });
+  updateApplicationsList();
+}
+
+function switchBoardOpsFilter(f) {
+  boardOpsFilter = f;
+  document.querySelectorAll('.tracker-tab[data-board-ops-filter]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.boardOpsFilter === f);
   });
   updateApplicationsList();
 }
@@ -2163,7 +2192,7 @@ function renderInvTableRows(filtered, limit) {
               ? `<span class="tracker-mark-done">✓ Paid</span><div class="tracker-paid-note" title="${esc(inv.paid_note)}">${esc(inv.paid_note)}</div>`
               : '<span class="tracker-mark-done">✓ Marked Paid</span>'}`
           : pendingMp
-            ? `<button type="button" class="tracker-mark-btn tracker-mark-btn-muted" onclick="event.stopPropagation();switchView('applications');switchAppFilter('pending')">View in Approval</button>`
+            ? `<button type="button" class="tracker-mark-btn tracker-mark-btn-muted" onclick="event.stopPropagation();goToBoardOpsPending()">View in Approval</button>`
             : `<button type="button" class="tracker-mark-btn" onclick="event.stopPropagation();openMarkPaidModal(${inv.invoice_num}, this)">Mark Paid</button>`}</td>
     </tr>`;
   });
@@ -2374,13 +2403,26 @@ function renderMembersView() {
     </div>`;
 }
 
-function getApplicationsFiltered() {
-  return APPLICATIONS.filter(a => {
+function getMembershipApplicationsFiltered() {
+  return APPLICATIONS.filter(isMembershipApplication).filter(a => {
     if (appFilter === 'pending' && !['Submitted', 'Under Review', 'Pending', 'Awaiting Payment'].includes(a.status)) return false;
     if (appFilter === 'approved' && a.status !== 'Approved') return false;
     if (appFilter === 'rejected' && a.status !== 'Rejected') return false;
     return true;
   });
+}
+
+function getBoardOpsFiltered() {
+  return APPLICATIONS.filter(isBoardOpsRequest).filter(a => {
+    if (boardOpsFilter === 'pending' && a.status !== 'Pending') return false;
+    if (boardOpsFilter === 'approved' && a.status !== 'Approved') return false;
+    if (boardOpsFilter === 'rejected' && a.status !== 'Rejected') return false;
+    return true;
+  });
+}
+
+function getApplicationsFiltered() {
+  return getMembershipApplicationsFiltered();
 }
 
 function vettingChecklistCount(c) {
@@ -2408,14 +2450,24 @@ function renderApplicationsTableHtml(filtered) {
       <td>${secondCol}</td>
       <td><span class="tracker-date">${esc(fmtDate(a.submitted_at))}</span></td>
       <td><span class="tracker-status ${statusClass}"><span class="tracker-status-dot"></span>${esc(a.status)}</span></td>
-      <td><span class="tracker-inv-num">${isMarkPaid ? esc(a.requested_by || 'Board') : isBen ? (a.is_new_beneficiary ? 'New' : 'Update') : `${done}/4`}</span></td>
+      <td><span class="tracker-inv-num">${isMarkPaid ? esc(a.requested_by || 'Board') : isBen ? (a.is_new_beneficiary ? 'New' : 'Update') : `${done}/3`}</span></td>
       <td><button type="button" class="tracker-mark-btn" onclick='event.stopPropagation();openApplicationReview(${JSON.stringify(a.id)})'>${a.status === 'Approved' ? 'View' : 'Review'}</button></td>
     </tr>`;
   }).join('') : '';
   return filtered.length ? `<table class="tracker-table">
         <thead><tr><th>Member</th><th>Type</th><th>Details</th><th>Submitted</th><th>Status</th><th>Review</th><th>Action</th></tr></thead>
         <tbody>${rows}</tbody>
-      </table>` : '<div class="tracker-empty">No applications in this filter</div>';
+      </table>` : '<div class="tracker-empty">No items in this filter</div>';
+}
+
+function renderBoardOpsTableHtml(filtered) {
+  return renderApplicationsTableHtml(filtered).replace(
+    'No items in this filter',
+    'No board requests in this filter'
+  ).replace(
+    'No applications in this filter',
+    'No board requests in this filter'
+  );
 }
 
 function updateApplicationsList() {
@@ -2424,6 +2476,8 @@ function updateApplicationsList() {
   if (!wrap) return;
   if (appSection === 'waiting-list') {
     wrap.innerHTML = renderWaitingListTableHtml(getWaitingListFiltered());
+  } else if (appSection === 'board-ops') {
+    wrap.innerHTML = renderBoardOpsTableHtml(getBoardOpsFiltered());
   } else {
     wrap.innerHTML = renderApplicationsTableHtml(getApplicationsFiltered());
   }
@@ -2436,13 +2490,14 @@ function renderApplicationsView() {
   const wlInvited = WAITING_LIST.filter(w => w.status === 'Invited to Apply').length;
   const wlInProgress = WAITING_LIST.filter(w => isWlInProgress(w.status)).length;
   const slotsOpen = MEMBERSHIP_SLOTS?.invite_slots_remaining ?? 0;
-  const pending = APPLICATIONS.filter(a => ['Submitted', 'Under Review', 'Pending', 'Awaiting Payment'].includes(a.status)).length;
-  const awaitingPay = APPLICATIONS.filter(a => a.status === 'Awaiting Payment').length;
-  const approved = APPLICATIONS.filter(a => a.status === 'Approved').length;
-  const rejected = APPLICATIONS.filter(a => a.status === 'Rejected').length;
+  const memPending = APPLICATIONS.filter(a => isMembershipApplication(a) && ['Submitted', 'Under Review', 'Pending', 'Awaiting Payment'].includes(a.status)).length;
+  const awaitingPay = APPLICATIONS.filter(a => isMembershipApplication(a) && a.status === 'Awaiting Payment').length;
+  const opsPending = APPLICATIONS.filter(a => isBoardOpsRequest(a) && a.status === 'Pending').length;
+  const opsRejected = APPLICATIONS.filter(a => isBoardOpsRequest(a) && a.status === 'Rejected').length;
   const wlFiltered = getWaitingListFiltered();
   const wlActive = WAITING_LIST.filter(w => w.status !== 'Added as Member').length;
   const appFiltered = getApplicationsFiltered();
+  const opsFiltered = getBoardOpsFiltered();
 
   document.getElementById('mainArea').innerHTML = `
     ${trackerHeaderHtml(stats)}
@@ -2451,10 +2506,12 @@ function renderApplicationsView() {
       <div class="tracker-stat"><div class="tracker-stat-lbl">In Queue</div><div class="tracker-stat-val orange">${wlReady}</div></div>
       <div class="tracker-stat"><div class="tracker-stat-lbl">Invited to Apply</div><div class="tracker-stat-val">${wlInvited}</div></div>
       <div class="tracker-stat"><div class="tracker-stat-lbl">Awaiting Payment</div><div class="tracker-stat-val orange">${awaitingPay}</div></div>
+      <div class="tracker-stat"><div class="tracker-stat-lbl">Board Requests</div><div class="tracker-stat-val${opsPending ? ' orange' : ''}">${opsPending}</div></div>
     </div>
     <nav class="tracker-tabs">
       <button type="button" class="tracker-tab${appSection === 'waiting-list' ? ' active' : ''}" data-app-section="waiting-list" onclick="switchAppSection('waiting-list')">Waiting List${wlReady ? ` (${wlReady} ready)` : wlPending ? ` (${wlPending})` : ''}</button>
-      <button type="button" class="tracker-tab${appSection === 'applications' ? ' active' : ''}" data-app-section="applications" onclick="switchAppSection('applications')">Applications${pending ? ` (${pending})` : ''}</button>
+      <button type="button" class="tracker-tab${appSection === 'applications' ? ' active' : ''}" data-app-section="applications" onclick="switchAppSection('applications')">Applications${memPending ? ` (${memPending})` : ''}</button>
+      <button type="button" class="tracker-tab${appSection === 'board-ops' ? ' active' : ''}" data-app-section="board-ops" onclick="switchAppSection('board-ops')">Board Requests${opsPending ? ` (${opsPending})` : ''}</button>
     </nav>
     <nav class="tracker-tabs tracker-subtabs" data-app-section="waiting-list" style="display:${appSection === 'waiting-list' ? '' : 'none'}">
       <button type="button" class="tracker-tab${wlFilter === 'all' ? ' active' : ''}" data-wl-filter="all" onclick="switchWlFilter('all')">All${wlActive ? ` (${wlActive})` : ''}</button>
@@ -2467,9 +2524,15 @@ function renderApplicationsView() {
       <button type="button" class="tracker-tab${appFilter === 'rejected' ? ' active' : ''}" data-app-filter="rejected" onclick="switchAppFilter('rejected')">Rejected</button>
       <button type="button" class="tracker-tab${appFilter === 'all' ? ' active' : ''}" data-app-filter="all" onclick="switchAppFilter('all')">All</button>
     </nav>
+    <nav class="tracker-tabs tracker-subtabs" data-app-section="board-ops" style="display:${appSection === 'board-ops' ? '' : 'none'}">
+      <button type="button" class="tracker-tab${boardOpsFilter === 'pending' ? ' active' : ''}" data-board-ops-filter="pending" onclick="switchBoardOpsFilter('pending')">Pending${opsPending ? ` (${opsPending})` : ''}</button>
+      <button type="button" class="tracker-tab${boardOpsFilter === 'approved' ? ' active' : ''}" data-board-ops-filter="approved" onclick="switchBoardOpsFilter('approved')">Approved</button>
+      <button type="button" class="tracker-tab${boardOpsFilter === 'rejected' ? ' active' : ''}" data-board-ops-filter="rejected" onclick="switchBoardOpsFilter('rejected')">Rejected${opsRejected ? ` (${opsRejected})` : ''}</button>
+      <button type="button" class="tracker-tab${boardOpsFilter === 'all' ? ' active' : ''}" data-board-ops-filter="all" onclick="switchBoardOpsFilter('all')">All</button>
+    </nav>
     ${appSection === 'waiting-list' ? renderMembershipSlotsBannerHtml() : ''}
     <div class="tracker-table-wrap" id="applicationsTableWrap">
-      ${appSection === 'waiting-list' ? renderWaitingListTableHtml(wlFiltered) : renderApplicationsTableHtml(appFiltered)}
+      ${appSection === 'waiting-list' ? renderWaitingListTableHtml(wlFiltered) : appSection === 'board-ops' ? renderBoardOpsTableHtml(opsFiltered) : renderApplicationsTableHtml(appFiltered)}
     </div>`;
 }
 

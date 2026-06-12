@@ -1,6 +1,6 @@
 # Hibret Edir — Agent Context & Handoff
 
-**Last updated:** June 11, 2026 (membership onboarding workflow + waiting list public status fix)  
+**Last updated:** June 11, 2026 (Board Requests tab, announcement restore, onboarding workflow)  
 **Purpose:** Onboard a new Cursor agent quickly. Read this file first, then `HIBRET_EDIR_PROJECT_HANDOFF (1).md` for deeper business rules and by-laws.
 
 ---
@@ -89,6 +89,7 @@ hibretedir/
 │   ├── mark_added_waiting_list_members.py
 │   ├── mark_invitations_sent.py
 │   ├── seed_waiting_list_public.py
+│   ├── set_event_announcement.js  # Prayer/burial/payment details on events.notes (public announcement)
 │   ├── build_invoice_snapshot.py
 │   └── build_members_snapshot.py
 │   └── (many compare/audit scripts for ops — optional)
@@ -164,7 +165,7 @@ Notifications **skip gracefully** when SendGrid/Twilio are unset.
 |-------|---------|
 | `members` | CRM — includes `pin_hash` for portal |
 | `beneficiaries` | Death beneficiary per member (primary) |
-| `events` | Funeral events (deceased name, event #, amount, notes JSON for announcement venues) |
+| `events` | Funeral events (deceased name, event #, amount); `notes` = JSON for public announcement (prayer/burial venues, `collect_dues`, optional `announcement_text`) |
 | `invoices` | PayPal-linked invoices; `recipient_name`, `paid_note` |
 | `receipts` | Zelle/BofA receipt uploads (base64; approve → mark invoice Paid) |
 | `waiting_list` | Public waiting list queue (`invited_at`, statuses below) |
@@ -201,7 +202,19 @@ npm run import:waiting-list:seed          # if DB empty
 python scripts/import_waiting_list.py --file "data/waiting list with phone and email.xlsx" --seed
 python scripts/mark_added_waiting_list_members.py   # marks known members + refreshes public JSON
 python scripts/mark_invitations_sent.py             # one-off status updates
+node scripts/set_event_announcement.js 30           # Backfill public announcement for event #30 (or any event #)
 ```
+
+**Event announcement JSON** (`events.notes` — set via `scripts/set_event_announcement.js` or `--file`):
+
+| Field | Purpose |
+|-------|---------|
+| `prayer_venue`, `prayer_address`, `prayer_datetime` | Prayer service block on public site |
+| `burial_venue`, `burial_address` | Burial service block |
+| `collect_dues` | `false` or `waive_dues: true` → no dues paragraph |
+| `announcement_text` | Free-text fallback if structured fields absent |
+
+PayPal sync creates events with name only — **run `set_event_announcement.js` after each new funeral** so the public memorial letter shows full service details.
 
 ---
 
@@ -245,7 +258,7 @@ Base URL: `/.netlify/functions/<name>`
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/site-stats` | — | `active_count`, `amount_per_member`, `payout_amount` |
-| GET | `/current-announcement` | — | Latest event from DB |
+| GET | `/current-announcement` | — | Latest **Active** event; venues from `events.notes` JSON |
 | GET | `/waiting-list/status` | — | Live queue; `added` only if `Added as Member` |
 | POST | `/waiting-list`, `/contact` | — | Public forms |
 | POST | `/verify`, `/membership` | — | Application gate (must be `Invited to Apply`) |
@@ -292,7 +305,7 @@ Hash routing (`#announcement`, `#apply`, etc.). English + Amharic.
 **Live from API:**
 
 - Hero **active member count**, per-death amount, payout amount → `apply/site-stats`
-- **Current announcement** → `apply/current-announcement` (memorial letter + summary box)
+- **Current announcement** → `apply/current-announcement` — full **memorial letter** (prayer/burial/payment) + summary box; data from `events.notes` JSON on latest Active event
 - **Waiting list status** → `apply/waiting-list/status` (DB first, `waiting-list-public.json` fallback)
 - Public labels: **Added** only for members; **Invitation Sent** for invited / in-progress applicants
 
@@ -328,13 +341,19 @@ Placeholders show `—` until API loads. Regenerate static JSON: `python scripts
 
 **PayPal:** **Sync PayPal** on Invoices tab (batched POST). Stats cache invalidated after sync and member changes.
 
-**Approval view (Waiting List + Applications):**
+**Approval view (three top tabs):**
 
-| Waiting List tabs | All · Invited · In Progress (no separate “Ready to Invite” — invite from **All**) |
-| Applications | Pending (incl. Awaiting Payment) · Approved · Rejected |
-| Invite | **Send Invitation →** on eligible rows in **All** only |
-| Review | 3 checks: name, fields, ID → **Approve & Send Invoice** |
-| Payment | **Mark Registration Paid** when status is Awaiting Payment (Zelle/BofA) |
+| Tab | Contents |
+|-----|----------|
+| **Waiting List** | All · Invited · In Progress — invite from **All** with **Send Invitation →** (no separate “Ready to Invite” tab) |
+| **Applications** | Membership only — Pending (incl. Awaiting Payment) · Approved · Rejected |
+| **Board Requests** | Operational approvals — **Mark Paid**, **Beneficiary** changes; own Pending · Approved · Rejected · All |
+
+| Action | Where |
+|--------|-------|
+| Vet new member | Applications → 3 checks (name, fields, ID) → **Approve & Send Invoice** |
+| Zelle registration | Applications → **Mark Registration Paid** when Awaiting Payment |
+| Mark invoice paid (dual control) | Board Requests → Mark Paid requests; invoice table **View in Approval** opens Board Requests → Pending |
 
 Slot math: `invite_slots_remaining = MEMBER_CAP − active − in_pipeline` (`Invited to Apply` + `Application Submitted`).
 
@@ -378,6 +397,9 @@ Auth, portal, admin CRM, applications, waiting list, notifications, audit, payou
 - [x] **Public waiting list fix** — “Added” only for actual members; **Invitation Sent** for invited/applicants (fixed position 1–11 bug)
 - [x] **Docs** — `membership-onboarding-workflow.md`, board handout, automation showcase
 - [x] **Ops scripts** — `mark_invitations_sent.py`, updated public JSON export
+- [x] **Admin Approval split** — **Board Requests** tab for Mark Paid + beneficiary ops; **Applications** = membership only
+- [x] **Public announcement restore** — memorial letter loads from `events.notes`; `set_event_announcement.js`; Event #30 (Brook Zewdie) backfilled
+- [x] **DB migrate resilience** — `run_schema.js` connect timeout 60s, query 120s, 3 retries (Render intermittent timeouts)
 
 ### Still partial / ops
 
@@ -394,6 +416,7 @@ Auth, portal, admin CRM, applications, waiting list, notifications, audit, payou
 
 | Item | Notes |
 |------|-------|
+| Admin UI for event announcement | Use `set_event_announcement.js` until form exists |
 | `events.js` | No admin “create event → auto ~197 invoices” via PayPal API |
 | Automated payment reminders | Not started |
 | Twilio SMS bot | Not started |
@@ -437,6 +460,13 @@ From by-laws / handoff:
 
 ## 12. Recent session changelog
 
+### June 11, 2026 — Board Requests + public announcement (local session)
+
+- **Admin Approval:** third tab **Board Requests** for Mark Paid and beneficiary change requests; membership apps stay under **Applications** only.
+- **Public announcement:** memorial letter (prayer/burial/payment) restored — reads `events.notes` JSON via `/current-announcement`; Event #30 backfilled.
+- **New script:** `scripts/set_event_announcement.js` — set announcement details per event after PayPal sync creates bare event rows.
+- **API:** `getCurrentAnnouncementFromDb()` filters `status = 'Active'`; supports `announcement_text` fallback and alternate venue field names.
+
 ### June 11, 2026 — Membership onboarding + waiting list (local session)
 
 - Full onboarding workflow: invite → apply → review → PayPal $200 → active member on payment.
@@ -478,6 +508,8 @@ From by-laws / handoff:
 | Invited person shows “Added” on public list | Regenerate JSON; ensure API uses status not position — see `isWaitingListPublicAdded()` in `apply.js` |
 | PayPal registration invoice fails | Check `PAYPAL_CLIENT_ID`/`SECRET`; use **Mark Registration Paid** as fallback |
 | PayPal sync timeout on Netlify | Use Admin batched sync or `npm run sync:paypal`; background function for cron |
+| Public announcement shows only summary, no service details | `events.notes` empty — run `node scripts/set_event_announcement.js <event#>` |
+| `npm run db:migrate` timeout to Render | Retry; `run_schema.js` has 60s connect / 120s query / 3 retries |
 
 ---
 

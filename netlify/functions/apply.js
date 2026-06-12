@@ -314,6 +314,7 @@ async function getCurrentAnnouncementFromDb() {
     SELECT event_number, deceased_name, event_date, amount_per_member, payout_amount, notes, status
     FROM events
     WHERE deceased_name IS NOT NULL AND TRIM(deceased_name) <> ''
+      AND status = 'Active'
     ORDER BY event_number DESC NULLS LAST
     LIMIT 1
   `);
@@ -337,11 +338,12 @@ async function getCurrentAnnouncementFromDb() {
     amount_per_member: Number(row.amount_per_member || process.env.AMOUNT_PER_MEMBER || 110),
     payout_amount: Number(row.payout_amount || process.env.PAYOUT_AMOUNT || 15000),
     collect_dues: meta.collect_dues !== false && meta.waive_dues !== true,
-    prayer_venue: meta.prayer_venue || null,
+    prayer_venue: meta.prayer_venue || meta.prayer_location || null,
     prayer_address: meta.prayer_address || null,
-    prayer_datetime: meta.prayer_datetime || null,
-    burial_venue: meta.burial_venue || null,
+    prayer_datetime: meta.prayer_datetime || meta.prayer_date || meta.prayer_time || null,
+    burial_venue: meta.burial_venue || meta.burial_location || null,
     burial_address: meta.burial_address || null,
+    announcement_text: meta.announcement_text || meta.full_message || null,
     updated_at: new Date().toISOString(),
   };
 }

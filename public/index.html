@@ -6,7 +6,7 @@
 <title>Hibret Edir Association — Ethiopian Mutual Assistance</title>
 <link rel="stylesheet" href="/css/hibret.css?v=nav1">
 <link rel="stylesheet" href="/css/compat.css?v=nav1">
-<link rel="stylesheet" href="/css/public-pages.css?v=pubfix19">
+<link rel="stylesheet" href="/css/public-pages.css?v=pubfix20">
 </head>
 <body class="site-public">
 
@@ -180,6 +180,10 @@
 
         <div class="ann-no-dues-block" data-ann-dues-section="waived">
           <p class="ann-no-dues-note">* No member contribution is required for this memorial. Sufficient funds are available in the Edir account to support the family at this time.</p>
+        </div>
+
+        <div class="ann-full-text-block" id="annFullTextBlock" hidden>
+          <div class="ann-full-text" id="annFullText"></div>
         </div>
 
         <p class="ann-letter-signoff">
@@ -1284,6 +1288,20 @@ function applyAnnouncement(ann) {
     const waivedBlock = memorial.querySelector('[data-ann-dues-section="waived"]');
     if (collectBlock) collectBlock.style.display = ann.collect_dues ? '' : 'none';
     if (waivedBlock) waivedBlock.style.display = ann.collect_dues ? 'none' : '';
+
+    const fullTextBlock = document.getElementById('annFullTextBlock');
+    const fullTextEl = document.getElementById('annFullText');
+    const fullText = ann.announcement_text || '';
+    const hasStructured = hasPrayer || hasBurial;
+    if (fullTextBlock && fullTextEl) {
+      if (fullText && !hasStructured) {
+        fullTextEl.textContent = fullText;
+        fullTextBlock.hidden = false;
+      } else {
+        fullTextEl.textContent = '';
+        fullTextBlock.hidden = true;
+      }
+    }
   }
 
   const evNum = ann.event_number != null ? `#${ann.event_number}` : '';
