@@ -174,6 +174,7 @@
       }
       .progress-wrap { margin-bottom: 16px; }
       .workflow-main { scroll-margin-top: 10px; }
+      .diagram-area { scroll-margin-top: 8px; min-height: 300px !important; }
       .detail-body { display: none; }
       .visual-stage { height: 200px; border-bottom: none; }
       .stage-caption { padding: 10px 12px 12px; }
@@ -222,6 +223,9 @@
     .stage-caption-line.exit-right { transform: translateX(108%); opacity: 0; }
     .stage-caption-line.exit-left { transform: translateX(-108%); opacity: 0; }
 
+    @media (prefers-reduced-motion: reduce) {
+      .ring-board, .ring-center { transition: none; }
+    }
     .section-jump-item { display: contents; }
     .section-jump-label { display: none; }
     @media (max-width: 768px) {
@@ -234,11 +238,13 @@
       position: relative; display: flex; align-items: center; justify-content: center;
       min-height: 420px; padding: 8px 0; opacity: 0.92;
     }
-    .ring-board { position: relative; margin: 0 auto; }
+    .ring-board { position: relative; margin: 0 auto; transition: transform 1.25s cubic-bezier(0.25, 0.8, 0.25, 1); transform: rotate(var(--ring-rotate, 0deg)); }
     .ring-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
 
     .ring-center {
-      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      position: absolute; left: 50%; top: 50%;
+      transform: translate(-50%, -50%) rotate(var(--ring-counter, 0deg));
+      transition: transform 1.25s cubic-bezier(0.25, 0.8, 0.25, 1);
       z-index: 1; pointer-events: none; text-align: center;
       width: 84px; height: 84px; border-radius: 50%;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -323,7 +329,8 @@
       filter: url(#glow-filter); pointer-events: none;
     }
     .wire-glow.lit { opacity: 0.45; }
-    .wire-glow.flowing {
+    .wire-glow.flowing,
+    .wire-glow.phase-travel {
       opacity: 1; stroke-dasharray: 10 14;
       animation: flowGlow 0.5s linear infinite;
       filter: url(#glow-filter-strong);
@@ -948,6 +955,14 @@
       if (voiceOn && speechOk) {
         const forward = stepForward(prevCurrent, current);
         updateStageCaption(step, null, forward, true);
+        if (step.bulletIdx === 0) {
+          const prevPhase = STEPS[prevCurrent]?.phaseIndex;
+          if (prevPhase !== undefined && step.phaseIndex !== prevPhase) {
+            focusPhaseRing(step.phaseIndex, prevPhase, forward);
+          } else if (step.phaseIndex === 0 && lastFocusedPhase !== 0) {
+            focusPhaseRing(0, -1, true);
+          }
+        }
       }
       speakHumanText(line, onDone, attempt);
     }
@@ -958,6 +973,61 @@
 
     let captionStepKey = null;
     let captionResetTimer = null;
+    let lastFocusedPhase = -1;
+    let phaseArcTimer = null;
+
+    function ringRotationForPhase(phaseIndex) {
+      const n = PHASES.length;
+      const nodeAngle = -Math.PI / 2 + (2 * Math.PI * phaseIndex) / n;
+      const bottomAngle = Math.PI / 2;
+      return ((bottomAngle - nodeAngle) * 180) / Math.PI;
+    }
+
+    function applyRingRotation(phaseIndex) {
+      const board = document.getElementById('ringBoard');
+      const center = document.querySelector('.ring-center');
+      const deg = ringRotationForPhase(phaseIndex);
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      board?.style.setProperty('--ring-rotate', `${deg}deg`);
+      center?.style.setProperty('--ring-counter', `${-deg}deg`);
+      if (reduced) {
+        board?.style.setProperty('transition', 'none');
+        center?.style.setProperty('transition', 'none');
+      }
+    }
+
+    function pulsePhaseArc(fromPhaseIndex) {
+      if (fromPhaseIndex < 0) return;
+      if (phaseArcTimer) clearTimeout(phaseArcTimer);
+      document.querySelectorAll('.wire-glow').forEach((el) => el.classList.remove('phase-travel'));
+      const glow = document.querySelector(`.wire-glow[data-glow="${fromPhaseIndex}"]`);
+      if (!glow) return;
+      glow.classList.add('phase-travel');
+      phaseArcTimer = setTimeout(() => {
+        glow.classList.remove('phase-travel');
+        phaseArcTimer = null;
+      }, 2400);
+    }
+
+    function scrollRingIntoView() {
+      const target = document.querySelector('.diagram-area');
+      if (!target) return;
+      const top = target.getBoundingClientRect().top + window.scrollY - 10;
+      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      window.scrollTo({ top: Math.max(0, top), behavior: reduced ? 'auto' : 'smooth' });
+    }
+
+    function focusPhaseRing(phaseIndex, fromPhaseIndex, forward = true) {
+      if (!forward || phaseIndex === lastFocusedPhase) return;
+      lastFocusedPhase = phaseIndex;
+      applyRingRotation(phaseIndex);
+      if (fromPhaseIndex >= 0 && fromPhaseIndex < phaseIndex) {
+        pulsePhaseArc(fromPhaseIndex);
+      }
+      if (window.matchMedia('(max-width: 768px)').matches && phaseIndex >= 1) {
+        setTimeout(scrollRingIntoView, 280);
+      }
+    }
 
     function captionKeyFor(step, textOverride) {
       if (textOverride) return `o:${textOverride}`;
@@ -1495,6 +1565,12 @@
       document.getElementById('progressFill').style.width = `${((current + 1) / STEPS.length) * 100}%`;
       if (!voiceOn || !speechOk) {
         updateStageCaption(step, null, forward, stepChanged);
+        if (stepChanged && step.bulletIdx === 0) {
+          const prevPhase = STEPS[prevCurrent]?.phaseIndex;
+          if (prevPhase !== undefined && step.phaseIndex !== prevPhase) {
+            focusPhaseRing(step.phaseIndex, prevPhase, forward);
+          }
+        }
       }
     }
 
@@ -1584,6 +1660,8 @@
       cyclesCompleted = 0;
       sessionIntroPending = true;
       captionStepKey = null;
+      lastFocusedPhase = -1;
+      applyRingRotation(0);
       hideConclusionUI();
       setPlayAttention(false);
       setPlaying(true);
@@ -1603,6 +1681,7 @@
       setVoice(true);
       buildSectionJumps();
       buildRing();
+      applyRingRotation(0);
       render();
       waitForVoices().then(() => {
         if (speechOk) speechSynthesis.resume();
