@@ -157,9 +157,13 @@
 
     @media (max-width: 640px) {
       .page { padding: 18px 14px 44px; }
-      header { margin-bottom: 14px; }
+      header { margin-bottom: 10px; }
       h1 { font-size: 1.55rem; margin-bottom: 8px; }
-      .subtitle { font-size: 0.84rem; line-height: 1.45; max-width: 100%; }
+      .subtitle {
+        font-size: 0.82rem; line-height: 1.4; max-width: 100%;
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+      }
+      .mobile-live-topic { display: block; }
       .voice-hint { margin: 8px 0 6px; font-size: 0.62rem; }
       .controls { gap: 8px; margin-bottom: 10px; }
       .controls button { padding: 8px 14px; font-size: 0.62rem; }
@@ -171,32 +175,47 @@
       }
       .progress-wrap { margin-bottom: 16px; }
       .workflow-main { scroll-margin-top: 10px; }
-      .scroll-hint { display: flex; }
+      .terminal-bullets { display: none; }
+      .terminal .phase-header { margin-bottom: 12px; padding-bottom: 12px; }
     }
+
+    .mobile-live-topic {
+      display: none;
+      margin: 0 0 14px;
+      padding: 14px 16px 16px;
+      border-radius: 14px;
+      background: var(--glass);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: blur(12px);
+      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+      border-left: 3px solid var(--mlt-color, var(--green));
+    }
+    .mlt-meta {
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+      margin-bottom: 10px;
+    }
+    .mlt-phase {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.62rem; font-weight: 600;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--mlt-color, var(--green));
+    }
+    .mlt-step {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.58rem; color: var(--muted);
+    }
+    .mlt-text {
+      font-size: 0.95rem; font-weight: 600; line-height: 1.45;
+      color: var(--text); min-height: 2.9em;
+      transition: opacity 0.35s ease, transform 0.35s ease;
+    }
+    .mlt-text.updating { opacity: 0; transform: translateY(6px); }
 
     .section-jump-item { display: contents; }
     .section-jump-label { display: none; }
     @media (max-width: 640px) {
       .section-jump-item { display: flex; }
       .section-jump-label { display: block; }
-    }
-
-    .scroll-hint {
-      display: none; flex-direction: column; align-items: center; gap: 4px;
-      margin: 0 auto 12px; color: var(--muted); font-size: 0.68rem;
-      letter-spacing: 0.04em; transition: opacity 0.4s ease;
-    }
-    .scroll-hint.hidden { opacity: 0; pointer-events: none; }
-    .scroll-hint-chevron {
-      font-size: 1.1rem; line-height: 1;
-      animation: scrollHintBounce 1.8s ease-in-out infinite;
-    }
-    @keyframes scrollHintBounce {
-      0%, 100% { transform: translateY(0); opacity: 0.55; }
-      50% { transform: translateY(7px); opacity: 1; }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .scroll-hint-chevron { animation: none; }
     }
 
     /* Ring diagram — compact accent */
@@ -587,6 +606,14 @@
       <p class="subtitle">I'm the AI agent <em>Ethio AI Solutions</em> built for <strong>Hibret Edir</strong> — I run onboarding, memorial announcements, member invoicing, and benefit payouts from start to finish.</p>
     </header>
 
+    <div class="mobile-live-topic" id="mobileLiveTopic" aria-live="polite">
+      <div class="mlt-meta">
+        <span class="mlt-phase" id="mltPhase">1 · Onboarding</span>
+        <span class="mlt-step" id="mltStep">1 / 7</span>
+      </div>
+      <p class="mlt-text" id="mltText">I capture every applicant on the waiting list</p>
+    </div>
+
     <p class="voice-hint" id="voiceHint"></p>
     <div class="controls">
       <button type="button" id="playBtn" class="on">▶ PLAY</button>
@@ -596,10 +623,6 @@
       <button type="button" id="speakBtn">🔈 Speak</button>
     </div>
     <div class="section-jumps" id="sectionJumps"></div>
-    <div class="scroll-hint" id="scrollHint" aria-hidden="true">
-      <span class="scroll-hint-text">Explore the three workflows</span>
-      <span class="scroll-hint-chevron">↓</span>
-    </div>
     <div class="progress-wrap"><div class="progress-bar"><div class="fill" id="progressFill"></div></div></div>
 
     <div class="workflow-main">
@@ -914,6 +937,36 @@
       speakHumanText(text, onDone, attempt);
     }
 
+    function updateMobileLiveTopic(step, textOverride, animate = true, metaOverride = null) {
+      const panel = document.getElementById('mobileLiveTopic');
+      const phaseEl = document.getElementById('mltPhase');
+      const stepEl = document.getElementById('mltStep');
+      const textEl = document.getElementById('mltText');
+      if (!panel || !phaseEl || !stepEl || !textEl) return;
+
+      panel.style.setProperty('--mlt-color', step.color);
+      if (metaOverride) {
+        phaseEl.textContent = metaOverride.phase;
+        stepEl.textContent = metaOverride.step || '';
+      } else {
+        phaseEl.textContent = `${step.num} · ${step.title}`;
+        stepEl.textContent = `${step.bulletIdx + 1} / ${step.phaseBullets.length}`;
+      }
+      const nextText = textOverride || step.text;
+
+      if (!animate || textEl.textContent === nextText) {
+        textEl.textContent = nextText;
+        textEl.classList.remove('updating');
+        return;
+      }
+
+      textEl.classList.add('updating');
+      setTimeout(() => {
+        textEl.textContent = nextText;
+        textEl.classList.remove('updating');
+      }, 180);
+    }
+
     function showConclusionUI() {
       const body = document.getElementById('terminalBody');
       body.querySelector('.cycle-conclusion')?.remove();
@@ -925,6 +978,13 @@
       body.appendChild(el);
       document.getElementById('terminalTitle').textContent = 'meridian.closing';
       document.getElementById('builderBanner')?.classList.add('attention');
+      const lastStep = STEPS[STEPS.length - 1];
+      updateMobileLiveTopic(
+        lastStep,
+        'That\'s everything I run for Hibret Edir. Ethio AI Solutions builds custom AI agents like me.',
+        true,
+        { phase: '✓ · Ethio AI Solutions', step: 'www.EthioAiSolutions.com' },
+      );
     }
 
     function hideConclusionUI() {
@@ -1370,6 +1430,7 @@
 
       document.getElementById('terminalTitle').textContent = `phase.${step.num} · ${step.bulletIdx + 1}/${step.phaseBullets.length}`;
       document.getElementById('progressFill').style.width = `${((current + 1) / STEPS.length) * 100}%`;
+      updateMobileLiveTopic(step, null, stepChanged);
     }
 
     function buildSectionJumps() {
@@ -1472,65 +1533,11 @@
     let resizeT;
     window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { buildRing(); render(); }, 120); });
 
-    let introScrollFrame = null;
-    let introScrollCancelled = false;
-
-    function hideScrollHint() {
-      document.getElementById('scrollHint')?.classList.add('hidden');
-    }
-
-    function cancelIntroScroll() {
-      introScrollCancelled = true;
-      if (introScrollFrame) cancelAnimationFrame(introScrollFrame);
-      introScrollFrame = null;
-    }
-
-    function easeInOutQuad(t) {
-      return t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2;
-    }
-
-    function gentleScrollTo(targetY, duration = 3200) {
-      const startY = window.scrollY;
-      const distance = targetY - startY;
-      if (Math.abs(distance) < 36) return;
-      const startTime = performance.now();
-      const step = (now) => {
-        if (introScrollCancelled) return;
-        const t = Math.min(1, (now - startTime) / duration);
-        window.scrollTo(0, startY + distance * easeInOutQuad(t));
-        if (t < 1) introScrollFrame = requestAnimationFrame(step);
-        else introScrollFrame = null;
-      };
-      introScrollFrame = requestAnimationFrame(step);
-    }
-
-    function initMobileDiscoverability() {
-      if (!window.matchMedia('(max-width: 640px)').matches) return;
-      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-
-      const target = document.querySelector('.section-jumps') || document.querySelector('.workflow-main');
-      if (!target) return;
-
-      window.addEventListener('scroll', () => {
-        hideScrollHint();
-        cancelIntroScroll();
-      }, { passive: true });
-
-      window.addEventListener('touchstart', cancelIntroScroll, { passive: true });
-
-      setTimeout(() => {
-        if (introScrollCancelled || window.scrollY > 20) return;
-        const top = target.getBoundingClientRect().top + window.scrollY - 8;
-        gentleScrollTo(top, 3400);
-      }, 1400);
-    }
-
     function bootShowcase() {
       setVoice(true);
       buildSectionJumps();
       buildRing();
       render();
-      initMobileDiscoverability();
       waitForVoices().then(() => {
         if (speechOk) speechSynthesis.resume();
         loadVoices();
