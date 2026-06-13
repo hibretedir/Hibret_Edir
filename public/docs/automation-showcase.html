@@ -223,9 +223,6 @@
     .stage-caption-line.exit-right { transform: translateX(108%); opacity: 0; }
     .stage-caption-line.exit-left { transform: translateX(-108%); opacity: 0; }
 
-    @media (prefers-reduced-motion: reduce) {
-      .ring-board, .ring-center { transition: none; }
-    }
     .section-jump-item { display: contents; }
     .section-jump-label { display: none; }
     @media (max-width: 768px) {
@@ -238,13 +235,11 @@
       position: relative; display: flex; align-items: center; justify-content: center;
       min-height: 420px; padding: 8px 0; opacity: 0.92;
     }
-    .ring-board { position: relative; margin: 0 auto; transition: transform 1.25s cubic-bezier(0.25, 0.8, 0.25, 1); transform: rotate(var(--ring-rotate, 0deg)); }
+    .ring-board { position: relative; margin: 0 auto; }
     .ring-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
 
     .ring-center {
-      position: absolute; left: 50%; top: 50%;
-      transform: translate(-50%, -50%) rotate(var(--ring-counter, 0deg));
-      transition: transform 1.25s cubic-bezier(0.25, 0.8, 0.25, 1);
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
       z-index: 1; pointer-events: none; text-align: center;
       width: 84px; height: 84px; border-radius: 50%;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -960,7 +955,7 @@
           if (prevPhase !== undefined && step.phaseIndex !== prevPhase) {
             focusPhaseRing(step.phaseIndex, prevPhase, forward);
           } else if (step.phaseIndex === 0 && lastFocusedPhase !== 0) {
-            focusPhaseRing(0, -1, true);
+            lastFocusedPhase = 0;
           }
         }
       }
@@ -976,26 +971,6 @@
     let lastFocusedPhase = -1;
     let phaseArcTimer = null;
 
-    function ringRotationForPhase(phaseIndex) {
-      const n = PHASES.length;
-      const nodeAngle = -Math.PI / 2 + (2 * Math.PI * phaseIndex) / n;
-      const bottomAngle = Math.PI / 2;
-      return ((bottomAngle - nodeAngle) * 180) / Math.PI;
-    }
-
-    function applyRingRotation(phaseIndex) {
-      const board = document.getElementById('ringBoard');
-      const center = document.querySelector('.ring-center');
-      const deg = ringRotationForPhase(phaseIndex);
-      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      board?.style.setProperty('--ring-rotate', `${deg}deg`);
-      center?.style.setProperty('--ring-counter', `${-deg}deg`);
-      if (reduced) {
-        board?.style.setProperty('transition', 'none');
-        center?.style.setProperty('transition', 'none');
-      }
-    }
-
     function pulsePhaseArc(fromPhaseIndex) {
       if (fromPhaseIndex < 0) return;
       if (phaseArcTimer) clearTimeout(phaseArcTimer);
@@ -1010,22 +985,33 @@
     }
 
     function scrollRingIntoView() {
+      if (!window.matchMedia('(max-width: 768px)').matches) return;
       const target = document.querySelector('.diagram-area');
       if (!target) return;
-      const top = target.getBoundingClientRect().top + window.scrollY - 10;
       const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      window.scrollTo({ top: Math.max(0, top), behavior: reduced ? 'auto' : 'smooth' });
+      const behavior = reduced ? 'auto' : 'smooth';
+      const scrollToRing = () => {
+        const y = target.getBoundingClientRect().top + window.scrollY - 8;
+        window.scrollTo({ top: Math.max(0, y), left: 0, behavior });
+      };
+      scrollToRing();
+      requestAnimationFrame(() => {
+        requestAnimationFrame(scrollToRing);
+      });
+      setTimeout(() => {
+        target.scrollIntoView({ block: 'start', behavior });
+      }, 350);
     }
 
     function focusPhaseRing(phaseIndex, fromPhaseIndex, forward = true) {
       if (!forward || phaseIndex === lastFocusedPhase) return;
       lastFocusedPhase = phaseIndex;
-      applyRingRotation(phaseIndex);
       if (fromPhaseIndex >= 0 && fromPhaseIndex < phaseIndex) {
         pulsePhaseArc(fromPhaseIndex);
       }
-      if (window.matchMedia('(max-width: 768px)').matches && phaseIndex >= 1) {
-        setTimeout(scrollRingIntoView, 280);
+      if (phaseIndex >= 1) {
+        scrollRingIntoView();
+        setTimeout(scrollRingIntoView, 700);
       }
     }
 
@@ -1533,7 +1519,7 @@
         const i = Number(el.dataset.glow);
         el.classList.remove('lit', 'flowing');
         if (pi > i) el.classList.add('lit');
-        else if (pi === i && lastBullet) el.classList.add('flowing');
+        else if (pi === i && (lastBullet || (step.bulletIdx === 0 && stepChanged))) el.classList.add('flowing');
       });
       if (current === 0 && prevCurrent === STEPS.length - 1) {
         document.querySelector('.wire-glow[data-glow="2"]')?.classList.add('flowing');
@@ -1661,7 +1647,6 @@
       sessionIntroPending = true;
       captionStepKey = null;
       lastFocusedPhase = -1;
-      applyRingRotation(0);
       hideConclusionUI();
       setPlayAttention(false);
       setPlaying(true);
@@ -1681,7 +1666,6 @@
       setVoice(true);
       buildSectionJumps();
       buildRing();
-      applyRingRotation(0);
       render();
       waitForVoices().then(() => {
         if (speechOk) speechSynthesis.resume();
