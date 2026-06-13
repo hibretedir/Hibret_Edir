@@ -762,7 +762,7 @@
       });
     });
 
-    let current = 0, prevCurrent = 0, playing = false, timer = null;
+    let current = 0, prevCurrent = 0, playing = false, timer = null, speechFallback = null;
     let lastRenderedStep = -1;
     let voiceOn = true;
     let cyclesCompleted = 0;
@@ -864,7 +864,20 @@
 
     function estimateSpeechMs(text) {
       const words = String(text).split(/\s+/).filter(Boolean).length;
-      return Math.min(14000, Math.max(3200, words * 340 + 500));
+      return Math.min(22000, Math.max(4000, words * 420 + 900));
+    }
+
+    function scheduleSpeechAdvance(onDone, line) {
+      let done = false;
+      const finish = () => {
+        if (!playing || done) return;
+        done = true;
+        clearTimeout(speechFallback);
+        speechFallback = null;
+        onDone();
+      };
+      speechFallback = setTimeout(finish, estimateSpeechMs(line) + 4500);
+      queueSpeech(line, finish);
     }
 
     function resumeSpeech() {
@@ -1011,20 +1024,31 @@
     function scrollMobileWalkthroughIntoView() {
       if (!playing) return;
       if (!window.matchMedia('(max-width: 768px)').matches) return;
-      const anchor = document.querySelector('.section-jumps') || document.querySelector('.progress-wrap');
+      const anchor = document.querySelector('.terminal-bar')
+        || document.getElementById('stageCaption')
+        || document.getElementById('terminalCard');
+      const builder = document.getElementById('builderBanner');
       if (!anchor) return;
       const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       const behavior = reduced ? 'auto' : 'smooth';
-      const topInset = 10;
+      const topInset = 8;
 
-      const scrollToAnchor = () => {
-        const y = anchor.getBoundingClientRect().top + window.scrollY - topInset;
-        window.scrollTo({ top: Math.max(0, y), left: 0, behavior });
+      const computeY = () => {
+        const idealY = anchor.getBoundingClientRect().top + window.scrollY - topInset;
+        if (!builder) return Math.max(0, idealY);
+        const viewH = window.innerHeight;
+        const builderBottom = builder.getBoundingClientRect().bottom + window.scrollY;
+        const maxY = builderBottom - viewH + 16;
+        return Math.max(0, Math.min(idealY, maxY));
       };
 
-      scrollToAnchor();
+      const scrollOnce = () => {
+        window.scrollTo({ top: computeY(), left: 0, behavior });
+      };
+
+      scrollOnce();
       requestAnimationFrame(() => {
-        requestAnimationFrame(scrollToAnchor);
+        requestAnimationFrame(scrollOnce);
       });
     }
 
@@ -1034,7 +1058,7 @@
       if (fromPhaseIndex >= 0 && fromPhaseIndex < phaseIndex) {
         pulsePhaseArc(fromPhaseIndex);
       }
-      if (phaseIndex >= 1) {
+      if (phaseIndex === 1) {
         scrollMobileWalkthroughIntoView();
         setTimeout(scrollMobileWalkthroughIntoView, 700);
       }
@@ -1143,10 +1167,24 @@
         onDone?.();
       };
       if (isMobileDevice()) {
-        if (voiceOn && speechOk) speakPlainText(MERIDIAN_CONCLUSION, () => {});
-        timer = setTimeout(finish, voiceOn && speechOk
-          ? estimateSpeechMs(MERIDIAN_CONCLUSION) + VOICE_PAUSE
-          : CONCLUSION_PAUSE_MS);
+        let finished = false;
+        const finishCycle = () => {
+          hideConclusionUI();
+          onDone?.();
+        };
+        const finish = () => {
+          if (finished) return;
+          finished = true;
+          clearTimeout(speechFallback);
+          speechFallback = null;
+          finishCycle();
+        };
+        if (voiceOn && speechOk) {
+          speechFallback = setTimeout(finish, estimateSpeechMs(MERIDIAN_CONCLUSION) + 4500);
+          speakPlainText(MERIDIAN_CONCLUSION, finish);
+        } else {
+          timer = setTimeout(finishCycle, CONCLUSION_PAUSE_MS);
+        }
         return;
       }
       if (voiceOn && speechOk) {
@@ -1681,7 +1719,12 @@
       if (playing) armTimer();
     }
 
-    function clearSchedule() { clearTimeout(timer); timer = null; }
+    function clearSchedule() {
+      clearTimeout(timer);
+      clearTimeout(speechFallback);
+      timer = null;
+      speechFallback = null;
+    }
 
     function advanceStep() {
       prevCurrent = current;
@@ -1690,15 +1733,18 @@
         playCycleConclusion(() => {
           current = 0;
           cyclesCompleted++;
+          lastFocusedPhase = -1;
           render();
           if (cyclesCompleted >= MAX_CYCLES) {
             cyclesCompleted = 0;
             setPlaying(false);
             showIntroStage();
             setPlayAttention(true);
+            scrollMobileToTop();
             updateVoiceHint();
             return;
           }
+          scrollMobileToTop();
           armTimer();
         });
         return;
@@ -1733,8 +1779,11 @@
       };
 
       if (isMobileDevice()) {
-        if (voiceOn && speechOk) queueSpeech(line, () => {});
-        timer = setTimeout(advanceStep, voiceOn && speechOk ? estimateSpeechMs(line) : INTERVAL);
+        if (voiceOn && speechOk) {
+          scheduleSpeechAdvance(afterSpeech, line);
+        } else {
+          timer = setTimeout(advanceStep, INTERVAL);
+        }
         return;
       }
 
@@ -1808,6 +1857,7 @@
     window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { buildRing(); render(); }, 120); });
 
     function bootShowcase() {
+      if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
       setVoice(true);
       buildSectionJumps();
       buildRing();
@@ -1818,6 +1868,7 @@
       setPlayAttention(true);
       showIntroStage();
       render();
+      scrollMobileToTop();
       updateVoiceHint();
       waitForVoices().then(() => {
         resumeSpeech();
