@@ -194,6 +194,14 @@
       color: var(--cap-color, var(--green)); font-weight: 600;
     }
     .stage-caption-meta .cap-step { color: var(--muted); }
+    .stage-caption-box {
+      border: 1px solid color-mix(in srgb, var(--cap-color, var(--green)) 55%, transparent);
+      border-radius: 10px;
+      padding: 8px 11px;
+      background: rgba(3, 5, 8, 0.72);
+      box-shadow: 0 0 18px color-mix(in srgb, var(--cap-color, var(--green)) 18%, transparent),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
     .stage-caption-viewport {
       position: relative; height: 1.4em; overflow: hidden;
     }
@@ -648,9 +656,11 @@
                   <span class="cap-phase" id="stageCaptionPhase">1 · Onboarding</span>
                   <span class="cap-step" id="stageCaptionStep">1 / 7</span>
                 </div>
-                <div class="stage-caption-viewport">
-                  <p class="stage-caption-line is-current" id="stageCaptionCurrent">I capture every applicant on the waiting list</p>
-                  <p class="stage-caption-line" id="stageCaptionIncoming" aria-hidden="true"></p>
+                <div class="stage-caption-box">
+                  <div class="stage-caption-viewport">
+                    <p class="stage-caption-line is-current" id="stageCaptionCurrent">I capture every applicant on the waiting list</p>
+                    <p class="stage-caption-line" id="stageCaptionIncoming" aria-hidden="true"></p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -933,11 +943,34 @@
     function speakStep(step, onDone, attempt = 0) {
       const line = narrationText(step);
       if (sessionIntroPending && current === 0 && step.bulletIdx === 0) sessionIntroPending = false;
+      if (voiceOn && speechOk) {
+        const forward = stepForward(prevCurrent, current);
+        updateStageCaption(step, null, forward, true);
+      }
       speakHumanText(line, onDone, attempt);
     }
 
     function speakPlainText(text, onDone, attempt = 0) {
       speakHumanText(text, onDone, attempt);
+    }
+
+    let captionStepKey = null;
+    let captionResetTimer = null;
+
+    function captionKeyFor(step, textOverride) {
+      if (textOverride) return `o:${textOverride}`;
+      return `s:${current}:${step.text}`;
+    }
+
+    function finalizeCaptionSwap(currentEl, incomingEl, nextText) {
+      currentEl.textContent = nextText;
+      currentEl.style.transition = 'none';
+      currentEl.className = 'stage-caption-line is-current';
+      void currentEl.offsetWidth;
+      currentEl.style.transition = '';
+      incomingEl.className = 'stage-caption-line';
+      incomingEl.textContent = '';
+      incomingEl.setAttribute('aria-hidden', 'true');
     }
 
     function updateStageCaption(step, textOverride, forward, animate = true, metaOverride = null) {
@@ -948,6 +981,16 @@
       const incomingEl = document.getElementById('stageCaptionIncoming');
       if (!cap || !phaseEl || !stepEl || !currentEl || !incomingEl) return;
 
+      const nextText = textOverride || step.text;
+      const key = captionKeyFor(step, textOverride);
+      if (key === captionStepKey && !metaOverride) return;
+      captionStepKey = key;
+
+      if (captionResetTimer) {
+        clearTimeout(captionResetTimer);
+        captionResetTimer = null;
+      }
+
       cap.style.setProperty('--cap-color', step.color);
       if (metaOverride) {
         phaseEl.textContent = metaOverride.phase;
@@ -957,18 +1000,17 @@
         stepEl.textContent = `${step.bulletIdx + 1} / ${step.phaseBullets.length}`;
       }
 
-      const nextText = textOverride || step.text;
       if (!animate || currentEl.textContent === nextText) {
-        currentEl.textContent = nextText;
-        currentEl.className = 'stage-caption-line is-current';
-        incomingEl.className = 'stage-caption-line';
-        incomingEl.textContent = '';
+        finalizeCaptionSwap(currentEl, incomingEl, nextText);
         return;
       }
 
       incomingEl.textContent = nextText;
       incomingEl.setAttribute('aria-hidden', 'false');
+      incomingEl.style.transition = 'none';
       incomingEl.className = `stage-caption-line ${forward ? 'enter-from-right' : 'enter-from-left'}`;
+      void incomingEl.offsetWidth;
+      incomingEl.style.transition = '';
       currentEl.classList.remove('is-current');
       currentEl.classList.add(forward ? 'exit-left' : 'exit-right');
 
@@ -979,12 +1021,9 @@
         });
       });
 
-      setTimeout(() => {
-        currentEl.textContent = nextText;
-        currentEl.className = 'stage-caption-line is-current';
-        incomingEl.className = 'stage-caption-line';
-        incomingEl.textContent = '';
-        incomingEl.setAttribute('aria-hidden', 'true');
+      captionResetTimer = setTimeout(() => {
+        finalizeCaptionSwap(currentEl, incomingEl, nextText);
+        captionResetTimer = null;
       }, SCENE_MS + 150);
     }
 
@@ -1452,7 +1491,9 @@
 
       document.getElementById('terminalTitle').textContent = `phase.${step.num} · ${step.bulletIdx + 1}/${step.phaseBullets.length}`;
       document.getElementById('progressFill').style.width = `${((current + 1) / STEPS.length) * 100}%`;
-      updateStageCaption(step, null, forward, stepChanged);
+      if (!voiceOn || !speechOk) {
+        updateStageCaption(step, null, forward, stepChanged);
+      }
     }
 
     function buildSectionJumps() {
@@ -1540,6 +1581,7 @@
     function playShowcase() {
       cyclesCompleted = 0;
       sessionIntroPending = true;
+      captionStepKey = null;
       hideConclusionUI();
       setPlayAttention(false);
       setPlaying(true);
