@@ -93,14 +93,16 @@
       border-color: var(--green); color: var(--green);
       background: rgba(52,211,153,0.12); box-shadow: 0 0 24px rgba(52,211,153,0.2);
     }
-    .controls #playBtn.on {
-      background: linear-gradient(135deg, rgba(16,255,176,0.28), rgba(16,255,176,0.08));
-      box-shadow: 0 4px 24px rgba(16,255,176,0.28), inset 0 1px 0 rgba(255,255,255,0.1);
-    }
     .controls #playBtn.attention {
       border-color: var(--green); color: var(--green);
       background: linear-gradient(135deg, rgba(16,255,176,0.22), rgba(16,255,176,0.06));
+      -webkit-animation: playGlowPulse 1.8s ease-in-out infinite;
       animation: playGlowPulse 1.8s ease-in-out infinite;
+      box-shadow: 0 0 24px rgba(16,255,176,0.35), 0 0 48px rgba(16,255,176,0.15);
+    }
+    .controls #playBtn.on:not(.attention) {
+      background: linear-gradient(135deg, rgba(16,255,176,0.28), rgba(16,255,176,0.08));
+      box-shadow: 0 4px 24px rgba(16,255,176,0.28), inset 0 1px 0 rgba(255,255,255,0.1);
     }
     @keyframes playGlowPulse {
       0%, 100% {
@@ -166,6 +168,10 @@
       .voice-hint { margin: 8px 0 6px; font-size: 0.62rem; }
       .controls { gap: 8px; margin-bottom: 10px; }
       .controls button { padding: 8px 14px; font-size: 0.62rem; }
+      .controls #playBtn.attention {
+        box-shadow: 0 0 32px rgba(16,255,176,0.55), 0 0 64px rgba(16,255,176,0.2);
+        transform: scale(1.02);
+      }
       .section-jumps { margin: 8px auto 10px; gap: 10px; }
       .section-jump-item { display: flex; flex-direction: column; align-items: center; gap: 5px; }
       .section-jump-label {
@@ -621,7 +627,7 @@
 
     <p class="voice-hint" id="voiceHint"></p>
     <div class="controls">
-      <button type="button" id="playBtn" class="on">▶ PLAY</button>
+      <button type="button" id="playBtn" class="attention">▶ PLAY</button>
       <button type="button" id="pauseBtn">⏸ Hold</button>
       <button type="button" id="stepBtn">Step →</button>
       <button type="button" id="voiceBtn">🔊 Voice</button>
@@ -756,12 +762,12 @@
       });
     });
 
-    let current = 0, prevCurrent = 0, playing = true, timer = null;
+    let current = 0, prevCurrent = 0, playing = false, timer = null;
     let lastRenderedStep = -1;
     let voiceOn = true;
     let cyclesCompleted = 0;
     const MAX_CYCLES = 2;
-    let sessionIntroPending = true;
+    const INTRO_STEP_KEY = -999;
     let ringPositions = [];
     const INTERVAL = 5000;
     const VOICE_PAUSE = 600;
@@ -851,6 +857,16 @@
         || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     }
 
+    function isMobileDevice() {
+      return isMobileIOS()
+        || (window.matchMedia('(max-width: 768px)').matches && 'ontouchstart' in window);
+    }
+
+    function estimateSpeechMs(text) {
+      const words = String(text).split(/\s+/).filter(Boolean).length;
+      return Math.min(14000, Math.max(3200, words * 340 + 500));
+    }
+
     function resumeSpeech() {
       if (speechOk && typeof speechSynthesis.resume === 'function') {
         speechSynthesis.resume();
@@ -885,11 +901,7 @@
     }
 
     function narrationText(step) {
-      if (step.bulletIdx === 0) {
-        let line = `${step.phaseIntro} ${step.text}`;
-        if (sessionIntroPending && current === 0) line = `${MERIDIAN_INTRO} ${line}`;
-        return line;
-      }
+      if (step.bulletIdx === 0) return `${step.phaseIntro} ${step.text}`;
       return step.text;
     }
 
@@ -902,89 +914,75 @@
       setSpeaking(false);
     }
 
-    function speakHumanText(text, onDone, attempt = 0) {
-      if (!speechOk) { onDone?.(true); return; }
+    function queueSpeech(text, onDone) {
+      if (!speechOk || !voiceOn) { onDone?.(); return; }
       loadVoices();
       resumeSpeech();
-
       const chunks = splitSpeechChunks(text);
       let index = 0;
-      let started = false;
       let finished = false;
+      let started = false;
 
-      const complete = () => {
+      const finish = () => {
         if (finished) return;
         finished = true;
         setSpeaking(false);
-        onDone?.(started || index > 0);
+        onDone?.();
       };
 
-      const retry = () => {
-        if (finished || started) return;
-        if (attempt < 3) {
-          speakHumanText(text, onDone, attempt + 1);
-        } else {
-          complete();
-        }
-      };
-
-      if (attempt === 0 && (speechSynthesis.speaking || speechSynthesis.pending)) {
-        stopSpeech();
-      }
-
-      const speakNext = () => {
+      const speakOne = () => {
         if (finished || index >= chunks.length) {
-          complete();
+          finish();
           return;
         }
-        const chunk = chunks[index];
-        const u = new SpeechSynthesisUtterance(chunk);
+        const u = new SpeechSynthesisUtterance(chunks[index]);
         applyVoiceToUtterance(u);
-        u.onstart = () => {
-          started = true;
-          setSpeaking(true);
-          updateVoiceHint();
-        };
+        u.onstart = () => { started = true; setSpeaking(true); updateVoiceHint(); };
         u.onend = () => {
           index += 1;
-          started = true;
           if (index < chunks.length) {
-            setTimeout(speakNext, chunkPauseMs(chunk));
+            setTimeout(speakOne, isMobileIOS() ? 80 : chunkPauseMs(chunks[index - 1]));
           } else {
-            complete();
+            finish();
           }
         };
         u.onerror = () => {
           index += 1;
-          setTimeout(speakNext, isMobileIOS() ? 120 : 280);
+          if (index < chunks.length) setTimeout(speakOne, 120);
+          else finish();
         };
         speechSynthesis.speak(u);
+        if (index === 0) {
+          setTimeout(() => { if (!started && !finished) finish(); }, 6000);
+        }
       };
 
-      speakNext();
-      if (attempt === 0 && !isMobileIOS()) setTimeout(retry, 2800);
+      speakOne();
     }
 
-    function speakStep(step, onDone, attempt = 0) {
+    function speakStep(step, onDone) {
       const line = narrationText(step);
-      if (sessionIntroPending && current === 0 && step.bulletIdx === 0) sessionIntroPending = false;
+
       if (voiceOn && speechOk) {
-        const forward = stepForward(prevCurrent, current);
-        updateStageCaption(step, null, forward, true);
-        if (step.bulletIdx === 0) {
-          const prevPhase = STEPS[prevCurrent]?.phaseIndex;
-          if (prevPhase !== undefined && step.phaseIndex !== prevPhase) {
-            focusPhaseRing(step.phaseIndex, prevPhase, forward);
-          } else if (step.phaseIndex === 0 && lastFocusedPhase !== 0) {
-            lastFocusedPhase = 0;
-          }
+        queueSpeech(line, onDone);
+      } else {
+        onDone?.();
+      }
+
+      const forward = stepForward(prevCurrent, current);
+      updateStageCaption(step, null, forward, true);
+      if (step.bulletIdx === 0) {
+        const prevPhase = STEPS[prevCurrent]?.phaseIndex;
+        if (prevPhase !== undefined && step.phaseIndex !== prevPhase) {
+          focusPhaseRing(step.phaseIndex, prevPhase, forward);
+        } else if (step.phaseIndex === 0 && lastFocusedPhase !== 0) {
+          lastFocusedPhase = 0;
         }
       }
-      speakHumanText(line, (ok) => onDone?.(ok !== false), attempt);
     }
 
-    function speakPlainText(text, onDone, attempt = 0) {
-      speakHumanText(text, onDone, attempt);
+    function speakPlainText(text, onDone) {
+      queueSpeech(text, onDone);
     }
 
     let captionStepKey = null;
@@ -1138,6 +1136,13 @@
         hideConclusionUI();
         onDone?.();
       };
+      if (isMobileDevice()) {
+        if (voiceOn && speechOk) speakPlainText(MERIDIAN_CONCLUSION, () => {});
+        timer = setTimeout(finish, voiceOn && speechOk
+          ? estimateSpeechMs(MERIDIAN_CONCLUSION) + VOICE_PAUSE
+          : CONCLUSION_PAUSE_MS);
+        return;
+      }
       if (voiceOn && speechOk) {
         speakPlainText(MERIDIAN_CONCLUSION, () => {
           if (playing) timer = setTimeout(finish, VOICE_PAUSE);
@@ -1157,10 +1162,10 @@
         return;
       }
       if (!playing && document.getElementById('playBtn').classList.contains('attention')) {
-        el.textContent = 'Press PLAY to hear Meridian again — built by Ethio AI Solutions.';
+        el.textContent = 'Tap ▶ PLAY to start Meridian\'s walkthrough.';
         return;
       }
-      el.textContent = voiceOn ? 'Meridian is narrating — then the walkthrough advances automatically.' : 'Voice off — tap Voice to hear Meridian.';
+      el.textContent = voiceOn ? 'Meridian is narrating — then the walkthrough advances automatically.' : 'Voice off — tap Voice to turn narration back on.';
     }
 
     function ringDims(board) {
@@ -1363,6 +1368,21 @@
           <text x="60" y="60" text-anchor="middle" fill="#7d92ab" font-size="7">BANK</text>
           <text x="140" y="60" text-anchor="middle" fill="${c}" font-size="9" font-weight="700">$$$</text>
         </g>`,
+        'meridian-intro': `<g>
+          <circle cx="100" cy="48" r="30" fill="rgba(16,255,176,0.12)" stroke="${c}" stroke-width="1.5" class="anim-wave"/>
+          <circle cx="100" cy="48" r="20" fill="rgba(16,255,176,0.22)" stroke="${c}"/>
+          <text x="100" y="54" text-anchor="middle" fill="${c}" font-size="16" font-weight="700">M</text>
+          <g>
+            <rect x="68" y="78" width="5" height="10" rx="2" fill="${c}" opacity="0.45" class="anim-wave"/>
+            <rect x="78" y="72" width="5" height="22" rx="2" fill="${c}" opacity="0.65" class="anim-wave" style="animation-delay:0.15s"/>
+            <rect x="88" y="66" width="5" height="34" rx="2" fill="${c}" class="anim-wave" style="animation-delay:0.3s"/>
+            <rect x="98" y="62" width="5" height="42" rx="2" fill="${c}" class="anim-wave" style="animation-delay:0.45s"/>
+            <rect x="108" y="66" width="5" height="34" rx="2" fill="${c}" class="anim-wave" style="animation-delay:0.3s"/>
+            <rect x="118" y="72" width="5" height="22" rx="2" fill="${c}" opacity="0.65" class="anim-wave" style="animation-delay:0.15s"/>
+            <rect x="128" y="78" width="5" height="10" rx="2" fill="${c}" opacity="0.45" class="anim-wave"/>
+          </g>
+          <text x="100" y="102" text-anchor="middle" fill="#7d92ab" font-size="7">MERIDIAN · AI AGENT</text>
+        </g>`,
       };
       return scenes[animId] || scenes.waitlist;
     }
@@ -1413,6 +1433,8 @@
 
     function updateVisualStage(step) {
       const viewport = document.getElementById('sceneViewport');
+      if (!playing && lastRenderedStep === INTRO_STEP_KEY) return;
+
       const forward = stepForward(prevCurrent, current);
       const changed = lastRenderedStep !== current;
       const existing = viewport.querySelector('.scene-slide.is-current');
@@ -1455,6 +1477,31 @@
         if (e.propertyName === 'transform') cleanup();
       }, { once: true });
       setTimeout(cleanup, SCENE_MS + 150);
+    }
+
+    function showIntroStage() {
+      const viewport = document.getElementById('sceneViewport');
+      const cap = document.getElementById('stageCaption');
+      if (cap) cap.style.setProperty('--cap-color', '#10ffb0');
+      document.getElementById('stageBg').style.background = phaseBg.green;
+
+      updateStageCaption(
+        STEPS[0],
+        'Hi — I\'m Meridian, your AI guide for Hibret Edir.',
+        true,
+        false,
+        { phase: 'Meet Meridian', step: 'Ethio AI Solutions' },
+      );
+
+      if (lastRenderedStep === INTRO_STEP_KEY && viewport.querySelector('.scene-slide.is-current')) return;
+
+      viewport.innerHTML = '';
+      const slide = document.createElement('div');
+      slide.className = 'scene-slide is-current';
+      slide.style.setProperty('--slide-glow', hexToGlow('#10ffb0', 0.4));
+      slide.innerHTML = `<div class="scene-slide-inner"><svg viewBox="0 0 200 110" aria-hidden="true">${renderSubScene('meridian-intro', '#10ffb0')}</svg></div>`;
+      viewport.appendChild(slide);
+      lastRenderedStep = INTRO_STEP_KEY;
     }
 
     function buildBulletHtml(step) {
@@ -1530,6 +1577,8 @@
       const step = STEPS[current];
       const pi = step.phaseIndex;
       const lastBullet = step.bulletIdx === step.phaseBullets.length - 1;
+      const stepChanged = prevCurrent !== current;
+      const forward = stepForward(prevCurrent, current);
 
       document.querySelectorAll('.ring-node').forEach((el, i) => {
         el.classList.toggle('active', i === pi);
@@ -1564,13 +1613,11 @@
       const card = document.getElementById('terminalCard');
       card.className = 'terminal glow-' + step.phase;
 
-      const stepChanged = prevCurrent !== current;
-      const forward = stepForward(prevCurrent, current);
       updateTerminalBody(step, stepChanged, forward);
 
       document.getElementById('terminalTitle').textContent = `phase.${step.num} · ${step.bulletIdx + 1}/${step.phaseBullets.length}`;
       document.getElementById('progressFill').style.width = `${((current + 1) / STEPS.length) * 100}%`;
-      if (!voiceOn || !speechOk) {
+      if (playing && (!voiceOn || !speechOk)) {
         updateStageCaption(step, null, forward, stepChanged);
         if (stepChanged && step.bulletIdx === 0) {
           const prevPhase = STEPS[prevCurrent]?.phaseIndex;
@@ -1612,9 +1659,12 @@
 
     function setPlaying(on) {
       playing = on;
-      document.getElementById('playBtn').classList.toggle('on', on);
+      const playBtn = document.getElementById('playBtn');
+      playBtn.classList.toggle('on', on);
       document.getElementById('pauseBtn').classList.toggle('on', !on);
-      if (on) setPlayAttention(false);
+      if (on) {
+        playBtn.classList.remove('attention');
+      }
       if (!on) { clearSchedule(); stopSpeech(); }
     }
 
@@ -1638,6 +1688,7 @@
           if (cyclesCompleted >= MAX_CYCLES) {
             cyclesCompleted = 0;
             setPlaying(false);
+            showIntroStage();
             setPlayAttention(true);
             updateVoiceHint();
             return;
@@ -1652,44 +1703,99 @@
     }
 
     function armTimer() {
-      if (timer) clearTimeout(timer);
-      timer = null;
+      clearSchedule();
+      stopSpeech();
       if (!playing) return;
-      if (voiceOn && speechOk) {
-        if (speechSynthesis.speaking || speechSynthesis.pending) {
-          speechSynthesis.cancel();
+      const step = STEPS[current];
+      const line = narrationText(step);
+      const forward = stepForward(prevCurrent, current);
+      const stepChanged = prevCurrent !== current || lastRenderedStep === INTRO_STEP_KEY;
+
+      updateStageCaption(step, null, forward, stepChanged);
+      if (step.bulletIdx === 0) {
+        const prevPhase = STEPS[prevCurrent]?.phaseIndex;
+        if (prevPhase !== undefined && step.phaseIndex !== prevPhase) {
+          focusPhaseRing(step.phaseIndex, prevPhase, forward);
+        } else if (step.phaseIndex === 0 && lastFocusedPhase !== 0 && stepChanged) {
+          lastFocusedPhase = 0;
         }
-        speakStep(STEPS[current], () => {
-          if (!playing) return;
-          timer = setTimeout(advanceStep, VOICE_PAUSE);
-        });
+      }
+
+      const afterSpeech = () => {
+        if (!playing) return;
+        timer = setTimeout(advanceStep, VOICE_PAUSE);
+      };
+
+      if (isMobileDevice()) {
+        if (voiceOn && speechOk) queueSpeech(line, () => {});
+        timer = setTimeout(advanceStep, voiceOn && speechOk ? estimateSpeechMs(line) : INTERVAL);
+        return;
+      }
+
+      if (voiceOn && speechOk) {
+        queueSpeech(line, afterSpeech);
       } else {
         timer = setTimeout(advanceStep, INTERVAL);
       }
     }
 
-    function goTo(i) { prevCurrent = current; current = i; render(); armTimer(); }
-    function startFromStep(i) { setPlaying(true); goTo(i); }
-    function playShowcase() {
-      cyclesCompleted = 0;
-      sessionIntroPending = true;
-      captionStepKey = null;
-      lastFocusedPhase = -1;
-      hideConclusionUI();
-      setPlayAttention(false);
-      clearSchedule();
-      setPlaying(true);
+    function beginWalkthroughSteps() {
+      if (!playing) return;
       prevCurrent = 0;
       current = 0;
-      resumeSpeech();
+      lastRenderedStep = -1;
+      captionStepKey = null;
       render();
       armTimer();
     }
 
+    let playTapLock = false;
+    function playShowcase(evt) {
+      evt?.preventDefault?.();
+      if (playTapLock) return;
+      playTapLock = true;
+      setTimeout(() => { playTapLock = false; }, 500);
+
+      stopSpeech();
+      voiceOn = true;
+      playing = true;
+
+      if (voiceOn && speechOk) {
+        loadVoices();
+        resumeSpeech();
+        queueSpeech(MERIDIAN_INTRO, beginWalkthroughSteps);
+      }
+
+      clearSchedule();
+      cyclesCompleted = 0;
+      captionStepKey = null;
+      lastFocusedPhase = -1;
+      hideConclusionUI();
+      document.getElementById('voiceBtn').classList.add('voice-on');
+      setPlayAttention(false);
+      document.getElementById('playBtn').classList.add('on');
+      document.getElementById('pauseBtn').classList.remove('on');
+
+      showIntroStage();
+
+      if (!voiceOn || !speechOk) {
+        timer = setTimeout(beginWalkthroughSteps, 2800);
+      }
+
+      updateVoiceHint();
+    }
+
+    function goTo(i) { prevCurrent = current; current = i; lastRenderedStep = -1; render(); armTimer(); }
+    function startFromStep(i) { setPlaying(true); goTo(i); }
+
     document.getElementById('playBtn').addEventListener('click', playShowcase);
+    document.getElementById('playBtn').addEventListener('touchend', playShowcase, { passive: false });
     document.getElementById('pauseBtn').addEventListener('click', () => { setPlaying(false); render(); });
     document.getElementById('stepBtn').addEventListener('click', () => { clearSchedule(); stopSpeech(); advanceStep(); });
-    document.getElementById('voiceBtn').addEventListener('click', () => setVoice(!voiceOn));
+    document.getElementById('voiceBtn').addEventListener('click', () => {
+      if (!playing) { playShowcase(); return; }
+      setVoice(!voiceOn);
+    });
     document.getElementById('speakBtn').addEventListener('click', () => speakStep(STEPS[current]));
 
     let resizeT;
@@ -1700,13 +1806,17 @@
       buildSectionJumps();
       buildRing();
       playing = false;
+      current = 0;
+      prevCurrent = 0;
       document.getElementById('playBtn').classList.remove('on');
+      setPlayAttention(true);
+      showIntroStage();
       render();
+      updateVoiceHint();
       waitForVoices().then(() => {
         resumeSpeech();
         loadVoices();
         updateVoiceHint();
-        setPlayAttention(true);
       });
     }
     bootShowcase();
