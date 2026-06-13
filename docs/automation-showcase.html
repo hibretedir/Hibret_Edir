@@ -155,6 +155,50 @@
       .diagram-area { min-height: 360px !important; }
     }
 
+    @media (max-width: 640px) {
+      .page { padding: 18px 14px 44px; }
+      header { margin-bottom: 14px; }
+      h1 { font-size: 1.55rem; margin-bottom: 8px; }
+      .subtitle { font-size: 0.84rem; line-height: 1.45; max-width: 100%; }
+      .voice-hint { margin: 8px 0 6px; font-size: 0.62rem; }
+      .controls { gap: 8px; margin-bottom: 10px; }
+      .controls button { padding: 8px 14px; font-size: 0.62rem; }
+      .section-jumps { margin: 8px auto 10px; gap: 10px; }
+      .section-jump-item { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+      .section-jump-label {
+        font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.1em;
+        color: var(--muted); max-width: 72px; text-align: center; line-height: 1.2;
+      }
+      .progress-wrap { margin-bottom: 16px; }
+      .workflow-main { scroll-margin-top: 10px; }
+      .scroll-hint { display: flex; }
+    }
+
+    .section-jump-item { display: contents; }
+    .section-jump-label { display: none; }
+    @media (max-width: 640px) {
+      .section-jump-item { display: flex; }
+      .section-jump-label { display: block; }
+    }
+
+    .scroll-hint {
+      display: none; flex-direction: column; align-items: center; gap: 4px;
+      margin: 0 auto 12px; color: var(--muted); font-size: 0.68rem;
+      letter-spacing: 0.04em; transition: opacity 0.4s ease;
+    }
+    .scroll-hint.hidden { opacity: 0; pointer-events: none; }
+    .scroll-hint-chevron {
+      font-size: 1.1rem; line-height: 1;
+      animation: scrollHintBounce 1.8s ease-in-out infinite;
+    }
+    @keyframes scrollHintBounce {
+      0%, 100% { transform: translateY(0); opacity: 0.55; }
+      50% { transform: translateY(7px); opacity: 1; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .scroll-hint-chevron { animation: none; }
+    }
+
     /* Ring diagram — compact accent */
     .diagram-area {
       position: relative; display: flex; align-items: center; justify-content: center;
@@ -552,6 +596,10 @@
       <button type="button" id="speakBtn">🔈 Speak</button>
     </div>
     <div class="section-jumps" id="sectionJumps"></div>
+    <div class="scroll-hint" id="scrollHint" aria-hidden="true">
+      <span class="scroll-hint-text">Explore the three workflows</span>
+      <span class="scroll-hint-chevron">↓</span>
+    </div>
     <div class="progress-wrap"><div class="progress-bar"><div class="fill" id="progressFill"></div></div></div>
 
     <div class="workflow-main">
@@ -1328,13 +1376,21 @@
       const el = document.getElementById('sectionJumps');
       el.innerHTML = '';
       PHASES.forEach((p) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'section-jump-item';
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.textContent = p.num;
         btn.title = p.title;
+        btn.setAttribute('aria-label', `${p.num}. ${p.title}`);
         btn.style.cssText = `border-color:${p.color};background:${p.color}28;color:#fff;box-shadow:0 0 16px ${p.color}33`;
         btn.addEventListener('click', () => startSection(p.num));
-        el.appendChild(btn);
+        const lbl = document.createElement('span');
+        lbl.className = 'section-jump-label';
+        lbl.textContent = p.label;
+        wrap.appendChild(btn);
+        wrap.appendChild(lbl);
+        el.appendChild(wrap);
       });
     }
 
@@ -1416,11 +1472,65 @@
     let resizeT;
     window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { buildRing(); render(); }, 120); });
 
+    let introScrollFrame = null;
+    let introScrollCancelled = false;
+
+    function hideScrollHint() {
+      document.getElementById('scrollHint')?.classList.add('hidden');
+    }
+
+    function cancelIntroScroll() {
+      introScrollCancelled = true;
+      if (introScrollFrame) cancelAnimationFrame(introScrollFrame);
+      introScrollFrame = null;
+    }
+
+    function easeInOutQuad(t) {
+      return t < 0.5 ? 2 * t * t : 1 - ((-2 * t + 2) ** 2) / 2;
+    }
+
+    function gentleScrollTo(targetY, duration = 3200) {
+      const startY = window.scrollY;
+      const distance = targetY - startY;
+      if (Math.abs(distance) < 36) return;
+      const startTime = performance.now();
+      const step = (now) => {
+        if (introScrollCancelled) return;
+        const t = Math.min(1, (now - startTime) / duration);
+        window.scrollTo(0, startY + distance * easeInOutQuad(t));
+        if (t < 1) introScrollFrame = requestAnimationFrame(step);
+        else introScrollFrame = null;
+      };
+      introScrollFrame = requestAnimationFrame(step);
+    }
+
+    function initMobileDiscoverability() {
+      if (!window.matchMedia('(max-width: 640px)').matches) return;
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+      const target = document.querySelector('.section-jumps') || document.querySelector('.workflow-main');
+      if (!target) return;
+
+      window.addEventListener('scroll', () => {
+        hideScrollHint();
+        cancelIntroScroll();
+      }, { passive: true });
+
+      window.addEventListener('touchstart', cancelIntroScroll, { passive: true });
+
+      setTimeout(() => {
+        if (introScrollCancelled || window.scrollY > 20) return;
+        const top = target.getBoundingClientRect().top + window.scrollY - 8;
+        gentleScrollTo(top, 3400);
+      }, 1400);
+    }
+
     function bootShowcase() {
       setVoice(true);
       buildSectionJumps();
       buildRing();
       render();
+      initMobileDiscoverability();
       waitForVoices().then(() => {
         if (speechOk) speechSynthesis.resume();
         loadVoices();
