@@ -184,9 +184,6 @@
       .detail-body { display: none; }
       .visual-stage { height: 200px; border-bottom: none; }
       .stage-caption { padding: 10px 12px 12px; }
-      .workflow-main.mobile-walkthrough-focus .diagram-area {
-        display: none;
-      }
     }
 
     .stage-caption {
@@ -865,11 +862,6 @@
         || (window.matchMedia('(max-width: 768px)').matches && 'ontouchstart' in window);
     }
 
-    function setMobileWalkthroughFocus(on) {
-      document.querySelector('.workflow-main')
-        ?.classList.toggle('mobile-walkthrough-focus', on && isMobileDevice());
-    }
-
     function scheduleSpeechAdvance(onDone, line) {
       let done = false;
       const finish = () => {
@@ -1021,7 +1013,6 @@
 
     function scrollMobileToTop() {
       if (!isMobileDevice()) return;
-      setMobileWalkthroughFocus(false);
       const go = () => {
         window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
         document.documentElement.scrollTop = 0;
@@ -1035,7 +1026,6 @@
     function scrollMobileWalkthroughIntoView() {
       if (!playing) return;
       if (!isMobileDevice()) return;
-      setMobileWalkthroughFocus(true);
       const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       const behavior = reduced ? 'auto' : 'smooth';
 
@@ -1044,12 +1034,15 @@
         const builder = document.getElementById('builderBanner');
         if (!bar || !builder) return 0;
         const viewH = window.innerHeight;
-        const builderBottom = builder.getBoundingClientRect().bottom + window.scrollY;
-        const barTop = bar.getBoundingClientRect().top + window.scrollY;
-        const yForBuilder = builderBottom - viewH + 14;
-        const yForBar = barTop - 8;
-        if (yForBar >= yForBuilder) return Math.max(0, yForBar);
-        return Math.max(0, yForBuilder);
+        const scrollY = window.scrollY;
+        const barTop = bar.getBoundingClientRect().top + scrollY;
+        const builderTop = builder.getBoundingClientRect().top + scrollY;
+        const builderBottom = builder.getBoundingClientRect().bottom + scrollY;
+        let y = Math.max(0, barTop - 8);
+        if (builderTop > y + viewH - 12) {
+          y = Math.max(0, builderBottom - viewH + 14);
+        }
+        return y;
       };
 
       const scrollOnce = () => {
@@ -1059,6 +1052,7 @@
       scrollOnce();
       requestAnimationFrame(() => requestAnimationFrame(scrollOnce));
       setTimeout(scrollOnce, 400);
+      setTimeout(scrollOnce, 900);
     }
 
     function focusPhaseRing(phaseIndex, fromPhaseIndex, forward = true) {
@@ -1739,7 +1733,6 @@
       current = 0;
       cyclesCompleted++;
       lastFocusedPhase = -1;
-      setMobileWalkthroughFocus(false);
       render();
       scrollMobileToTop();
       if (cyclesCompleted >= MAX_CYCLES) {

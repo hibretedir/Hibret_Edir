@@ -184,9 +184,6 @@
       .detail-body { display: none; }
       .visual-stage { height: 200px; border-bottom: none; }
       .stage-caption { padding: 10px 12px 12px; }
-      .workflow-main.mobile-walkthrough-focus .diagram-area {
-        display: none;
-      }
     }
 
     .stage-caption {
@@ -865,11 +862,6 @@
         || (window.matchMedia('(max-width: 768px)').matches && 'ontouchstart' in window);
     }
 
-    function setMobileWalkthroughFocus(on) {
-      document.querySelector('.workflow-main')
-        ?.classList.toggle('mobile-walkthrough-focus', on && isMobileDevice());
-    }
-
     function scheduleSpeechAdvance(onDone, line) {
       let done = false;
       const finish = () => {
@@ -1021,7 +1013,6 @@
 
     function scrollMobileToTop() {
       if (!isMobileDevice()) return;
-      setMobileWalkthroughFocus(false);
       const go = () => {
         window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
         document.documentElement.scrollTop = 0;
