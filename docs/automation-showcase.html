@@ -3,291 +3,1433 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Automated Membership Onboarding — Hibret Edir Platform</title>
-  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <meta name="description" content="Meridian — AI agent built by Ethio AI Solutions for Hibret Edir. Onboarding, memorials, invoicing, and payouts.">
+  <title>Meridian — AI Agent for Hibret Edir</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #0f1419;
-      --surface: #1a2332;
-      --text: #e8ecf1;
-      --muted: #8b9cb3;
-      --gold: #d4a853;
-      --gold-dim: rgba(212, 168, 83, 0.15);
-      --green: #3dd68c;
-      --line: #2a3544;
+      --bg: #030508;
+      --text: #f0f4fa;
+      --muted: #7d92ab;
+      --green: #10ffb0;
+      --yellow: #ffd020;
+      --red: #ff5566;
+      --phase-green: #10ffb0;
+      --phase-yellow: #ffd020;
+      --phase-red: #ff5566;
+      --glass: rgba(12, 18, 28, 0.72);
+      --glass-border: rgba(255, 255, 255, 0.08);
     }
-    * { box-sizing: border-box; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      margin: 0;
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-      line-height: 1.6;
+      font-family: 'Outfit', system-ui, sans-serif;
+      background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden;
     }
-    .hero {
-      padding: 56px 24px 48px;
-      text-align: center;
-      background: linear-gradient(180deg, #1a2332 0%, var(--bg) 100%);
-      border-bottom: 1px solid var(--line);
+
+    /* Ambient layers */
+    .ambient { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+    .orb {
+      position: absolute; border-radius: 50%; filter: blur(80px);
+      animation: orbFloat 14s ease-in-out infinite;
     }
-    .hero h1 {
-      font-size: clamp(1.75rem, 4vw, 2.5rem);
-      font-weight: 700;
-      margin: 0 0 12px;
-      letter-spacing: -0.02em;
+    .orb-g { width: 500px; height: 500px; background: rgba(16,255,176,0.22); top: -10%; left: -8%; }
+    .orb-y { width: 450px; height: 450px; background: rgba(255,208,32,0.18); top: 35%; right: -10%; animation-delay: -5s; }
+    .orb-r { width: 420px; height: 420px; background: rgba(255,85,102,0.2); bottom: 0%; left: 20%; animation-delay: -9s; }
+    @keyframes orbFloat {
+      0%, 100% { transform: translate(0, 0) scale(1); }
+      33% { transform: translate(24px, -18px) scale(1.06); }
+      66% { transform: translate(-16px, 12px) scale(0.96); }
     }
-    .hero p {
-      max-width: 640px;
-      margin: 0 auto;
-      color: var(--muted);
-      font-size: 1.05rem;
+    .grid-floor {
+      position: absolute; inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+      background-size: 40px 40px;
+      mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, black 20%, transparent 75%);
     }
-    .badge {
-      display: inline-block;
-      font-size: 0.75rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--gold);
-      background: var(--gold-dim);
-      padding: 6px 14px;
-      border-radius: 999px;
-      margin-bottom: 20px;
+    .vignette {
+      position: absolute; inset: 0;
+      background: radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(3,5,8,0.85) 100%);
     }
-    main { max-width: 960px; margin: 0 auto; padding: 40px 24px 80px; }
-    section { margin-bottom: 48px; }
-    h2 {
-      font-size: 1.25rem;
-      color: var(--gold);
-      margin: 0 0 20px;
-      font-weight: 600;
+
+    .page { position: relative; z-index: 1; max-width: 1340px; margin: 0 auto; padding: 36px 18px 56px; }
+
+    header { text-align: center; margin-bottom: 28px; }
+    .eyebrow {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.62rem;
+      letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--green); margin-bottom: 12px;
+      padding: 6px 14px; border-radius: 999px;
+      background: rgba(16,255,176,0.1); border: 1px solid rgba(16,255,176,0.35);
     }
-    .cards {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-      gap: 16px;
+    .eyebrow::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 10px var(--green); animation: blink 2s ease infinite; }
+    @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.35; } }
+    h1 {
+      font-size: clamp(1.75rem, 4.5vw, 2.75rem); font-weight: 700;
+      letter-spacing: -0.03em; line-height: 1.1; margin-bottom: 10px;
+      background: linear-gradient(135deg, #fff 0%, #a8c4e0 50%, var(--green) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
     }
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 20px 22px;
+    .subtitle { color: var(--muted); font-size: 0.95rem; max-width: 520px; margin: 0 auto; line-height: 1.55; }
+
+    .voice-hint { font-size: 0.7rem; color: var(--muted); text-align: center; margin: 18px 0 10px; opacity: 0.85; }
+
+    .controls {
+      display: flex; justify-content: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap;
     }
-    .card h3 { margin: 0 0 8px; font-size: 1rem; }
-    .card p { margin: 0; font-size: 0.9rem; color: var(--muted); }
-    .diagram {
-      background: var(--surface);
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      padding: 24px 16px;
-      overflow-x: auto;
+    .controls button {
+      font-family: 'JetBrains Mono', monospace; font-size: 0.68rem; font-weight: 500;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      background: var(--glass); border: 1px solid var(--glass-border);
+      color: var(--muted); padding: 10px 18px; border-radius: 999px;
+      cursor: pointer; backdrop-filter: blur(12px);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    .diagram h3 {
-      margin: 0 0 16px;
-      font-size: 0.85rem;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--muted);
-      padding: 0 8px;
+    .controls button:hover { color: var(--text); border-color: rgba(255,255,255,0.2); transform: translateY(-1px); }
+    .controls button.on {
+      border-color: var(--green); color: var(--green);
+      background: rgba(52,211,153,0.12); box-shadow: 0 0 24px rgba(52,211,153,0.2);
     }
-    .trigger {
-      border-left: 3px solid var(--gold);
-      padding-left: 16px;
-      margin-bottom: 28px;
+    .controls #playBtn.on {
+      background: linear-gradient(135deg, rgba(16,255,176,0.28), rgba(16,255,176,0.08));
+      box-shadow: 0 4px 24px rgba(16,255,176,0.28), inset 0 1px 0 rgba(255,255,255,0.1);
     }
-    .trigger-title { font-weight: 600; margin-bottom: 4px; }
-    .trigger-desc { color: var(--muted); font-size: 0.9rem; margin-bottom: 12px; }
-    ul.auto { margin: 0; padding-left: 1.2rem; color: var(--muted); font-size: 0.9rem; }
-    ul.auto li { margin-bottom: 6px; }
-    ul.auto li::marker { color: var(--green); }
-    .stack {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      margin-top: 24px;
+    .controls #playBtn.attention {
+      border-color: var(--green); color: var(--green);
+      background: linear-gradient(135deg, rgba(16,255,176,0.22), rgba(16,255,176,0.06));
+      animation: playGlowPulse 1.8s ease-in-out infinite;
     }
-    .stack span {
-      font-size: 0.78rem;
-      background: var(--surface);
-      border: 1px solid var(--line);
-      padding: 6px 12px;
-      border-radius: 6px;
-      color: var(--muted);
+    @keyframes playGlowPulse {
+      0%, 100% {
+        box-shadow: 0 0 14px rgba(16,255,176,0.25);
+        transform: scale(1);
+      }
+      50% {
+        box-shadow: 0 0 36px rgba(16,255,176,0.7), 0 0 56px rgba(16,255,176,0.3);
+        transform: scale(1.05);
+      }
     }
+    .controls button.voice-on { border-color: #a78bfa; color: #c4b5fd; background: rgba(167,139,250,0.12); box-shadow: 0 0 20px rgba(167,139,250,0.2); }
+    .controls button.speaking { animation: voicePulse 1s ease-in-out infinite; box-shadow: 0 0 20px rgba(52,211,153,0.4); }
+    @keyframes voicePulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+    .section-jumps { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; margin: 12px auto 16px; }
+    .section-jumps button {
+      width: 48px; height: 48px; border-radius: 50%; border: 2px solid;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; font-weight: 700;
+      cursor: pointer; color: #fff; backdrop-filter: blur(8px);
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .section-jumps button:hover { transform: scale(1.15) translateY(-2px); }
+    .section-jumps button.active { transform: scale(1.2); box-shadow: 0 0 20px currentColor, 0 0 40px currentColor; }
+
+    .progress-wrap { max-width: 720px; margin: 0 auto 24px; }
+    .progress-bar {
+      height: 4px; background: rgba(255,255,255,0.06); border-radius: 4px; overflow: hidden;
+      box-shadow: inset 0 1px 3px rgba(0,0,0,0.4);
+    }
+    .progress-bar .fill {
+      height: 100%; width: 0%; border-radius: 4px;
+      background: linear-gradient(90deg, var(--phase-green), var(--phase-yellow), var(--phase-red));
+      box-shadow: 0 0 12px rgba(52,211,153,0.5);
+      transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+    }
+    .progress-bar .fill::after {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+      animation: shimmer 2s ease-in-out infinite;
+    }
+    @keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(200%); } }
+
+    .workflow-main {
+      display: grid; grid-template-columns: minmax(260px, 0.75fr) minmax(460px, 1.35fr);
+      gap: 24px; align-items: center;
+    }
+    @media (max-width: 1000px) {
+      .workflow-main { grid-template-columns: 1fr; }
+      .terminal-panel { order: -1; position: static !important; }
+      .diagram-area { min-height: 360px !important; }
+    }
+
+    /* Ring diagram — compact accent */
+    .diagram-area {
+      position: relative; display: flex; align-items: center; justify-content: center;
+      min-height: 420px; padding: 8px 0; opacity: 0.92;
+    }
+    .ring-board { position: relative; margin: 0 auto; }
+    .ring-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+
+    .ring-center {
+      position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+      z-index: 1; pointer-events: none; text-align: center;
+      width: 84px; height: 84px; border-radius: 50%;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: var(--glass); border: 1px solid var(--glass-border);
+      backdrop-filter: blur(16px);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08);
+    }
+    .ring-center .rc-num {
+      font-family: 'JetBrains Mono', monospace; font-size: 1.5rem; font-weight: 700;
+      line-height: 1; transition: color 0.5s, text-shadow 0.5s;
+    }
+    .ring-center .rc-lbl {
+      font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.14em;
+      color: var(--muted); margin-top: 2px;
+    }
+    .ring-center .rc-phase {
+      font-size: 0.5rem; text-transform: uppercase; letter-spacing: 0.1em;
+      margin-top: 4px; font-weight: 600; opacity: 0.8;
+    }
+
+    .ring-node {
+      position: absolute; z-index: 3; transform: translate(-50%, -50%);
+      cursor: pointer; border: none; background: transparent; padding: 0;
+      display: flex; flex-direction: column; align-items: center; gap: 8px;
+    }
+    .ring-node .node-body {
+      position: relative; width: 76px; height: 76px; border-radius: 20px;
+      background: linear-gradient(145deg, rgba(20,28,42,0.95), rgba(8,12,20,0.98));
+      border: 2px solid rgba(255,255,255,0.1);
+      display: flex; align-items: center; justify-content: center;
+      transition: all 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+    }
+    .ring-node .node-body::before {
+      content: ''; position: absolute; inset: -2px; border-radius: inherit; opacity: 0;
+      background: linear-gradient(135deg, var(--node-color), transparent 60%);
+      transition: opacity 0.4s; z-index: -1;
+    }
+    .ring-node.circle .node-body { border-radius: 50%; width: 64px; height: 64px; }
+    .ring-node .ico { font-size: 1.25rem; filter: drop-shadow(0 2px 6px rgba(0,0,0,0.35)); }
+    .ring-node .lbl {
+      font-size: 0.58rem; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--muted); text-align: center;
+      max-width: 76px; line-height: 1.2; transition: color 0.35s, text-shadow 0.35s;
+    }
+    .ring-node .sec-num {
+      position: absolute; top: -6px; right: -6px; z-index: 2;
+      width: 22px; height: 22px; border-radius: 50%;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; font-weight: 700;
+      display: flex; align-items: center; justify-content: center; color: #0a0f14;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+    .ring-node:hover .node-body { transform: translateY(-3px) scale(1.05); }
+    .ring-node.done .node-body { opacity: 0.45; border-color: rgba(52,211,153,0.4); }
+    .ring-node.done .lbl { opacity: 0.5; }
+    .ring-node.active .node-body {
+      border-color: var(--node-color);
+      transform: scale(1.14) translateY(-4px);
+      box-shadow: 0 0 30px var(--glow), 0 0 60px var(--glow), 0 12px 28px rgba(0,0,0,0.45);
+      animation: nodeFloat 2.5s ease-in-out infinite;
+    }
+    .ring-node.active .node-body::before { opacity: 0.35; }
+    .ring-node.active .lbl { color: var(--text); text-shadow: 0 0 12px var(--glow); }
+    .ring-node.active::after {
+      content: ''; position: absolute; width: 76px; height: 76px; border-radius: 20px;
+      border: 2px solid var(--node-color); top: 0; left: 50%; transform: translateX(-50%);
+      animation: ringRipple 2s ease-out infinite; pointer-events: none;
+    }
+    .ring-node.circle.active::after { border-radius: 50%; width: 84px; height: 84px; }
+    @keyframes nodeFloat {
+      0%, 100% { transform: scale(1.14) translateY(-4px); }
+      50% { transform: scale(1.16) translateY(-8px); }
+    }
+    @keyframes ringRipple {
+      0% { transform: translateX(-50%) scale(1); opacity: 0.6; }
+      100% { transform: translateX(-50%) scale(1.6); opacity: 0; }
+    }
+
+    .wire { fill: none; stroke: rgba(255,255,255,0.06); stroke-width: 2; stroke-linecap: round; }
+    .wire-glow {
+      fill: none; stroke-width: 4; stroke-linecap: round; opacity: 0;
+      filter: url(#glow-filter); pointer-events: none;
+    }
+    .wire-glow.lit { opacity: 0.45; }
+    .wire-glow.flowing {
+      opacity: 1; stroke-dasharray: 10 14;
+      animation: flowGlow 0.5s linear infinite;
+      filter: url(#glow-filter-strong);
+    }
+    @keyframes flowGlow { to { stroke-dashoffset: -24; } }
+
+    .orbit-spin {
+      transform-origin: center;
+      animation: slowSpin 120s linear infinite;
+    }
+    @keyframes slowSpin { to { transform: rotate(360deg); } }
+
+    /* Detail panel — primary focus */
+    .terminal-panel { position: sticky; top: 20px; min-width: 0; }
+    .terminal-side-label {
+      font-family: 'JetBrains Mono', monospace; font-size: 0.65rem;
+      text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); margin-bottom: 10px;
+    }
+    .terminal {
+      position: relative;
+      background: var(--glass); border: 1px solid var(--glass-border);
+      border-radius: 20px; overflow: hidden;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 20px 56px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08);
+      transition: box-shadow 1.1s cubic-bezier(0.25, 0.8, 0.25, 1), border-color 1.1s cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+    .terminal::after {
+      content: ''; position: absolute; inset: 0; border-radius: inherit;
+      pointer-events: none; z-index: 4; opacity: 0;
+      box-shadow: inset 0 0 50px var(--pulse-glow, rgba(16,255,176,0.2)), 0 0 40px var(--pulse-glow, rgba(16,255,176,0.15));
+    }
+    .terminal.card-pulse::after { animation: cardGlowPulse 1.4s cubic-bezier(0.25, 0.8, 0.25, 1); }
+    @keyframes cardGlowPulse {
+      0% { opacity: 0; }
+      35% { opacity: 1; }
+      100% { opacity: 0; }
+    }
+    .terminal.glow-green { box-shadow: 0 20px 56px rgba(0,0,0,0.5), 0 0 56px rgba(16,255,176,0.2), inset 0 0 36px rgba(16,255,176,0.04); border-color: rgba(16,255,176,0.22); }
+    .terminal.glow-yellow { box-shadow: 0 20px 56px rgba(0,0,0,0.5), 0 0 56px rgba(255,208,32,0.2), inset 0 0 36px rgba(255,208,32,0.04); border-color: rgba(255,208,32,0.22); }
+    .terminal.glow-red { box-shadow: 0 20px 56px rgba(0,0,0,0.5), 0 0 56px rgba(255,85,102,0.2), inset 0 0 36px rgba(255,85,102,0.04); border-color: rgba(255,85,102,0.22); }
+
+    .terminal-bar {
+      display: flex; align-items: center; gap: 8px; padding: 12px 18px;
+      background: rgba(0,0,0,0.35); border-bottom: 1px solid var(--glass-border);
+      font-family: 'JetBrains Mono', monospace; font-size: 0.62rem; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.08em;
+    }
+    .terminal-bar .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .terminal-bar .dot.r { background: var(--red); box-shadow: 0 0 6px var(--red); }
+    .terminal-bar .dot.y { background: var(--yellow); box-shadow: 0 0 6px var(--yellow); }
+    .terminal-bar .dot.g { background: var(--green); box-shadow: 0 0 6px var(--green); }
+
+    .visual-stage {
+      position: relative; height: 220px; overflow: hidden;
+      border-bottom: 1px solid var(--glass-border);
+      --glow-c: rgba(16,255,176,0.4);
+      transition: box-shadow 1s cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+    .visual-stage.is-transitioning {
+      box-shadow: inset 0 0 40px color-mix(in srgb, var(--glow-c) 25%, transparent);
+    }
+    .visual-stage .stage-bg {
+      position: absolute; inset: 0; opacity: 0.5;
+      transition: background 1.2s cubic-bezier(0.25, 0.8, 0.25, 1), opacity 0.8s ease;
+    }
+    .visual-stage .stage-glow {
+      position: absolute; inset: -30%; z-index: 1; pointer-events: none;
+      background: radial-gradient(ellipse at 50% 55%, var(--glow-c) 0%, transparent 68%);
+      opacity: 0; transform: scale(0.92);
+    }
+    .visual-stage.is-transitioning .stage-glow {
+      animation: stageGlowPulse 1.35s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+    }
+    @keyframes stageGlowPulse {
+      0% { opacity: 0; transform: scale(0.9); }
+      30% { opacity: 0.75; transform: scale(1); }
+      100% { opacity: 0; transform: scale(1.08); }
+    }
+    .visual-stage .stage-scan {
+      position: absolute; inset: 0; pointer-events: none; z-index: 1;
+      background: linear-gradient(180deg, transparent 0%, rgba(255,255,255,0.03) 50%, transparent 100%);
+      background-size: 100% 8px; animation: scanline 4s linear infinite; opacity: 0.4;
+    }
+    @keyframes scanline { 0% { background-position: 0 0; } 100% { background-position: 0 100%; } }
+    .scene-viewport {
+      position: absolute; inset: 0; z-index: 2; overflow: hidden;
+    }
+    .scene-slide {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      transition:
+        transform 1.15s cubic-bezier(0.25, 0.8, 0.25, 1),
+        opacity 1.05s cubic-bezier(0.25, 0.8, 0.25, 1),
+        filter 1.05s cubic-bezier(0.25, 0.8, 0.25, 1);
+      will-change: transform, opacity, filter;
+    }
+    .scene-slide-inner {
+      position: relative; width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .scene-slide-inner::after {
+      content: ''; position: absolute; inset: 8% 12%;
+      border-radius: 50%; pointer-events: none; opacity: 0;
+      background: radial-gradient(ellipse at center, var(--slide-glow, rgba(16,255,176,0.35)) 0%, transparent 72%);
+      transition: opacity 0.8s ease;
+    }
+    .scene-slide.is-current .scene-slide-inner::after,
+    .scene-slide.to-current .scene-slide-inner::after {
+      opacity: 0.55; animation: slideInnerGlow 1.6s ease-in-out infinite;
+    }
+    @keyframes slideInnerGlow {
+      0%, 100% { opacity: 0.35; transform: scale(1); }
+      50% { opacity: 0.65; transform: scale(1.04); }
+    }
+    .scene-slide svg { position: relative; z-index: 1; width: 100%; height: 100%; display: block; }
+    .scene-slide.is-current { transform: translateX(0) scale(1); opacity: 1; filter: blur(0); }
+    .scene-slide.exit-right { transform: translateX(42%) scale(0.94); opacity: 0; filter: blur(5px); }
+    .scene-slide.enter-from-left { transform: translateX(-42%) scale(0.96); opacity: 0; filter: blur(4px); }
+    .scene-slide.enter-from-left.to-current { transform: translateX(0) scale(1); opacity: 1; filter: blur(0); }
+    .scene-slide.exit-left { transform: translateX(-42%) scale(0.94); opacity: 0; filter: blur(5px); }
+    .scene-slide.enter-from-right { transform: translateX(42%) scale(0.96); opacity: 0; filter: blur(4px); }
+    .scene-slide.enter-from-right.to-current { transform: translateX(0) scale(1); opacity: 1; filter: blur(0); }
+
+    .detail-body { padding: 22px 24px 26px; }
+    .cycle-conclusion {
+      margin-top: 20px;
+      padding: 16px 18px;
+      border-radius: 10px;
+      border: 1px solid rgba(255, 208, 32, 0.35);
+      background: linear-gradient(135deg, rgba(255, 208, 32, 0.1), rgba(16, 255, 176, 0.06));
+      color: #eef2f7;
+      font-size: 0.92rem;
+      line-height: 1.55;
+      animation: conclusionIn 0.55s ease-out;
+    }
+    .cycle-conclusion strong { color: var(--yellow); }
+    @keyframes conclusionIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .phase-header {
+      display: flex; align-items: flex-start; gap: 16px;
+      margin-bottom: 22px; padding: 4px 0 20px;
+      border-bottom: 2px solid color-mix(in srgb, var(--phase-c, var(--green)) 22%, transparent);
+      transition: border-color 0.8s ease;
+    }
+    .phase-num {
+      flex-shrink: 0; width: 48px; height: 48px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      margin-top: 4px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.15rem; font-weight: 700; color: #0a0f14;
+      background: var(--phase-c, var(--green));
+      border: 2px solid color-mix(in srgb, var(--phase-c, var(--green)) 80%, #fff);
+      box-shadow: 0 0 24px color-mix(in srgb, var(--phase-c, var(--green)) 45%, transparent);
+      transition: background 0.8s ease, border-color 0.8s ease, box-shadow 0.8s ease;
+    }
+    .phase-title {
+      flex: 1; min-width: 0;
+      font-size: clamp(1.85rem, 5.5vw, 2.5rem); font-weight: 800;
+      letter-spacing: -0.03em; line-height: 1.15;
+      color: #fff;
+      text-shadow: 0 0 40px color-mix(in srgb, var(--phase-c, var(--green)) 50%, transparent);
+      transition: text-shadow 0.8s ease;
+    }
+    .terminal-bullets { list-style: none; }
+    .terminal-bullets li {
+      position: relative; padding: 10px 12px 10px 22px; margin-bottom: 7px;
+      font-size: 0.82rem; color: var(--muted); line-height: 1.4;
+      border-radius: 8px; border: 1px solid transparent;
+      transform: translateX(0); opacity: 1;
+      transition:
+        transform 1s cubic-bezier(0.25, 0.8, 0.25, 1),
+        opacity 0.9s cubic-bezier(0.25, 0.8, 0.25, 1),
+        background 0.8s ease, border-color 0.8s ease,
+        box-shadow 0.8s ease, color 0.6s ease;
+    }
+    .terminal-bullets li.active {
+      color: var(--text); font-weight: 600;
+      background: rgba(255,255,255,0.06);
+      border-color: var(--bullet-c, var(--green));
+      box-shadow: 0 0 24px color-mix(in srgb, var(--bullet-c) 28%, transparent);
+      transform: translateX(0); opacity: 1;
+    }
+    .terminal-bullets li.bullet-leaving {
+      transform: translateX(32px); opacity: 0.2;
+      box-shadow: none; border-color: transparent; background: transparent;
+    }
+    .terminal-bullets li.bullet-leaving.back { transform: translateX(-32px); }
+    .terminal-bullets li.bullet-arriving {
+      transform: translateX(-26px); opacity: 0.35;
+    }
+    .terminal-bullets li.bullet-arriving.back { transform: translateX(26px); }
+    .terminal-bullets li.done {
+      opacity: 0.38;
+      transition: opacity 0.9s ease, transform 1s cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+    .terminal-bullets li::before {
+      content: ''; position: absolute; left: 0; top: 0.55em;
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--bullet-c, var(--green));
+      box-shadow: 0 0 8px var(--bullet-c, var(--green));
+    }
+
+    /* Scene animations */
+    @keyframes penWrite { 0% { stroke-dashoffset: 80; } 100% { stroke-dashoffset: 0; } }
+    @keyframes checkPop { 0% { transform: scale(0); opacity: 0; } 60% { transform: scale(1.2); } 100% { transform: scale(1); opacity: 1; } }
+    @keyframes queueShift { 0%,100% { transform: translateX(0); } 50% { transform: translateX(6px); } }
+    @keyframes waveOut { 0% { r: 4; opacity: 0.8; } 100% { r: 28; opacity: 0; } }
+    @keyframes mailFly { 0% { transform: translateX(-30px); opacity: 0; } 30% { opacity: 1; } 100% { transform: translateX(40px); opacity: 1; } }
+    @keyframes stampHit { 0%,70% { transform: scale(1); } 80% { transform: scale(1.15); } 100% { transform: scale(1); } }
+    @keyframes coinDrop { 0% { transform: translateY(-20px); opacity: 0; } 60% { transform: translateY(2px); opacity: 1; } 100% { transform: translateY(0); } }
+    @keyframes cardFlip { 0% { transform: perspective(200px) rotateY(-70deg); opacity: 0.3; } 100% { transform: perspective(200px) rotateY(0); opacity: 1; } }
+    @keyframes idSend { 0% { transform: translateX(0); } 50% { transform: translateX(50px); opacity: 1; } 100% { transform: translateX(90px); opacity: 0; } }
+    @keyframes phoneRing { 0%,100% { transform: rotate(0); } 10% { transform: rotate(-8deg); } 20% { transform: rotate(8deg); } 30% { transform: rotate(-6deg); } 40% { transform: rotate(6deg); } 50% { transform: rotate(0); } }
+    @keyframes calPulse { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+    @keyframes invoiceStack { 0% { transform: translateY(8px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
+    @keyframes payFlow { 0% { stroke-dashoffset: 60; } 100% { stroke-dashoffset: 0; } }
+    @keyframes signLine { 0% { stroke-dashoffset: 50; } 100% { stroke-dashoffset: 0; } }
+    @keyframes wirePulse { 0%,100% { opacity: 0.35; } 50% { opacity: 1; } }
+    .anim-pen { stroke-dasharray: 80; animation: penWrite 2.5s ease-in-out infinite; }
+    .anim-check { transform-origin: center; animation: checkPop 0.8s ease-out forwards; }
+    .anim-queue { animation: queueShift 2s ease-in-out infinite; }
+    .anim-wave { animation: waveOut 1.5s ease-out infinite; }
+    .anim-mail { animation: mailFly 2s ease-in-out infinite; }
+    .anim-stamp { transform-origin: center; animation: stampHit 1.8s ease-in-out infinite; }
+    .anim-coin { animation: coinDrop 1.2s ease-out infinite; }
+    .anim-card { transform-origin: center; animation: cardFlip 2s ease-in-out infinite; }
+    .anim-id-send { animation: idSend 2.2s ease-in-out infinite; }
+    .anim-phone { transform-origin: 70px 58px; animation: phoneRing 1.5s ease-in-out infinite; }
+    .anim-cal { animation: calPulse 1.5s ease-in-out infinite; }
+    .anim-inv-stack { animation: invoiceStack 1.2s ease-out infinite; }
+    .anim-pay-flow { stroke-dasharray: 60; animation: payFlow 1.8s ease-in-out infinite; }
+    .anim-sign { stroke-dasharray: 50; animation: signLine 2s ease-in-out infinite; }
+    .anim-wire { animation: wirePulse 1.2s ease-in-out infinite; }
+
+    .builder-banner {
+      text-align: center; margin: 28px auto 0; padding: 16px 22px;
+      max-width: 520px; border-radius: 14px;
+      background: linear-gradient(135deg, rgba(255,208,32,0.08), rgba(16,255,176,0.06));
+      border: 1px solid rgba(255,208,32,0.2);
+      font-size: 0.82rem; color: var(--muted); line-height: 1.5;
+      transition: box-shadow 0.5s, border-color 0.5s;
+    }
+    .builder-banner .builder-name {
+      font-weight: 700; font-size: 1rem; color: var(--yellow);
+      text-decoration: none; letter-spacing: -0.01em;
+    }
+    .builder-banner .builder-name:hover { text-decoration: underline; }
+    .builder-banner .builder-url {
+      display: block; margin-top: 4px;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.72rem;
+      color: var(--green); text-decoration: none;
+    }
+    .builder-banner .builder-url:hover { text-decoration: underline; }
+    .builder-banner.attention {
+      animation: builderGlow 2.2s ease-in-out infinite;
+    }
+    @keyframes builderGlow {
+      0%, 100% {
+        box-shadow: 0 0 16px rgba(255,208,32,0.12);
+        border-color: rgba(255,208,32,0.2);
+      }
+      50% {
+        box-shadow: 0 0 32px rgba(255,208,32,0.35), 0 0 48px rgba(16,255,176,0.15);
+        border-color: rgba(255,208,32,0.45);
+      }
+    }
+
     footer {
-      text-align: center;
-      padding: 32px 24px;
-      border-top: 1px solid var(--line);
-      color: var(--muted);
-      font-size: 0.85rem;
+      text-align: center; margin-top: 20px; font-size: 0.68rem;
+      color: var(--muted); font-family: 'JetBrains Mono', monospace; opacity: 0.7;
     }
-    .mermaid { background: transparent !important; }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--yellow); }
   </style>
 </head>
 <body>
-  <header class="hero">
-    <div class="badge">Case study · Mutual-assistance platform</div>
-    <h1>End-to-end membership onboarding automation</h1>
-    <p>
-      A 200-member Edir organization replaced spreadsheets and manual tracking with a single pipeline —
-      waiting list through paid membership — with full audit logging at every step.
-    </p>
-  </header>
+  <div class="ambient">
+    <div class="orb orb-g"></div>
+    <div class="orb orb-r"></div>
+    <div class="orb orb-y"></div>
+    <div class="grid-floor"></div>
+    <div class="vignette"></div>
+  </div>
 
-  <main>
-    <section>
-      <h2>What the platform automates</h2>
-      <div class="cards">
-        <div class="card">
-          <h3>Fair queue &amp; cap</h3>
-          <p>Ordered waiting list with live slot math against a 200-member cap — no over-inviting.</p>
+  <div class="page">
+    <header>
+      <div class="eyebrow">AI agent · case study</div>
+      <h1>Meet Meridian</h1>
+      <p class="subtitle">I'm the AI agent <em>Ethio AI Solutions</em> built for <strong>Hibret Edir</strong> — I run onboarding, memorial announcements, member invoicing, and benefit payouts from start to finish.</p>
+    </header>
+
+    <p class="voice-hint" id="voiceHint"></p>
+    <div class="controls">
+      <button type="button" id="playBtn" class="on">▶ PLAY</button>
+      <button type="button" id="pauseBtn">⏸ Hold</button>
+      <button type="button" id="stepBtn">Step →</button>
+      <button type="button" id="voiceBtn">🔊 Voice</button>
+      <button type="button" id="speakBtn">🔈 Speak</button>
+    </div>
+    <div class="section-jumps" id="sectionJumps"></div>
+    <div class="progress-wrap"><div class="progress-bar"><div class="fill" id="progressFill"></div></div></div>
+
+    <div class="workflow-main">
+      <div class="diagram-area">
+        <div class="ring-board" id="ringBoard">
+          <svg class="ring-svg" id="ringSvg" aria-hidden="true"></svg>
+          <div class="ring-center">
+            <div class="rc-num" id="ringCenterNum">1</div>
+            <div class="rc-lbl" id="ringCenterSub">step</div>
+            <div class="rc-phase" id="ringCenterPhase">Onboard</div>
+          </div>
         </div>
-        <div class="card">
-          <h3>Vet before billing</h3>
-          <p>Board reviews name, application, and ID before any PayPal invoice is sent.</p>
+      </div>
+
+      <aside class="terminal-panel" aria-live="polite">
+        <div class="terminal-side-label">Meridian · live walkthrough</div>
+        <div class="terminal" id="terminalCard">
+          <div class="terminal-bar">
+            <span class="dot g"></span><span class="dot y"></span><span class="dot r"></span>
+            <span id="terminalTitle">workflow.status</span>
+          </div>
+          <div class="terminal-body">
+            <div class="visual-stage" id="visualStage">
+              <div class="stage-bg" id="stageBg"></div>
+              <div class="stage-glow" id="stageGlow"></div>
+              <div class="stage-scan"></div>
+              <div class="scene-viewport" id="sceneViewport"></div>
+            </div>
+            <div class="detail-body" id="terminalBody"></div>
+          </div>
         </div>
-        <div class="card">
-          <h3>Pay to activate</h3>
-          <p>$200 registration invoice via PayPal; active member record created only when paid.</p>
-        </div>
-        <div class="card">
-          <h3>Full audit trail</h3>
-          <p>Every invite, submission, review, invoice, and approval logged for board governance.</p>
-        </div>
-      </div>
-    </section>
+      </aside>
+    </div>
 
-    <section>
-      <h2>Pipeline overview</h2>
-      <div class="diagram">
-        <pre class="mermaid">
-flowchart LR
-  A[Waiting list] --> B[Board invite]
-  B --> C[Application form]
-  C --> D[Board review]
-  D --> E[PayPal $200]
-  E --> F[Active member]
-  F --> G[Audit log]
-        </pre>
-      </div>
-    </section>
+    <div class="builder-banner" id="builderBanner">
+      <span>Meridian was built by </span>
+      <a class="builder-name" href="https://www.EthioAiSolutions.com" target="_blank" rel="noopener">Ethio AI Solutions</a>
+      <a class="builder-url" href="https://www.EthioAiSolutions.com" target="_blank" rel="noopener">www.EthioAiSolutions.com</a>
+    </div>
 
-    <section>
-      <h2>Automation by trigger</h2>
-
-      <div class="trigger">
-        <div class="trigger-title">1 · Public waiting list signup</div>
-        <div class="trigger-desc">Applicant submits name, email, phone on the public site.</div>
-        <ul class="auto">
-          <li>Validates and stores queue position</li>
-          <li>Updates public waiting list status</li>
-          <li>Writes audit log entry</li>
-        </ul>
-      </div>
-
-      <div class="trigger">
-        <div class="trigger-title">2 · Board sends invitation</div>
-        <div class="trigger-desc">Board clicks Send Invitation when a membership slot is open.</div>
-        <ul class="auto">
-          <li>Verifies slot availability (cap − active − in pipeline)</li>
-          <li>Emails application link via SendGrid</li>
-          <li>Status → Invited to Apply; holds slot</li>
-        </ul>
-      </div>
-
-      <div class="trigger">
-        <div class="trigger-title">3 · Application submitted</div>
-        <div class="trigger-desc">Invited applicant completes form + ID upload at /application/.</div>
-        <ul class="auto">
-          <li>Creates membership_applications record</li>
-          <li>Notifies board (email/SMS when configured)</li>
-          <li>Appears in Applications → Pending</li>
-        </ul>
-      </div>
-
-      <div class="trigger">
-        <div class="trigger-title">4 · Board approves &amp; sends invoice</div>
-        <div class="trigger-desc">After name, fields, and ID checks — Approve &amp; Send Invoice.</div>
-        <ul class="auto">
-          <li>Creates &amp; sends $200 PayPal registration invoice</li>
-          <li>Status → Awaiting Payment</li>
-          <li>Applicant notified with payment link</li>
-        </ul>
-      </div>
-
-      <div class="trigger">
-        <div class="trigger-title">5 · Payment received</div>
-        <div class="trigger-desc">PayPal sync (9 AM &amp; 6 PM Pacific) or board Mark Registration Paid.</div>
-        <ul class="auto">
-          <li>Creates Active member + beneficiary in CRM</li>
-          <li>Records $200 payment; links application</li>
-          <li>Waiting list → Added as Member; welcome notification</li>
-        </ul>
-      </div>
-    </section>
-
-    <section>
-      <h2>Invite → invoice sequence</h2>
-      <div class="diagram">
-        <pre class="mermaid">
-sequenceDiagram
-  participant B as Board
-  participant P as Platform
-  participant PP as PayPal
-  participant A as Applicant
-
-  A->>P: Submit application
-  P->>B: Notify board
-  B->>P: Approve and send invoice
-  P->>PP: Create and send $200 invoice
-  PP->>A: Email payment link
-  A->>PP: Pay
-  PP->>P: Paid status on sync
-  P->>P: Create active member
-        </pre>
-      </div>
-    </section>
-
-    <section>
-      <h2>Technical stack</h2>
-      <div class="stack">
-        <span>Netlify Functions</span>
-        <span>PostgreSQL</span>
-        <span>PayPal Invoicing API</span>
-        <span>SendGrid / Twilio</span>
-        <span>Vanilla JS admin</span>
-        <span>JWT board auth</span>
-        <span>Scheduled PayPal sync</span>
-        <span>Audit log</span>
-      </div>
-    </section>
-
-    <section>
-      <h2>Result</h2>
-      <p style="color:var(--muted);max-width:720px">
-        The board spends time on <strong style="color:var(--text)">decisions</strong>, not spreadsheets.
-        Applicants get a clear path from waiting list to membership.
-        Every step is traceable for governance — and the same platform handles $110 event invoices,
-        member portal, and $15,000 payout workflows.
-      </p>
-    </section>
-  </main>
-
-  <footer>
-    Hibret Edir · Built 2025–2026 ·
-    <a href="board-meeting-handout.html" style="color:var(--gold)">Board handout</a> ·
-    <a href="membership-onboarding-workflow.md" style="color:var(--gold)">Full workflow doc</a>
-  </footer>
+    <footer>Case study: Hibret Edir member lifecycle platform</footer>
+  </div>
 
   <script>
-    mermaid.initialize({ startOnLoad: true, theme: 'dark', themeVariables: {
-      primaryColor: '#1a2332',
-      primaryTextColor: '#e8ecf1',
-      primaryBorderColor: '#d4a853',
-      lineColor: '#8b9cb3',
-      secondaryColor: '#0f1419',
-      tertiaryColor: '#2a3544'
-    }});
+    const PHASE_META = {
+      green: { color: '#10ffb0', glow: 'rgba(16,255,176,0.65)' },
+      yellow: { color: '#ffd020', glow: 'rgba(255,208,32,0.65)' },
+      red: { color: '#ff5566', glow: 'rgba(255,85,102,0.65)' },
+    };
+
+    const MERIDIAN_INTRO = "Hi, I'm Meridian, an AI agent built by Ethio AI Solutions for Hibret Edir. Let me show you what I do.";
+    const MERIDIAN_CONCLUSION = "That's everything I run for Hibret Edir, end to end. Ethio AI Solutions builds custom AI agents like me — visit www.EthioAiSolutions.com to bring this to your organization.";
+    const CONCLUSION_PAUSE_MS = 9000;
+
+    const PHASES = [
+      { num: 1, phase: 'green', title: 'Onboarding', icon: '📋', label: 'Onboard', scene: 'onboard',
+        phaseIntro: 'I start with onboarding.',
+        bullets: [
+          'I capture every applicant on the waiting list',
+          'When a slot opens, I send the invitation to apply',
+          'The applicant completes the full application',
+          'I review it and approve when everything checks out',
+          'I send the registration fee invoice',
+          'Once payment lands, I activate them as a member',
+          'I deliver their digital member ID',
+        ]},
+      { num: 2, phase: 'yellow', title: 'When a member passes', icon: '🕊️', label: 'Memorial', scene: 'event',
+        phaseIntro: 'When a member passes, I step in.',
+        bullets: [
+          'I receive notification when a member passes',
+          'The family submits visit, service, funeral, and lunch details',
+          'I broadcast the memorial announcement',
+          'I generate and send PayPal invoices to every member',
+          'Members pay — I record each payment',
+        ]},
+      { num: 3, phase: 'red', title: 'Payout benefit', icon: '💰', label: 'Payout', scene: 'payout',
+        phaseIntro: 'For benefit payouts, here is my process.',
+        bullets: [
+          'I send beneficiary paperwork for signature',
+          'The beneficiary completes and returns all required information',
+          'I run multi-step review and approval',
+          'I wire the benefit to the beneficiary',
+        ]},
+    ].map((p) => ({ ...p, color: PHASE_META[p.phase].color, glow: PHASE_META[p.phase].glow }));
+
+    const ANIM_IDS = [
+      'waitlist', 'invite', 'application', 'approve', 'fee', 'member', 'digital-id',
+      'phone-call', 'details', 'announce', 'invoice', 'collect',
+      'beneficiary', 'form', 'board-approve', 'wire',
+    ];
+
+    const STEPS = [];
+    const PHASE_START = {};
+    let animSeq = 0;
+    PHASES.forEach((p, pi) => {
+      PHASE_START[p.num] = STEPS.length;
+      p.bullets.forEach((text, bi) => {
+        STEPS.push({
+          phaseIndex: pi,
+          bulletIdx: bi,
+          text,
+          phaseIntro: p.phaseIntro,
+          animId: ANIM_IDS[animSeq++],
+          num: p.num,
+          phase: p.phase,
+          color: p.color,
+          glow: p.glow,
+          title: p.title,
+          icon: p.icon,
+          label: p.label,
+          scene: p.scene,
+          phaseBullets: p.bullets,
+        });
+      });
+    });
+
+    let current = 0, prevCurrent = 0, playing = true, timer = null;
+    let lastRenderedStep = -1;
+    let voiceOn = true;
+    let cyclesCompleted = 0;
+    const MAX_CYCLES = 2;
+    let sessionIntroPending = true;
+    let ringPositions = [];
+    const INTERVAL = 5000;
+    const VOICE_PAUSE = 600;
+    const speechOk = typeof window !== 'undefined' && 'speechSynthesis' in window;
+    let cachedVoice = null;
+
+    function isLikelyFemaleVoice(name) {
+      return /female|woman|samantha|jenny|aria|zira|susan|hazel|sonia|victoria|karen|moira|fiona|serena|linda|heather|laura|natalie|emma|amy|sara|hannah|olivia|libby|mia|abbie|kate|catherine|michelle|sophie|alice/i.test(name);
+    }
+
+    function isLikelyMaleVoice(name) {
+      return /male|man|george|ryan|thomas|daniel|arthur|brian|guy|james|christopher|eric|gordon|lee|martin|nathan|noah|oliver|roger|steven|tom|malcolm|peter|sean|william|barry|hugh|oliver|brian|colin|alan|simon|paul|michael|john|harry|charlie|fred|ralph|bruce|duncan|gareth|geraint|iwan|ioan|si\s?n/i.test(name);
+    }
+
+    function voiceQualityScore(v) {
+      const label = `${v.name} ${v.voiceURI || ''}`;
+      let score = 0;
+      if (/natural|neural|premium|online|wavenet|enhanced|multilingual/i.test(label)) score += 120;
+      if (v.localService === false) score += 55;
+      if (/^en-GB/i.test(v.lang)) score += 45;
+      if (isLikelyMaleVoice(v.name) && !isLikelyFemaleVoice(v.name)) score += 40;
+      else if (isLikelyFemaleVoice(v.name)) score -= 100;
+      if (/george|ryan|thomas|daniel|uk english male|english \(united kingdom\)/i.test(label)) score += 30;
+      if (/desktop|legacy|compact|mobile sapi|eSpeak/i.test(label)) score -= 50;
+      return score;
+    }
+
+    function pickMeridianVoice(voices) {
+      if (!voices.length) return null;
+      const ranked = voices
+        .map((v) => ({ v, score: voiceQualityScore(v) }))
+        .sort((a, b) => b.score - a.score);
+      return ranked[0]?.v || voices[0];
+    }
+
+    function loadVoices() {
+      if (!speechOk) return;
+      const voices = speechSynthesis.getVoices();
+      if (!voices.length) return;
+      const next = pickMeridianVoice(voices);
+      if (!cachedVoice || voiceQualityScore(next) >= voiceQualityScore(cachedVoice)) {
+        cachedVoice = next;
+      }
+    }
+
+    function applyVoiceToUtterance(u) {
+      u.lang = cachedVoice?.lang || 'en-GB';
+      u.rate = 0.89;
+      u.pitch = 0.98;
+      u.volume = 1;
+      if (cachedVoice) u.voice = cachedVoice;
+    }
+
+    /** Pacing + pronunciation tweaks for more natural TTS delivery. */
+    function prepareSpeechText(text) {
+      return humanizeSpeechText(pronounceForSpeech(text));
+    }
+
+    function humanizeSpeechText(text) {
+      return String(text)
+        .replace(/\s*—\s*/g, ', ')
+        .replace(/\s*;\s*/g, ', ')
+        .replace(/\s*&\s*/g, ' and ')
+        .replace(/\.{3,}/g, '.')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+    }
+
+    function splitSpeechChunks(text) {
+      const prepared = humanizeSpeechText(text);
+      const parts = prepared
+        .split(/(?<=[.!?])\s+/)
+        .flatMap((chunk) => chunk.split(/,\s+(?=and\b|then\b|once\b|when\b|if\b|visit\b)/i))
+        .map((s) => s.trim())
+        .filter(Boolean);
+      return parts.length ? parts : [prepared];
+    }
+
+    function chunkPauseMs(chunk) {
+      const words = chunk.split(/\s+/).length;
+      return Math.min(420, 180 + words * 14);
+    }
+
+    function waitForVoices() {
+      if (!speechOk) return Promise.resolve();
+      return new Promise((resolve) => {
+        const ready = () => {
+          loadVoices();
+          if (speechSynthesis.getVoices().length) return true;
+          return false;
+        };
+        if (ready()) { resolve(); return; }
+        const onChange = () => { if (ready()) { speechSynthesis.removeEventListener('voiceschanged', onChange); resolve(); } };
+        speechSynthesis.addEventListener('voiceschanged', onChange);
+        setTimeout(() => { speechSynthesis.removeEventListener('voiceschanged', onChange); loadVoices(); resolve(); }, 4000);
+      });
+    }
+
+    if (speechOk) {
+      loadVoices();
+      speechSynthesis.onvoiceschanged = loadVoices;
+    }
+
+    /** TTS-friendly spellings — on-screen text stays unchanged. */
+    function pronounceForSpeech(text) {
+      return String(text)
+        .replace(/\bHibret\b/gi, 'Hehbret')
+        .replace(/\bEdir\b/gi, 'Eder');
+    }
+
+    function narrationText(step) {
+      if (step.bulletIdx === 0) {
+        let line = `${step.phaseIntro} ${step.text}`;
+        if (sessionIntroPending && current === 0) line = `${MERIDIAN_INTRO} ${line}`;
+        return line;
+      }
+      return step.text;
+    }
+
+    function setSpeaking(on) { document.getElementById('speakBtn')?.classList.toggle('speaking', on); }
+    function stopSpeech() { if (!speechOk) return; speechSynthesis.cancel(); setSpeaking(false); }
+
+    function speakHumanText(text, onDone, attempt = 0) {
+      if (!speechOk) { onDone?.(); return; }
+      loadVoices();
+      speechSynthesis.resume();
+
+      const chunks = splitSpeechChunks(prepareSpeechText(text));
+      let index = 0;
+      let started = false;
+      let finished = false;
+
+      const complete = () => {
+        if (finished) return;
+        finished = true;
+        setSpeaking(false);
+        onDone?.();
+      };
+
+      const retry = () => {
+        if (finished || started) return;
+        if (attempt < 5) {
+          setTimeout(() => speakHumanText(text, onDone, attempt + 1), 500);
+        } else {
+          complete();
+        }
+      };
+
+      if (attempt === 0) stopSpeech();
+
+      const speakNext = () => {
+        if (finished || index >= chunks.length) {
+          complete();
+          return;
+        }
+        const chunk = chunks[index];
+        const u = new SpeechSynthesisUtterance(chunk);
+        applyVoiceToUtterance(u);
+        u.onstart = () => {
+          started = true;
+          setSpeaking(true);
+          updateVoiceHint();
+        };
+        u.onend = () => {
+          index += 1;
+          if (index < chunks.length) {
+            setTimeout(speakNext, chunkPauseMs(chunk));
+          } else {
+            complete();
+          }
+        };
+        u.onerror = () => {
+          index += 1;
+          setTimeout(speakNext, 280);
+        };
+        speechSynthesis.speak(u);
+      };
+
+      speakNext();
+      if (attempt === 0) setTimeout(retry, 2200);
+    }
+
+    function speakStep(step, onDone, attempt = 0) {
+      const line = narrationText(step);
+      if (sessionIntroPending && current === 0 && step.bulletIdx === 0) sessionIntroPending = false;
+      speakHumanText(line, onDone, attempt);
+    }
+
+    function speakPlainText(text, onDone, attempt = 0) {
+      speakHumanText(text, onDone, attempt);
+    }
+
+    function showConclusionUI() {
+      const body = document.getElementById('terminalBody');
+      body.querySelector('.cycle-conclusion')?.remove();
+      const el = document.createElement('div');
+      el.className = 'cycle-conclusion';
+      el.innerHTML = `That's everything I run for <strong>Hibret Edir</strong>, end to end. `
+        + `<strong>Ethio AI Solutions</strong> builds custom AI agents like me — `
+        + `visit <strong>www.EthioAiSolutions.com</strong> to bring this to your organization.`;
+      body.appendChild(el);
+      document.getElementById('terminalTitle').textContent = 'meridian.closing';
+      document.getElementById('builderBanner')?.classList.add('attention');
+    }
+
+    function hideConclusionUI() {
+      document.getElementById('terminalBody')?.querySelector('.cycle-conclusion')?.remove();
+      document.getElementById('builderBanner')?.classList.remove('attention');
+    }
+
+    function playCycleConclusion(onDone) {
+      showConclusionUI();
+      const finish = () => {
+        hideConclusionUI();
+        onDone?.();
+      };
+      if (voiceOn && speechOk) {
+        speakPlainText(MERIDIAN_CONCLUSION, () => {
+          if (playing) timer = setTimeout(finish, VOICE_PAUSE);
+          else finish();
+        });
+      } else {
+        timer = setTimeout(finish, CONCLUSION_PAUSE_MS);
+      }
+    }
+
+    function updateVoiceHint() {
+      const el = document.getElementById('voiceHint');
+      if (!speechOk) {
+        el.textContent = 'Voice not supported — use Chrome or Edge.';
+        document.getElementById('voiceBtn').disabled = true;
+        document.getElementById('speakBtn').disabled = true;
+        return;
+      }
+      if (!playing && document.getElementById('playBtn').classList.contains('attention')) {
+        el.textContent = 'Press PLAY to hear Meridian again — built by Ethio AI Solutions.';
+        return;
+      }
+      el.textContent = voiceOn ? 'Meridian is narrating — then the walkthrough advances automatically.' : 'Voice off — tap Voice to hear Meridian.';
+    }
+
+    function ringDims(board) {
+      const parentW = board.parentElement?.clientWidth || 420;
+      const w = Math.min(Math.max(parentW - 8, 300), 680);
+      const h = Math.round(w * 0.72);
+      return { w, h, cx: w / 2, cy: h / 2, rx: w * 0.46, ry: h * 0.44 };
+    }
+
+    function ringLayout(dims) {
+      const { cx, cy, rx, ry } = dims;
+      return PHASES.map((_, i) => {
+        const angle = -Math.PI / 2 + (2 * Math.PI * i) / PHASES.length;
+        return { x: cx + rx * Math.cos(angle), y: cy + ry * Math.sin(angle), angle };
+      });
+    }
+
+    function ellipseArcPath(cx, cy, rx, ry, a1, a2) {
+      const x1 = cx + rx * Math.cos(a1), y1 = cy + ry * Math.sin(a1);
+      const x2 = cx + rx * Math.cos(a2), y2 = cy + ry * Math.sin(a2);
+      const large = Math.abs(a2 - a1) > Math.PI ? 1 : 0;
+      return `M ${x1} ${y1} A ${rx} ${ry} 0 ${large} 1 ${x2} ${y2}`;
+    }
+
+    function buildRing() {
+      const board = document.getElementById('ringBoard');
+      const dims = ringDims(board);
+      const { w, h, cx, cy, rx, ry } = dims;
+      board.style.width = w + 'px';
+      board.style.height = h + 'px';
+      ringPositions = ringLayout(dims);
+
+      board.querySelectorAll('.ring-node').forEach((n) => n.remove());
+
+      PHASES.forEach((phase, i) => {
+        const p = ringPositions[i];
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'ring-node';
+        btn.dataset.phase = i;
+        btn.style.cssText = `left:${p.x}px;top:${p.y}px;--node-color:${phase.color};--glow:${phase.glow}`;
+        btn.innerHTML = `
+          <div class="node-body" style="border-color:${phase.color}55">
+            <span class="sec-num" style="background:${phase.color}">${phase.num}</span>
+            <span class="ico">${phase.icon}</span>
+          </div>
+          <span class="lbl">${phase.label}</span>`;
+        btn.addEventListener('click', () => startSection(phase.num));
+        board.appendChild(btn);
+      });
+
+      const svg = document.getElementById('ringSvg');
+      svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+      svg.innerHTML = `
+        <defs>
+          <filter id="glow-filter" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="glow-filter-strong" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <linearGradient id="ring-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="${PHASE_META.green.color}" stop-opacity="0.7"/>
+            <stop offset="50%" stop-color="${PHASE_META.yellow.color}" stop-opacity="0.7"/>
+            <stop offset="100%" stop-color="${PHASE_META.red.color}" stop-opacity="0.7"/>
+          </linearGradient>
+        </defs>`;
+
+      const gSpin = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      gSpin.setAttribute('class', 'orbit-spin');
+      gSpin.setAttribute('transform', `translate(${cx},${cy})`);
+
+      const outer = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+      outer.setAttribute('cx', '0'); outer.setAttribute('cy', '0');
+      outer.setAttribute('rx', rx + 24); outer.setAttribute('ry', ry + 24);
+      outer.setAttribute('fill', 'none'); outer.setAttribute('stroke', 'url(#ring-grad)');
+      outer.setAttribute('stroke-width', '1'); outer.setAttribute('opacity', '0.35');
+      outer.setAttribute('stroke-dasharray', '8 16');
+      gSpin.appendChild(outer);
+      svg.appendChild(gSpin);
+
+      const track = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+      track.setAttribute('cx', cx); track.setAttribute('cy', cy);
+      track.setAttribute('rx', rx); track.setAttribute('ry', ry);
+      track.setAttribute('fill', 'none'); track.setAttribute('stroke', 'rgba(255,255,255,0.08)');
+      track.setAttribute('stroke-width', '2');
+      svg.appendChild(track);
+
+      for (let i = 0; i < PHASES.length; i++) {
+        const j = (i + 1) % PHASES.length;
+        const a1 = -Math.PI / 2 + (2 * Math.PI * i) / PHASES.length;
+        const a2 = -Math.PI / 2 + (2 * Math.PI * j) / PHASES.length;
+        const d = ellipseArcPath(cx, cy, rx, ry, a1, a2);
+
+        const base = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        base.setAttribute('class', 'wire'); base.setAttribute('d', d);
+        svg.appendChild(base);
+
+        const glow = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        glow.setAttribute('class', 'wire-glow'); glow.setAttribute('d', d);
+        glow.setAttribute('stroke', PHASES[j].color);
+        glow.dataset.glow = i;
+        svg.appendChild(glow);
+      }
+    }
+
+    function renderSubScene(animId, color) {
+      const c = color || '#10ffb0';
+      const m = 'rgba(255,255,255,0.08)';
+      const scenes = {
+        waitlist: `<g>
+          <rect x="30" y="28" width="90" height="58" rx="5" fill="rgba(0,0,0,0.45)" stroke="${c}"/>
+          <line x1="42" y1="44" x2="108" y2="44" stroke="${m}"/><line x1="42" y1="56" x2="95" y2="56" stroke="${m}"/>
+          <rect x="42" y="66" width="48" height="10" rx="2" fill="${c}" opacity="0.35"/>
+          <g class="anim-queue"><circle cx="145" cy="48" r="10" fill="${c}"/><text x="145" y="52" text-anchor="middle" fill="#0a0f14" font-size="8" font-weight="700">#</text></g>
+        </g>`,
+        invite: `<g>
+          <rect x="28" y="38" width="52" height="36" rx="3" fill="rgba(0,0,0,0.4)" stroke="${c}"/>
+          <path d="M28 38 L52 56 L80 38" fill="none" stroke="${c}" stroke-width="1.5"/>
+          <g class="anim-mail"><rect x="100" y="42" width="44" height="28" rx="3" fill="${c}" opacity="0.25" stroke="${c}"/><path d="M100 42 L122 58 L144 42" fill="none" stroke="${c}"/></g>
+          <text x="52" y="88" text-anchor="middle" fill="#7d92ab" font-size="7">INVITE</text>
+        </g>`,
+        application: `<g>
+          <rect x="45" y="22" width="110" height="68" rx="4" fill="rgba(0,0,0,0.45)" stroke="${c}"/>
+          <line x1="58" y1="40" x2="142" y2="40" stroke="${m}"/><line x1="58" y1="52" x2="125" y2="52" stroke="${m}"/><line x1="58" y1="64" x2="135" y2="64" stroke="${m}"/>
+          <path class="anim-pen" d="M62 78 Q95 72 120 78 T155 74" fill="none" stroke="${c}" stroke-width="2.5"/>
+          <polygon points="162,58 168,61 160,66" fill="${c}"/>
+        </g>`,
+        approve: `<g>
+          <rect x="50" y="20" width="100" height="72" rx="4" fill="rgba(0,0,0,0.4)" stroke="${c}"/>
+          <g class="anim-check"><path d="M128 34 L134 40 L148 28" stroke="${c}" stroke-width="2.5" fill="none"/><path d="M128 52 L134 58 L148 46" stroke="${c}" stroke-width="2.5" fill="none"/><path d="M128 70 L134 76 L148 64" stroke="${c}" stroke-width="2.5" fill="none"/></g>
+          <g class="anim-stamp"><circle cx="72" cy="78" r="14" fill="none" stroke="${c}" stroke-width="2"/><text x="72" y="82" text-anchor="middle" fill="${c}" font-size="7" font-weight="700">OK</text></g>
+        </g>`,
+        fee: `<g>
+          <rect x="55" y="30" width="90" height="52" rx="4" fill="rgba(0,0,0,0.45)" stroke="${c}"/>
+          <text x="100" y="58" text-anchor="middle" fill="${c}" font-size="18" font-weight="700">$</text>
+          <text x="100" y="72" text-anchor="middle" fill="#7d92ab" font-size="7">registration fee</text>
+          <g class="anim-coin"><circle cx="158" cy="52" r="12" fill="${c}" opacity="0.5"/><text x="158" y="56" text-anchor="middle" fill="#0a0f14" font-size="9" font-weight="700">$</text></g>
+        </g>`,
+        member: `<g>
+          <g class="anim-card"><rect x="60" y="32" width="80" height="48" rx="6" fill="${c}" opacity="0.2" stroke="${c}"/><circle cx="82" cy="56" r="11" fill="${c}" opacity="0.45"/><text x="108" y="58" fill="#fff" font-size="9" font-weight="700">MEMBER</text></g>
+          <circle cx="155" cy="56" r="16" fill="${c}" opacity="0.15" stroke="${c}" class="anim-wave"/>
+        </g>`,
+        'digital-id': `<g>
+          <rect x="40" y="35" width="70" height="44" rx="4" fill="${c}" opacity="0.2" stroke="${c}"/>
+          <circle cx="58" cy="57" r="9" fill="${c}" opacity="0.5"/><line x1="72" y1="50" x2="98" y2="50" stroke="${m}"/><line x1="72" y1="60" x2="92" y2="60" stroke="${m}"/>
+          <g class="anim-id-send"><rect x="40" y="35" width="70" height="44" rx="4" fill="${c}" opacity="0.15" stroke="${c}"/><path d="M115 57 L145 57" stroke="${c}" stroke-width="2" marker-end="url(#arrow)"/><polygon points="145,57 138,53 138,61" fill="${c}"/></g>
+        </g>`,
+        'phone-call': `<g class="anim-phone">
+          <rect x="58" y="28" width="44" height="72" rx="8" fill="rgba(0,0,0,0.5)" stroke="${c}"/>
+          <circle cx="80" cy="88" r="5" fill="${c}"/><rect x="66" y="38" width="28" height="40" rx="2" fill="rgba(255,255,255,0.06)"/>
+          <circle cx="130" cy="52" r="6" fill="none" stroke="${c}" class="anim-wave"/><circle cx="130" cy="52" r="6" fill="none" stroke="${c}" class="anim-wave" style="animation-delay:0.6s"/>
+        </g>`,
+        details: `<g>
+          <rect x="42" y="26" width="56" height="60" rx="4" fill="rgba(0,0,0,0.4)" stroke="${c}"/>
+          <text x="70" y="44" text-anchor="middle" fill="${c}" font-size="10" font-weight="700">JUL</text>
+          <g class="anim-cal"><rect x="50" y="50" width="14" height="12" rx="1" fill="${c}" opacity="0.5"/><rect x="68" y="50" width="14" height="12" rx="1" fill="${c}" opacity="0.3"/><rect x="50" y="66" width="14" height="12" rx="1" fill="${c}" opacity="0.3"/></g>
+          <path d="M115 40 C125 30 140 35 150 50 C140 70 120 75 110 60 Z" fill="none" stroke="${c}" stroke-width="2" opacity="0.7"/>
+          <circle cx="128" cy="52" r="4" fill="${c}"/>
+        </g>`,
+        announce: `<g>
+          <polygon points="48,58 90,44 90,72 48,58" fill="${c}"/>
+          <circle cx="118" cy="58" r="5" fill="none" stroke="${c}" class="anim-wave"/>
+          <circle cx="118" cy="58" r="5" fill="none" stroke="${c}" class="anim-wave" style="animation-delay:0.5s"/>
+          <circle cx="118" cy="58" r="5" fill="none" stroke="${c}" class="anim-wave" style="animation-delay:1s"/>
+          <rect x="138" y="32" width="48" height="52" rx="3" fill="rgba(0,0,0,0.4)" stroke="${c}"/><line x1="148" y1="46" x2="176" y2="46" stroke="${m}"/><line x1="148" y1="58" x2="170" y2="58" stroke="${m}"/>
+        </g>`,
+        invoice: `<g>
+          <rect x="72" y="50" width="56" height="38" rx="3" fill="rgba(0,0,0,0.45)" stroke="${c}" opacity="0.5"/>
+          <g class="anim-inv-stack"><rect x="80" y="30" width="56" height="38" rx="3" fill="rgba(0,0,0,0.5)" stroke="${c}"/><text x="108" y="52" text-anchor="middle" fill="${c}" font-size="12" font-weight="700">PayPal</text><text x="108" y="62" text-anchor="middle" fill="#7d92ab" font-size="7">invoice</text></g>
+        </g>`,
+        collect: `<g>
+          <path class="anim-pay-flow" d="M40 58 L90 58 L110 42 L155 42" fill="none" stroke="${c}" stroke-width="2.5"/>
+          <circle cx="155" cy="42" r="10" fill="${c}" opacity="0.35" stroke="${c}"/>
+          <text x="155" y="46" text-anchor="middle" fill="#0a0f14" font-size="9" font-weight="700">✓</text>
+          <g class="anim-coin"><circle cx="70" cy="72" r="8" fill="${c}" opacity="0.4"/><circle cx="90" cy="72" r="8" fill="${c}" opacity="0.55"/><circle cx="110" cy="72" r="8" fill="${c}" opacity="0.7"/></g>
+        </g>`,
+        beneficiary: `<g>
+          <rect x="38" y="28" width="72" height="58" rx="4" fill="rgba(0,0,0,0.45)" stroke="${c}"/>
+          <line x1="50" y1="44" x2="98" y2="44" stroke="${m}"/><line x1="50" y1="56" x2="90" y2="56" stroke="${m}"/>
+          <path class="anim-sign" d="M50 72 Q65 62 80 72 T110 68" fill="none" stroke="${c}" stroke-width="2"/>
+          <text x="130" y="50" fill="#7d92ab" font-size="7">SIGN</text>
+        </g>`,
+        form: `<g>
+          <rect x="48" y="22" width="104" height="70" rx="4" fill="rgba(0,0,0,0.4)" stroke="${c}"/>
+          <line x1="60" y1="38" x2="140" y2="38" stroke="${m}"/><line x1="60" y1="50" x2="130" y2="50" stroke="${m}"/><line x1="60" y1="62" x2="120" y2="62" stroke="${m}"/>
+          <path class="anim-pen" d="M60 78 L100 78 L120 68 L150 68" fill="none" stroke="${c}" stroke-width="2"/>
+          <rect x="60" y="74" width="36" height="8" rx="1" fill="${c}" opacity="0.25"/>
+        </g>`,
+        'board-approve': `<g>
+          <circle cx="55" cy="56" r="14" fill="${c}" opacity="0.25" stroke="${c}"/><text x="55" y="60" text-anchor="middle" fill="${c}" font-size="8">B1</text>
+          <circle cx="100" cy="56" r="14" fill="${c}" opacity="0.35" stroke="${c}"/><text x="100" y="60" text-anchor="middle" fill="${c}" font-size="8">B2</text>
+          <circle cx="145" cy="56" r="14" fill="${c}" opacity="0.45" stroke="${c}"/><text x="145" y="60" text-anchor="middle" fill="${c}" font-size="8">B3</text>
+          <g class="anim-check"><path d="M48 48 L52 52 L62 42" stroke="${c}" stroke-width="2" fill="none"/><path d="M93 48 L97 52 L107 42" stroke="${c}" stroke-width="2" fill="none"/><path d="M138 48 L142 52 L152 42" stroke="${c}" stroke-width="2" fill="none"/></g>
+        </g>`,
+        wire: `<g>
+          <rect x="35" y="42" width="50" height="32" rx="3" fill="rgba(0,0,0,0.4)" stroke="${c}"/>
+          <rect x="115" y="42" width="50" height="32" rx="3" fill="${c}" opacity="0.2" stroke="${c}"/>
+          <path class="anim-wire" d="M85 58 L115 58" stroke="${c}" stroke-width="3" stroke-dasharray="6 4"/>
+          <text x="60" y="60" text-anchor="middle" fill="#7d92ab" font-size="7">BANK</text>
+          <text x="140" y="60" text-anchor="middle" fill="${c}" font-size="9" font-weight="700">$$$</text>
+        </g>`,
+      };
+      return scenes[animId] || scenes.waitlist;
+    }
+
+    function stepForward(from, to) {
+      if (from === to) return false;
+      if (to === 0 && from === STEPS.length - 1) return true;
+      return to > from;
+    }
+
+    const SCENE_MS = 1200;
+
+    function hexToGlow(hex, alpha) {
+      const h = hex.replace('#', '');
+      const r = parseInt(h.slice(0, 2), 16);
+      const g = parseInt(h.slice(2, 4), 16);
+      const b = parseInt(h.slice(4, 6), 16);
+      return `rgba(${r},${g},${b},${alpha})`;
+    }
+
+    function pulseCardGlow(color) {
+      const card = document.getElementById('terminalCard');
+      card.style.setProperty('--pulse-glow', hexToGlow(color, 0.38));
+      card.classList.remove('card-pulse');
+      void card.offsetWidth;
+      card.classList.add('card-pulse');
+      clearTimeout(card._pulseT);
+      card._pulseT = setTimeout(() => card.classList.remove('card-pulse'), SCENE_MS + 200);
+    }
+
+    function pulseStageGlow(color) {
+      const stage = document.getElementById('visualStage');
+      stage.style.setProperty('--glow-c', hexToGlow(color, 0.42));
+      stage.classList.remove('is-transitioning');
+      void stage.offsetWidth;
+      stage.classList.add('is-transitioning');
+      clearTimeout(stage._glowT);
+      stage._glowT = setTimeout(() => stage.classList.remove('is-transitioning'), SCENE_MS + 200);
+    }
+
+    function makeSceneSlide(step) {
+      const slide = document.createElement('div');
+      slide.className = 'scene-slide';
+      slide.style.setProperty('--slide-glow', hexToGlow(step.color, 0.4));
+      slide.innerHTML = `<div class="scene-slide-inner"><svg viewBox="0 0 200 110" aria-hidden="true">${renderSubScene(step.animId, step.color)}</svg></div>`;
+      return slide;
+    }
+
+    function updateVisualStage(step) {
+      const viewport = document.getElementById('sceneViewport');
+      const forward = stepForward(prevCurrent, current);
+      const changed = lastRenderedStep !== current;
+      const existing = viewport.querySelector('.scene-slide.is-current');
+
+      if (!changed && existing) return;
+
+      if (!existing) {
+        const slide = makeSceneSlide(step);
+        slide.classList.add('is-current');
+        viewport.appendChild(slide);
+        lastRenderedStep = current;
+        return;
+      }
+
+      pulseStageGlow(step.color);
+      pulseCardGlow(step.color);
+
+      const incoming = makeSceneSlide(step);
+      incoming.classList.add(forward ? 'enter-from-left' : 'enter-from-right');
+      viewport.appendChild(incoming);
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          existing.classList.remove('is-current');
+          existing.classList.add(forward ? 'exit-right' : 'exit-left');
+          incoming.classList.add('to-current');
+        });
+      });
+
+      let cleaned = false;
+      const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
+        existing.remove();
+        incoming.classList.add('is-current');
+        incoming.classList.remove('enter-from-left', 'enter-from-right', 'to-current');
+        lastRenderedStep = current;
+      };
+      incoming.addEventListener('transitionend', (e) => {
+        if (e.propertyName === 'transform') cleanup();
+      }, { once: true });
+      setTimeout(cleanup, SCENE_MS + 150);
+    }
+
+    function buildBulletHtml(step) {
+      const bulletHtml = step.phaseBullets.map((b, bi) => {
+        const parts = [];
+        if (bi === step.bulletIdx) parts.push('active');
+        if (bi < step.bulletIdx) parts.push('done');
+        return `<li class="${parts.join(' ')}" data-idx="${bi}" style="--bullet-c:${step.color}">${b}</li>`;
+      }).join('');
+      return `
+        <div class="phase-header" style="--phase-c:${step.color}">
+          <span class="phase-num">${step.num}</span>
+          <h2 class="phase-title">${step.title}</h2>
+        </div>
+        <ul class="terminal-bullets">${bulletHtml}</ul>`;
+    }
+
+    function updateTerminalBody(step, changed, forward) {
+      const body = document.getElementById('terminalBody');
+
+      let header = body.querySelector('.phase-header');
+      let ul = body.querySelector('.terminal-bullets');
+      const needsRebuild = !ul || !header || ul.children.length !== step.phaseBullets.length;
+
+      if (needsRebuild) {
+        body.innerHTML = buildBulletHtml(step);
+        return;
+      }
+
+      header.style.setProperty('--phase-c', step.color);
+      header.querySelector('.phase-num').textContent = step.num;
+      header.querySelector('.phase-title').textContent = step.title;
+
+      [...ul.children].forEach((li, bi) => {
+        const wasActive = li.classList.contains('active');
+        const isActive = bi === step.bulletIdx;
+        li.textContent = step.phaseBullets[bi];
+        li.style.setProperty('--bullet-c', step.color);
+        li.classList.remove('active', 'done', 'bullet-leaving', 'bullet-arriving');
+
+        if (bi < step.bulletIdx) li.classList.add('done');
+
+        if (changed && wasActive && !isActive) {
+          li.classList.add('bullet-leaving');
+          if (!forward) li.classList.add('back');
+          setTimeout(() => li.classList.remove('bullet-leaving', 'back'), SCENE_MS);
+        }
+
+        if (isActive) {
+          if (changed) {
+            li.classList.add('bullet-arriving');
+            if (!forward) li.classList.add('back');
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                li.classList.remove('bullet-arriving', 'back');
+                li.classList.add('active');
+              });
+            });
+          } else {
+            li.classList.add('active');
+          }
+        }
+      });
+    }
+
+    const phaseBg = {
+      green: 'radial-gradient(ellipse at 50% 80%, rgba(16,255,176,0.28), transparent 70%)',
+      yellow: 'radial-gradient(ellipse at 50% 80%, rgba(255,208,32,0.28), transparent 70%)',
+      red: 'radial-gradient(ellipse at 50% 80%, rgba(255,85,102,0.28), transparent 70%)',
+    };
+
+    function render() {
+      const step = STEPS[current];
+      const pi = step.phaseIndex;
+      const lastBullet = step.bulletIdx === step.phaseBullets.length - 1;
+
+      document.querySelectorAll('.ring-node').forEach((el, i) => {
+        el.classList.toggle('active', i === pi);
+        el.classList.toggle('done', i < pi);
+      });
+
+      document.querySelectorAll('.wire-glow').forEach((el) => {
+        const i = Number(el.dataset.glow);
+        el.classList.remove('lit', 'flowing');
+        if (pi > i) el.classList.add('lit');
+        else if (pi === i && lastBullet) el.classList.add('flowing');
+      });
+      if (current === 0 && prevCurrent === STEPS.length - 1) {
+        document.querySelector('.wire-glow[data-glow="2"]')?.classList.add('flowing');
+      }
+
+      document.querySelectorAll('.section-jumps button').forEach((btn, i) => {
+        btn.classList.toggle('active', pi === i);
+      });
+
+      const rcNum = document.getElementById('ringCenterNum');
+      rcNum.textContent = step.num;
+      rcNum.style.color = step.color;
+      rcNum.style.textShadow = `0 0 24px ${step.color}`;
+      document.getElementById('ringCenterSub').textContent = `${step.bulletIdx + 1} / ${step.phaseBullets.length}`;
+      document.getElementById('ringCenterPhase').textContent = step.title;
+      document.getElementById('ringCenterPhase').style.color = step.color;
+
+      document.getElementById('stageBg').style.background = phaseBg[step.phase];
+      updateVisualStage(step);
+
+      const card = document.getElementById('terminalCard');
+      card.className = 'terminal glow-' + step.phase;
+
+      const stepChanged = prevCurrent !== current;
+      const forward = stepForward(prevCurrent, current);
+      updateTerminalBody(step, stepChanged, forward);
+
+      document.getElementById('terminalTitle').textContent = `phase.${step.num} · ${step.bulletIdx + 1}/${step.phaseBullets.length}`;
+      document.getElementById('progressFill').style.width = `${((current + 1) / STEPS.length) * 100}%`;
+    }
+
+    function buildSectionJumps() {
+      const el = document.getElementById('sectionJumps');
+      el.innerHTML = '';
+      PHASES.forEach((p) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = p.num;
+        btn.title = p.title;
+        btn.style.cssText = `border-color:${p.color};background:${p.color}28;color:#fff;box-shadow:0 0 16px ${p.color}33`;
+        btn.addEventListener('click', () => startSection(p.num));
+        el.appendChild(btn);
+      });
+    }
+
+    function startSection(num) { startFromStep(PHASE_START[num]); }
+
+    function setPlayAttention(on) {
+      document.getElementById('playBtn').classList.toggle('attention', on);
+      document.getElementById('builderBanner')?.classList.toggle('attention', on);
+    }
+
+    function setPlaying(on) {
+      playing = on;
+      document.getElementById('playBtn').classList.toggle('on', on);
+      document.getElementById('pauseBtn').classList.toggle('on', !on);
+      if (on) setPlayAttention(false);
+      if (!on) { clearSchedule(); stopSpeech(); }
+    }
+
+    function setVoice(on) {
+      voiceOn = on;
+      document.getElementById('voiceBtn').classList.toggle('voice-on', on);
+      updateVoiceHint();
+      if (playing) armTimer();
+    }
+
+    function clearSchedule() { clearTimeout(timer); timer = null; }
+
+    function advanceStep() {
+      prevCurrent = current;
+      const wasLast = current === STEPS.length - 1;
+      if (wasLast) {
+        playCycleConclusion(() => {
+          current = 0;
+          cyclesCompleted++;
+          render();
+          if (cyclesCompleted >= MAX_CYCLES) {
+            cyclesCompleted = 0;
+            setPlaying(false);
+            setPlayAttention(true);
+            updateVoiceHint();
+            return;
+          }
+          armTimer();
+        });
+        return;
+      }
+      current++;
+      render();
+      armTimer();
+    }
+
+    function armTimer() {
+      clearSchedule(); stopSpeech();
+      if (!playing) return;
+      if (voiceOn && speechOk) {
+        speakStep(STEPS[current], () => { if (playing) timer = setTimeout(advanceStep, VOICE_PAUSE); });
+      } else {
+        timer = setTimeout(advanceStep, INTERVAL);
+      }
+    }
+
+    function goTo(i) { prevCurrent = current; current = i; render(); armTimer(); }
+    function startFromStep(i) { setPlaying(true); goTo(i); }
+    function playShowcase() {
+      cyclesCompleted = 0;
+      sessionIntroPending = true;
+      hideConclusionUI();
+      setPlayAttention(false);
+      setPlaying(true);
+      goTo(0);
+    }
+
+    document.getElementById('playBtn').addEventListener('click', playShowcase);
+    document.getElementById('pauseBtn').addEventListener('click', () => { setPlaying(false); render(); });
+    document.getElementById('stepBtn').addEventListener('click', () => { clearSchedule(); stopSpeech(); advanceStep(); });
+    document.getElementById('voiceBtn').addEventListener('click', () => setVoice(!voiceOn));
+    document.getElementById('speakBtn').addEventListener('click', () => speakStep(STEPS[current]));
+
+    let resizeT;
+    window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { buildRing(); render(); }, 120); });
+
+    function bootShowcase() {
+      setVoice(true);
+      buildSectionJumps();
+      buildRing();
+      render();
+      waitForVoices().then(() => {
+        if (speechOk) speechSynthesis.resume();
+        loadVoices();
+        playing = true;
+        document.getElementById('playBtn').classList.add('on');
+        goTo(0);
+      });
+    }
+    bootShowcase();
   </script>
 </body>
 </html>

@@ -157,6 +157,10 @@ function resolveStaticPath(pathname) {
   const abs = path.normalize(path.join(PUBLIC, pathname.replace(/^\//, '')));
   if (!abs.startsWith(PUBLIC)) return null;
   if (fs.existsSync(abs) && fs.statSync(abs).isFile()) return abs;
+  if (fs.existsSync(abs) && fs.statSync(abs).isDirectory()) {
+    const index = path.join(abs, 'index.html');
+    if (fs.existsSync(index)) return index;
+  }
   if (fs.existsSync(`${abs}.html`)) return `${abs}.html`;
   return null;
 }

@@ -1,6 +1,6 @@
 # Hibret Edir — Agent Context & Handoff
 
-**Last updated:** June 11, 2026 (Board Requests tab, announcement restore, onboarding workflow)  
+**Last updated:** June 12, 2026 (Meridian automation showcase, docs hub, automation registry)  
 **Purpose:** Onboard a new Cursor agent quickly. Read this file first, then `HIBRET_EDIR_PROJECT_HANDOFF (1).md` for deeper business rules and by-laws.
 
 ---
@@ -27,7 +27,7 @@
 | Email / SMS | SendGrid / Twilio (graceful skip if unset) |
 
 **Contacts:** (424) 547-5594 · hibretedirtext@gmail.com · hibretedirautomation@gmail.com  
-**Live URLs:** hibretedir.com · `/portal` · `/admin` · `/application`
+**Live URLs:** hibretedir.com · `/portal` · `/admin` · `/application` · `/docs/`
 
 ---
 
@@ -42,7 +42,7 @@ hibretedir/
 │   ├── application/index.html     # Full membership application (step 2)
 │   ├── waiting-list-public.json   # Static fallback for public waiting list (regenerate from DB)
 │   ├── waiting-list-status/       # Full public queue page with Status column
-│   ├── docs/                      # Board handout + automation showcase (also in docs/)
+│   ├── docs/                      # Board handout + automation showcase (mirror key HTML to public/docs/)
 │   ├── member-stats.json          # Static fallback for hero active count (offline only)
 │   ├── css/
 │   │   ├── public-pages.css
@@ -76,8 +76,9 @@ hibretedir/
 ├── db/schema.sql                  # PostgreSQL schema + idempotent migrations
 ├── docs/
 │   ├── membership-onboarding-workflow.md
+│   ├── automation-registry.md         # Catalog of all automations (IDs, triggers, files)
+│   ├── automation-showcase.html       # Portfolio / case-study site (share on business website)
 │   ├── board-meeting-handout.html
-│   ├── automation-showcase.html
 │   └── scheduled-paypal-sync.md
 ├── scripts/
 │   ├── start-dev.js               # Dev entry (delegates to dev-local.js)
@@ -367,7 +368,9 @@ Waiting list verify gate (email + phone, must be **Invited to Apply**) → full 
 
 Full queue table with **Status** column (same API as home page).
 
-**Docs (board + marketing):** `docs/membership-onboarding-workflow.md` · `docs/board-meeting-handout.html` · `docs/automation-showcase.html` · copies under `public/docs/` when deployed.
+**Docs (board + marketing):** `docs/membership-onboarding-workflow.md` · `docs/automation-registry.md` (all workflows) · `docs/automation-showcase.html` (Meridian portfolio — **keep in sync with** `public/docs/`) · `docs/board-meeting-handout.html` · deployed at `/docs/` (`public/docs/index.html` hub).
+
+**Meridian showcase** (`/docs/automation-showcase.html`): Ethio AI Solutions marketing case study. First-person AI agent **Meridian** narrates onboarding → memorial → payout with animated walkthrough. Browser **Web Speech API** (male UK English when available — quality varies by visitor OS/browser; Netlify does not provide TTS). Cycle-end conclusion promotes Ethio AI Solutions. TTS pronunciation map: Hibret → Hehbret, Edir → Eder; Ethio spoken as written.
 
 ---
 
@@ -389,7 +392,7 @@ Auth, portal, admin CRM, applications, waiting list, notifications, audit, payou
 - [x] **Netlify deploy fix** — `SECRETS_SCAN_OMIT_KEYS` for `PAYPAL_ENV` false positives (`aria-live`, etc.)
 - [x] **Docs** — `docs/scheduled-paypal-sync.md`
 
-### June 2026 — Membership onboarding & waiting list (local; not necessarily deployed)
+### June 2026 — Membership onboarding & waiting list
 
 - [x] **Onboarding pipeline** — vet → PayPal $200 on approve → member on payment (`membership-completion.js`, `paypal-registration-invoice.js`)
 - [x] **Admin Approval UI** — Approve & Send Invoice, Mark Registration Paid; removed Ready to Invite tab
@@ -400,6 +403,15 @@ Auth, portal, admin CRM, applications, waiting list, notifications, audit, payou
 - [x] **Admin Approval split** — **Board Requests** tab for Mark Paid + beneficiary ops; **Applications** = membership only
 - [x] **Public announcement restore** — memorial letter loads from `events.notes`; `set_event_announcement.js`; Event #30 (Brook Zewdie) backfilled
 - [x] **DB migrate resilience** — `run_schema.js` connect timeout 60s, query 120s, 3 retries (Render intermittent timeouts)
+
+### June 2026 — Meridian showcase & docs hub
+
+- [x] **`docs/automation-registry.md`** — Master automation catalog (ONB-*, EVT-*, PAY-*, etc.)
+- [x] **`public/docs/index.html`** — Docs hub at `/docs/`
+- [x] **Meridian showcase** — First-person agent narrative, voice + animation, Ethio AI closing line each cycle
+- [x] **Voice** — Male UK English preference, natural/Neural voices, phrase-chunk pacing (browser TTS)
+- [x] **`dev-local.js`** — Serve `/docs/` directory `index.html` locally
+- [x] **Sync rule** — Edit `docs/automation-showcase.html` then copy to `public/docs/` before deploy (no build step)
 
 ### Still partial / ops
 
@@ -455,10 +467,19 @@ From by-laws / handoff:
 6. **Database:** timeouts via `db.js`; run `npm run db:migrate` after schema changes.
 7. **Production:** `ADMIN_AUTH_ENABLED=true`, `CRON_SECRET` set on Netlify.
 8. **Restart dev server** after new API routes.
+9. **Showcase deploy:** After editing `docs/automation-showcase.html`, copy to `public/docs/automation-showcase.html` — Netlify publishes `public/` only.
 
 ---
 
 ## 12. Recent session changelog
+
+### June 12, 2026 — Meridian showcase & docs hub
+
+- **Meridian marketing page** — `/docs/automation-showcase.html`: first-person AI agent voice, animated workflow, cycle-end Ethio AI Solutions pitch.
+- **Voice:** Browser Web Speech API; prefers male UK Natural/Neural voices; phrase-chunk delivery; pronunciation map for Hibret/Edir.
+- **New:** `docs/automation-registry.md`, `public/docs/index.html` (docs hub).
+- **Fix:** `public/docs/` was stale vs `docs/` — showcase must be copied to `public/docs/` for localhost and Netlify.
+- **`dev-local.js`:** `/docs/` directory serves `index.html`.
 
 ### June 11, 2026 — Board Requests + public announcement (local session)
 
@@ -510,14 +531,17 @@ From by-laws / handoff:
 | PayPal sync timeout on Netlify | Use Admin batched sync or `npm run sync:paypal`; background function for cron |
 | Public announcement shows only summary, no service details | `events.notes` empty — run `node scripts/set_event_announcement.js <event#>` |
 | `npm run db:migrate` timeout to Render | Retry; `run_schema.js` has 60s connect / 120s query / 3 retries |
+| Showcase changes not visible on localhost | Netlify serves `public/` — copy `docs/automation-showcase.html` → `public/docs/` |
+| Meridian voice sounds robotic on deploy | Normal — TTS runs in visitor's browser, not on Netlify; Edge + UK Natural voices sound best |
 
 ---
 
 ## 14. Related documents
 
 - **`docs/membership-onboarding-workflow.md`** — Full onboarding pipeline (board + dev spec).
+- **`docs/automation-registry.md`** — Master catalog of all automations (IDs, triggers, tables, files, status).
+- **`docs/automation-showcase.html`** — Meridian portfolio case study (`/docs/automation-showcase.html`); mirror to `public/docs/`.
 - **`docs/board-meeting-handout.html`** — Printable board summary (Ctrl+P).
-- **`docs/automation-showcase.html`** — Portfolio / case-study page with diagrams.
 - **`docs/scheduled-paypal-sync.md`** — PayPal cron schedule (why “Every hour” in Netlify UI).
 - **`HIBRET_EDIR_PROJECT_HANDOFF (1).md`** — Original handoff (business, SMS bot spec, roadmap).
 - **`README.md`** — Deploy overview.
