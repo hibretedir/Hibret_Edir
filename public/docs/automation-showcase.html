@@ -682,8 +682,8 @@
 
     <div class="builder-banner" id="builderBanner">
       <span>Meridian was built by </span>
-      <a class="builder-name" href="https://www.EthioAiSolutions.com" target="_blank" rel="noopener">Ethio AI Solutions</a>
-      <a class="builder-url" href="https://www.EthioAiSolutions.com" target="_blank" rel="noopener">www.EthioAiSolutions.com</a>
+      <a class="builder-name" href="https://ethioaisolutions.com" target="_blank" rel="noopener">Ethio AI Solutions</a>
+      <a class="builder-url" href="https://ethioaisolutions.com" target="_blank" rel="noopener">www.EthioAiSolutions.com</a>
     </div>
 
     <footer>Case study: Hibret Edir member lifecycle platform</footer>
@@ -698,6 +698,8 @@
 
     const MERIDIAN_INTRO = "Hi, I'm Meridian, an AI agent built by Ethio AI Solutions for Hibret Edir. Let me show you what I do.";
     const MERIDIAN_CONCLUSION = "That's everything I run for Hibret Edir, end to end. Ethio AI Solutions builds custom AI agents like me — visit www.EthioAiSolutions.com, then schedule a free consultation to get started.";
+    const ETHIO_SITE = 'https://ethioaisolutions.com';
+    const ETHIO_CONTACT = 'https://ethioaisolutions.com/contact';
     const CONCLUSION_PAUSE_MS = 9000;
 
     const PHASES = [
@@ -1155,6 +1157,14 @@
       }, SCENE_MS + 150);
     }
 
+    function setBuilderBookingLinks(active) {
+      const banner = document.getElementById('builderBanner');
+      if (!banner) return;
+      const href = active ? ETHIO_CONTACT : ETHIO_SITE;
+      banner.querySelector('.builder-name')?.setAttribute('href', href);
+      banner.querySelector('.builder-url')?.setAttribute('href', href);
+    }
+
     function showConclusionUI() {
       const body = document.getElementById('terminalBody');
       body.querySelector('.cycle-conclusion')?.remove();
@@ -1162,7 +1172,7 @@
       el.className = 'cycle-conclusion';
       el.innerHTML = `That's everything I run for <strong>Hibret Edir</strong>, end to end. `
         + `<strong>Ethio AI Solutions</strong> builds custom AI agents like me — `
-        + `visit <strong>www.EthioAiSolutions.com</strong>, then `
+        + `visit <a href="${ETHIO_CONTACT}" target="_blank" rel="noopener"><strong>www.EthioAiSolutions.com</strong></a>, then `
         + `<strong>schedule a free consultation</strong> to get started.`;
       body.appendChild(el);
       document.getElementById('terminalTitle').textContent = 'meridian.closing';
@@ -1186,12 +1196,14 @@
       showConclusionUI();
       const finish = () => {
         hideConclusionUI();
+        setBuilderBookingLinks(true);
         onDone?.();
       };
       if (isMobileDevice()) {
         let finished = false;
         const finishCycle = () => {
           hideConclusionUI();
+          setBuilderBookingLinks(true);
           onDone?.();
         };
         const finish = () => {
@@ -1762,6 +1774,7 @@
         updateVoiceHint();
         return;
       }
+      setBuilderBookingLinks(false);
       armTimer();
     }
 
@@ -1849,6 +1862,7 @@
       captionStepKey = null;
       lastFocusedPhase = -1;
       hideConclusionUI();
+      setBuilderBookingLinks(false);
       document.getElementById('voiceBtn').classList.add('voice-on');
       setPlayAttention(false);
       document.getElementById('playBtn').classList.add('on');
@@ -1894,6 +1908,7 @@
       document.getElementById('playBtn').classList.remove('on');
       setPlayAttention(true);
       showIntroStage();
+      setBuilderBookingLinks(false);
       render();
       scrollMobileToTop();
       updateVoiceHint();
