@@ -930,10 +930,12 @@
       let index = 0;
       let finished = false;
       let started = false;
+      let watchdog = null;
 
       const finish = () => {
         if (finished) return;
         finished = true;
+        clearTimeout(watchdog);
         setSpeaking(false);
         onDone?.();
       };
@@ -943,11 +945,22 @@
           finish();
           return;
         }
-        const u = new SpeechSynthesisUtterance(chunks[index]);
+        const chunk = chunks[index];
+        const u = new SpeechSynthesisUtterance(chunk);
         applyVoiceToUtterance(u);
-        u.onstart = () => { started = true; setSpeaking(true); updateVoiceHint(); };
+        u.onstart = () => {
+          started = true;
+          setSpeaking(true);
+          updateVoiceHint();
+          clearTimeout(watchdog);
+          const words = chunk.split(/\s+/).filter(Boolean).length;
+          watchdog = setTimeout(() => {
+            if (!finished) finish();
+          }, Math.min(55000, Math.max(10000, words * 520 + 3000)));
+        };
         u.onend = () => {
           index += 1;
+          clearTimeout(watchdog);
           if (index < chunks.length) {
             setTimeout(speakOne, isMobileIOS() ? 80 : chunkPauseMs(chunks[index - 1]));
           } else {
@@ -956,12 +969,13 @@
         };
         u.onerror = () => {
           index += 1;
+          clearTimeout(watchdog);
           if (index < chunks.length) setTimeout(speakOne, 120);
           else finish();
         };
         speechSynthesis.speak(u);
         if (index === 0) {
-          setTimeout(() => { if (!started && !finished) finish(); }, 15000);
+          setTimeout(() => { if (!started && !finished) finish(); }, 12000);
         }
       };
 
@@ -1023,11 +1037,9 @@
       [150, 450, 1000].forEach((ms) => setTimeout(go, ms));
     }
 
-    function scrollMobileWalkthroughIntoView() {
-      if (!playing) return;
-      if (!isMobileDevice()) return;
-      const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      const behavior = reduced ? 'auto' : 'smooth';
+    function scrollMobileWalkthroughIntoView(onDone) {
+      if (!playing) { onDone?.(); return; }
+      if (!isMobileDevice()) { onDone?.(); return; }
 
       const computeY = () => {
         const bar = document.querySelector('.terminal-bar');
@@ -1045,14 +1057,15 @@
         return y;
       };
 
-      const scrollOnce = () => {
-        window.scrollTo({ top: computeY(), left: 0, behavior });
+      const apply = () => {
+        window.scrollTo({ top: computeY(), left: 0, behavior: 'auto' });
       };
 
-      scrollOnce();
-      requestAnimationFrame(() => requestAnimationFrame(scrollOnce));
-      setTimeout(scrollOnce, 400);
-      setTimeout(scrollOnce, 900);
+      apply();
+      requestAnimationFrame(() => {
+        apply();
+        if (onDone) setTimeout(onDone, 60);
+      });
     }
 
     function focusPhaseRing(phaseIndex, fromPhaseIndex, forward = true) {
@@ -1061,10 +1074,14 @@
       if (fromPhaseIndex >= 0 && fromPhaseIndex < phaseIndex) {
         pulsePhaseArc(fromPhaseIndex);
       }
-      if (phaseIndex === 1) {
-        scrollMobileWalkthroughIntoView();
-        setTimeout(scrollMobileWalkthroughIntoView, 700);
-      }
+    }
+
+    function needsPhase2MobileScroll(step, stepChanged) {
+      return isMobileDevice()
+        && stepChanged
+        && step.phaseIndex === 1
+        && step.bulletIdx === 0
+        && STEPS[prevCurrent]?.phaseIndex === 0;
     }
 
     function captionKeyFor(step, textOverride) {
@@ -1781,10 +1798,19 @@
         timer = setTimeout(advanceStep, VOICE_PAUSE);
       };
 
-      if (voiceOn && speechOk) {
-        scheduleSpeechAdvance(afterSpeech, line);
+      const beginSpeech = () => {
+        if (!playing) return;
+        if (voiceOn && speechOk) {
+          scheduleSpeechAdvance(afterSpeech, line);
+        } else {
+          timer = setTimeout(advanceStep, INTERVAL);
+        }
+      };
+
+      if (needsPhase2MobileScroll(step, stepChanged)) {
+        scrollMobileWalkthroughIntoView(beginSpeech);
       } else {
-        timer = setTimeout(advanceStep, INTERVAL);
+        beginSpeech();
       }
     }
 
