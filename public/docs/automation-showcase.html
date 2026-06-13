@@ -831,7 +831,8 @@
     }
 
     function splitSpeechChunks(text) {
-      const prepared = humanizeSpeechText(text);
+      const prepared = prepareSpeechText(text);
+      if (isMobileIOS()) return [prepared];
       const parts = prepared
         .split(/(?<=[.!?])\s+/)
         .flatMap((chunk) => chunk.split(/,\s+(?=and\b|then\b|once\b|when\b|if\b|visit\b)/i))
@@ -843,6 +844,17 @@
     function chunkPauseMs(chunk) {
       const words = chunk.split(/\s+/).length;
       return Math.min(420, 180 + words * 14);
+    }
+
+    function isMobileIOS() {
+      return /iPad|iPhone|iPod/.test(navigator.userAgent)
+        || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    }
+
+    function resumeSpeech() {
+      if (speechOk && typeof speechSynthesis.resume === 'function') {
+        speechSynthesis.resume();
+      }
     }
 
     function waitForVoices() {
@@ -882,14 +894,20 @@
     }
 
     function setSpeaking(on) { document.getElementById('speakBtn')?.classList.toggle('speaking', on); }
-    function stopSpeech() { if (!speechOk) return; speechSynthesis.cancel(); setSpeaking(false); }
+    function stopSpeech() {
+      if (!speechOk) return;
+      if (speechSynthesis.speaking || speechSynthesis.pending) {
+        speechSynthesis.cancel();
+      }
+      setSpeaking(false);
+    }
 
     function speakHumanText(text, onDone, attempt = 0) {
-      if (!speechOk) { onDone?.(); return; }
+      if (!speechOk) { onDone?.(true); return; }
       loadVoices();
-      speechSynthesis.resume();
+      resumeSpeech();
 
-      const chunks = splitSpeechChunks(prepareSpeechText(text));
+      const chunks = splitSpeechChunks(text);
       let index = 0;
       let started = false;
       let finished = false;
@@ -898,19 +916,21 @@
         if (finished) return;
         finished = true;
         setSpeaking(false);
-        onDone?.(started);
+        onDone?.(started || index > 0);
       };
 
       const retry = () => {
         if (finished || started) return;
-        if (attempt < 5) {
-          setTimeout(() => speakHumanText(text, onDone, attempt + 1), 500);
+        if (attempt < 3) {
+          speakHumanText(text, onDone, attempt + 1);
         } else {
           complete();
         }
       };
 
-      if (attempt === 0) stopSpeech();
+      if (attempt === 0 && (speechSynthesis.speaking || speechSynthesis.pending)) {
+        stopSpeech();
+      }
 
       const speakNext = () => {
         if (finished || index >= chunks.length) {
@@ -927,6 +947,7 @@
         };
         u.onend = () => {
           index += 1;
+          started = true;
           if (index < chunks.length) {
             setTimeout(speakNext, chunkPauseMs(chunk));
           } else {
@@ -935,15 +956,13 @@
         };
         u.onerror = () => {
           index += 1;
-          setTimeout(speakNext, 280);
+          setTimeout(speakNext, isMobileIOS() ? 120 : 280);
         };
         speechSynthesis.speak(u);
       };
 
-      const start = () => speakNext();
-      if (attempt === 0) setTimeout(start, 80);
-      else start();
-      if (attempt === 0) setTimeout(retry, 2800);
+      speakNext();
+      if (attempt === 0 && !isMobileIOS()) setTimeout(retry, 2800);
     }
 
     function speakStep(step, onDone, attempt = 0) {
@@ -961,7 +980,7 @@
           }
         }
       }
-      speakHumanText(line, (didSpeak) => onDone?.(didSpeak !== false), attempt);
+      speakHumanText(line, (ok) => onDone?.(ok !== false), attempt);
     }
 
     function speakPlainText(text, onDone, attempt = 0) {
@@ -1633,12 +1652,15 @@
     }
 
     function armTimer() {
-      clearSchedule(); stopSpeech();
+      if (timer) clearTimeout(timer);
+      timer = null;
       if (!playing) return;
       if (voiceOn && speechOk) {
-        speakStep(STEPS[current], (ok) => {
+        if (speechSynthesis.speaking || speechSynthesis.pending) {
+          speechSynthesis.cancel();
+        }
+        speakStep(STEPS[current], () => {
           if (!playing) return;
-          if (!ok) return;
           timer = setTimeout(advanceStep, VOICE_PAUSE);
         });
       } else {
@@ -1656,11 +1678,10 @@
       hideConclusionUI();
       setPlayAttention(false);
       clearSchedule();
-      stopSpeech();
-      if (speechOk) speechSynthesis.resume();
       setPlaying(true);
       prevCurrent = 0;
       current = 0;
+      resumeSpeech();
       render();
       armTimer();
     }
@@ -1682,7 +1703,7 @@
       document.getElementById('playBtn').classList.remove('on');
       render();
       waitForVoices().then(() => {
-        if (speechOk) speechSynthesis.resume();
+        resumeSpeech();
         loadVoices();
         updateVoiceHint();
         setPlayAttention(true);
