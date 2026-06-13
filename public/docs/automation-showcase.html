@@ -905,7 +905,8 @@
     function pronounceForSpeech(text) {
       return String(text)
         .replace(/\bHibret\b/gi, 'Hehbret')
-        .replace(/\bEdir\b/gi, 'Eder');
+        .replace(/\bEdir\b/gi, 'Eder')
+        .replace(/\bID\b/g, 'I, D');
     }
 
     function narrationText(step) {
