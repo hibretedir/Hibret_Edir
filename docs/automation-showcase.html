@@ -175,14 +175,16 @@
       .progress-wrap { margin-bottom: 16px; }
       .workflow-main { scroll-margin-top: 10px; }
       .detail-body { display: none; }
-      .visual-stage { height: 240px; border-bottom: none; }
+      .visual-stage { height: 200px; border-bottom: none; }
+      .stage-caption { padding: 10px 12px 12px; }
     }
 
     .stage-caption {
-      position: absolute; left: 0; right: 0; bottom: 0; z-index: 4;
-      padding: 28px 14px 11px;
-      background: linear-gradient(to top, rgba(3, 5, 8, 0.96) 0%, rgba(3, 5, 8, 0.72) 52%, transparent 100%);
-      pointer-events: none;
+      position: relative; z-index: 2;
+      padding: 10px 14px 12px;
+      background: rgba(0, 0, 0, 0.28);
+      border-top: 1px solid var(--glass-border);
+      border-bottom: 1px solid var(--glass-border);
     }
     .stage-caption-meta {
       display: flex; align-items: center; justify-content: space-between; gap: 8px;
@@ -376,7 +378,7 @@
 
     .visual-stage {
       position: relative; height: 220px; overflow: hidden;
-      border-bottom: 1px solid var(--glass-border);
+      border-bottom: none;
       --glow-c: rgba(16,255,176,0.4);
       transition: box-shadow 1s cubic-bezier(0.25, 0.8, 0.25, 1);
     }
@@ -651,16 +653,16 @@
               <div class="stage-glow" id="stageGlow"></div>
               <div class="stage-scan"></div>
               <div class="scene-viewport" id="sceneViewport"></div>
-              <div class="stage-caption" id="stageCaption" aria-live="polite">
-                <div class="stage-caption-meta">
-                  <span class="cap-phase" id="stageCaptionPhase">1 · Onboarding</span>
-                  <span class="cap-step" id="stageCaptionStep">1 / 7</span>
-                </div>
-                <div class="stage-caption-box">
-                  <div class="stage-caption-viewport">
-                    <p class="stage-caption-line is-current" id="stageCaptionCurrent">I capture every applicant on the waiting list</p>
-                    <p class="stage-caption-line" id="stageCaptionIncoming" aria-hidden="true"></p>
-                  </div>
+            </div>
+            <div class="stage-caption" id="stageCaption" aria-live="polite">
+              <div class="stage-caption-meta">
+                <span class="cap-phase" id="stageCaptionPhase">1 · Onboarding</span>
+                <span class="cap-step" id="stageCaptionStep">1 / 7</span>
+              </div>
+              <div class="stage-caption-box">
+                <div class="stage-caption-viewport">
+                  <p class="stage-caption-line is-current" id="stageCaptionCurrent">I capture every applicant on the waiting list</p>
+                  <p class="stage-caption-line" id="stageCaptionIncoming" aria-hidden="true"></p>
                 </div>
               </div>
             </div>
