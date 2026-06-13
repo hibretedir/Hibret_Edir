@@ -172,7 +172,7 @@
         box-shadow: 0 0 32px rgba(16,255,176,0.55), 0 0 64px rgba(16,255,176,0.2);
         transform: scale(1.02);
       }
-      .section-jumps { margin: 8px auto 10px; gap: 10px; }
+      .section-jumps { margin: 8px auto 10px; gap: 10px; scroll-margin-top: 10px; }
       .section-jump-item { display: flex; flex-direction: column; align-items: center; gap: 5px; }
       .section-jump-label {
         font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.1em;
@@ -1003,23 +1003,23 @@
       }, 2400);
     }
 
-    function scrollRingIntoView() {
+    function scrollMobileWalkthroughIntoView() {
       if (!window.matchMedia('(max-width: 768px)').matches) return;
-      const target = document.querySelector('.diagram-area');
-      if (!target) return;
+      const anchor = document.querySelector('.section-jumps') || document.querySelector('.progress-wrap');
+      if (!anchor) return;
       const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
       const behavior = reduced ? 'auto' : 'smooth';
-      const scrollToRing = () => {
-        const y = target.getBoundingClientRect().top + window.scrollY - 8;
+      const topInset = 10;
+
+      const scrollToAnchor = () => {
+        const y = anchor.getBoundingClientRect().top + window.scrollY - topInset;
         window.scrollTo({ top: Math.max(0, y), left: 0, behavior });
       };
-      scrollToRing();
+
+      scrollToAnchor();
       requestAnimationFrame(() => {
-        requestAnimationFrame(scrollToRing);
+        requestAnimationFrame(scrollToAnchor);
       });
-      setTimeout(() => {
-        target.scrollIntoView({ block: 'start', behavior });
-      }, 350);
     }
 
     function focusPhaseRing(phaseIndex, fromPhaseIndex, forward = true) {
@@ -1029,8 +1029,8 @@
         pulsePhaseArc(fromPhaseIndex);
       }
       if (phaseIndex >= 1) {
-        scrollRingIntoView();
-        setTimeout(scrollRingIntoView, 700);
+        scrollMobileWalkthroughIntoView();
+        setTimeout(scrollMobileWalkthroughIntoView, 700);
       }
     }
 
