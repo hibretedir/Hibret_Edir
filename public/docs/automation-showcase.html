@@ -697,7 +697,7 @@
     };
 
     const MERIDIAN_INTRO = "Hi, I'm Meridian, an AI agent built by Ethio AI Solutions for Hibret Edir. Let me show you what I do.";
-    const MERIDIAN_CONCLUSION = "That's everything I run for Hibret Edir, end to end. Ethio AI Solutions builds custom AI agents like me — visit www.EthioAiSolutions.com to bring this to your organization.";
+    const MERIDIAN_CONCLUSION = "That's everything I run for Hibret Edir, end to end. Ethio AI Solutions builds custom AI agents like me — visit www.EthioAiSolutions.com, then schedule a free consultation to get started.";
     const CONCLUSION_PAUSE_MS = 9000;
 
     const PHASES = [
@@ -906,7 +906,7 @@
       return String(text)
         .replace(/\bHibret\b/gi, 'Hehbret')
         .replace(/\bEdir\b/gi, 'Eder')
-        .replace(/\bID\b/g, 'I, D');
+        .replace(/\bID\b/g, 'I D');
     }
 
     function narrationText(step) {
@@ -1162,17 +1162,18 @@
       el.className = 'cycle-conclusion';
       el.innerHTML = `That's everything I run for <strong>Hibret Edir</strong>, end to end. `
         + `<strong>Ethio AI Solutions</strong> builds custom AI agents like me — `
-        + `visit <strong>www.EthioAiSolutions.com</strong> to bring this to your organization.`;
+        + `visit <strong>www.EthioAiSolutions.com</strong>, then `
+        + `<strong>schedule a free consultation</strong> to get started.`;
       body.appendChild(el);
       document.getElementById('terminalTitle').textContent = 'meridian.closing';
       document.getElementById('builderBanner')?.classList.add('attention');
       const lastStep = STEPS[STEPS.length - 1];
       updateStageCaption(
         lastStep,
-        'That\'s everything I run for Hibret Edir. Ethio AI Solutions builds custom AI agents like me.',
+        'Visit www.EthioAiSolutions.com — schedule a free consultation to get started.',
         true,
         true,
-        { phase: '✓ · Ethio AI Solutions', step: 'www.EthioAiSolutions.com' },
+        { phase: '✓ · Ethio AI Solutions', step: 'Free consultation' },
       );
     }
 
