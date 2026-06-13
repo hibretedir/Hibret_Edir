@@ -174,43 +174,43 @@
       }
       .progress-wrap { margin-bottom: 16px; }
       .workflow-main { scroll-margin-top: 10px; }
-      .terminal .phase-header { margin-bottom: 12px; padding-bottom: 12px; }
+      .detail-body { display: none; }
+      .visual-stage { height: 240px; border-bottom: none; }
     }
 
-    .mobile-live-topic {
-      display: none;
-      margin: 0 0 14px;
-      padding: 14px 16px 16px;
-      border-radius: 14px;
-      background: var(--glass);
-      border: 1px solid var(--glass-border);
-      backdrop-filter: blur(12px);
-      box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
-      border-left: 3px solid var(--mlt-color, var(--green));
+    .stage-caption {
+      position: absolute; left: 0; right: 0; bottom: 0; z-index: 4;
+      padding: 28px 14px 11px;
+      background: linear-gradient(to top, rgba(3, 5, 8, 0.96) 0%, rgba(3, 5, 8, 0.72) 52%, transparent 100%);
+      pointer-events: none;
     }
-    @media (max-width: 768px) {
-      .mobile-live-topic { display: block; }
+    .stage-caption-meta {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      margin-bottom: 5px;
+      font-family: 'JetBrains Mono', monospace; font-size: 0.55rem;
+      letter-spacing: 0.06em; text-transform: uppercase;
     }
-    .mlt-meta {
-      display: flex; align-items: center; justify-content: space-between; gap: 10px;
-      margin-bottom: 10px;
+    .stage-caption-meta .cap-phase {
+      color: var(--cap-color, var(--green)); font-weight: 600;
     }
-    .mlt-phase {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.62rem; font-weight: 600;
-      letter-spacing: 0.08em; text-transform: uppercase;
-      color: var(--mlt-color, var(--green));
+    .stage-caption-meta .cap-step { color: var(--muted); }
+    .stage-caption-viewport {
+      position: relative; height: 1.4em; overflow: hidden;
     }
-    .mlt-step {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.58rem; color: var(--muted);
+    .stage-caption-line {
+      position: absolute; left: 0; right: 0; top: 0; margin: 0;
+      font-size: 0.84rem; font-weight: 600; line-height: 1.4; color: #fff;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      transition:
+        transform 1.15s cubic-bezier(0.25, 0.8, 0.25, 1),
+        opacity 1.05s cubic-bezier(0.25, 0.8, 0.25, 1);
+      will-change: transform, opacity;
     }
-    .mlt-text {
-      font-size: 0.95rem; font-weight: 600; line-height: 1.45;
-      color: var(--text); min-height: 2.9em;
-      transition: opacity 0.35s ease, transform 0.35s ease;
-    }
-    .mlt-text.updating { opacity: 0; transform: translateY(6px); }
+    .stage-caption-line.is-current { transform: translateX(0); opacity: 1; }
+    .stage-caption-line.enter-from-right { transform: translateX(108%); opacity: 0; }
+    .stage-caption-line.enter-from-left { transform: translateX(-108%); opacity: 0; }
+    .stage-caption-line.exit-right { transform: translateX(108%); opacity: 0; }
+    .stage-caption-line.exit-left { transform: translateX(-108%); opacity: 0; }
 
     .section-jump-item { display: contents; }
     .section-jump-label { display: none; }
@@ -607,14 +607,6 @@
       <p class="subtitle">I'm the AI agent <em>Ethio AI Solutions</em> built for <strong>Hibret Edir</strong> — I run onboarding, memorial announcements, member invoicing, and benefit payouts from start to finish.</p>
     </header>
 
-    <div class="mobile-live-topic" id="mobileLiveTopic" aria-live="polite">
-      <div class="mlt-meta">
-        <span class="mlt-phase" id="mltPhase">1 · Onboarding</span>
-        <span class="mlt-step" id="mltStep">1 / 7</span>
-      </div>
-      <p class="mlt-text" id="mltText">I capture every applicant on the waiting list</p>
-    </div>
-
     <p class="voice-hint" id="voiceHint"></p>
     <div class="controls">
       <button type="button" id="playBtn" class="on">▶ PLAY</button>
@@ -651,6 +643,16 @@
               <div class="stage-glow" id="stageGlow"></div>
               <div class="stage-scan"></div>
               <div class="scene-viewport" id="sceneViewport"></div>
+              <div class="stage-caption" id="stageCaption" aria-live="polite">
+                <div class="stage-caption-meta">
+                  <span class="cap-phase" id="stageCaptionPhase">1 · Onboarding</span>
+                  <span class="cap-step" id="stageCaptionStep">1 / 7</span>
+                </div>
+                <div class="stage-caption-viewport">
+                  <p class="stage-caption-line is-current" id="stageCaptionCurrent">I capture every applicant on the waiting list</p>
+                  <p class="stage-caption-line" id="stageCaptionIncoming" aria-hidden="true"></p>
+                </div>
+              </div>
             </div>
             <div class="detail-body" id="terminalBody"></div>
           </div>
@@ -938,14 +940,15 @@
       speakHumanText(text, onDone, attempt);
     }
 
-    function updateMobileLiveTopic(step, textOverride, animate = true, metaOverride = null) {
-      const panel = document.getElementById('mobileLiveTopic');
-      const phaseEl = document.getElementById('mltPhase');
-      const stepEl = document.getElementById('mltStep');
-      const textEl = document.getElementById('mltText');
-      if (!panel || !phaseEl || !stepEl || !textEl) return;
+    function updateStageCaption(step, textOverride, forward, animate = true, metaOverride = null) {
+      const cap = document.getElementById('stageCaption');
+      const phaseEl = document.getElementById('stageCaptionPhase');
+      const stepEl = document.getElementById('stageCaptionStep');
+      const currentEl = document.getElementById('stageCaptionCurrent');
+      const incomingEl = document.getElementById('stageCaptionIncoming');
+      if (!cap || !phaseEl || !stepEl || !currentEl || !incomingEl) return;
 
-      panel.style.setProperty('--mlt-color', step.color);
+      cap.style.setProperty('--cap-color', step.color);
       if (metaOverride) {
         phaseEl.textContent = metaOverride.phase;
         stepEl.textContent = metaOverride.step || '';
@@ -953,21 +956,36 @@
         phaseEl.textContent = `${step.num} · ${step.title}`;
         stepEl.textContent = `${step.bulletIdx + 1} / ${step.phaseBullets.length}`;
       }
-      const nextText = textOverride || step.text;
 
-      if (!animate || textEl.textContent === nextText) {
-        textEl.textContent = nextText;
-        textEl.classList.remove('updating');
+      const nextText = textOverride || step.text;
+      if (!animate || currentEl.textContent === nextText) {
+        currentEl.textContent = nextText;
+        currentEl.className = 'stage-caption-line is-current';
+        incomingEl.className = 'stage-caption-line';
+        incomingEl.textContent = '';
         return;
       }
 
-      textEl.classList.add('updating');
-      const next = nextText;
+      incomingEl.textContent = nextText;
+      incomingEl.setAttribute('aria-hidden', 'false');
+      incomingEl.className = `stage-caption-line ${forward ? 'enter-from-right' : 'enter-from-left'}`;
+      currentEl.classList.remove('is-current');
+      currentEl.classList.add(forward ? 'exit-left' : 'exit-right');
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          incomingEl.classList.add('is-current');
+          incomingEl.classList.remove('enter-from-right', 'enter-from-left');
+        });
+      });
+
       setTimeout(() => {
-        textEl.textContent = next;
-        textEl.classList.remove('updating');
-      }, 180);
-      setTimeout(() => textEl.classList.remove('updating'), 600);
+        currentEl.textContent = nextText;
+        currentEl.className = 'stage-caption-line is-current';
+        incomingEl.className = 'stage-caption-line';
+        incomingEl.textContent = '';
+        incomingEl.setAttribute('aria-hidden', 'true');
+      }, SCENE_MS + 150);
     }
 
     function showConclusionUI() {
@@ -982,9 +1000,10 @@
       document.getElementById('terminalTitle').textContent = 'meridian.closing';
       document.getElementById('builderBanner')?.classList.add('attention');
       const lastStep = STEPS[STEPS.length - 1];
-      updateMobileLiveTopic(
+      updateStageCaption(
         lastStep,
         'That\'s everything I run for Hibret Edir. Ethio AI Solutions builds custom AI agents like me.',
+        true,
         true,
         { phase: '✓ · Ethio AI Solutions', step: 'www.EthioAiSolutions.com' },
       );
@@ -1433,7 +1452,7 @@
 
       document.getElementById('terminalTitle').textContent = `phase.${step.num} · ${step.bulletIdx + 1}/${step.phaseBullets.length}`;
       document.getElementById('progressFill').style.width = `${((current + 1) / STEPS.length) * 100}%`;
-      updateMobileLiveTopic(step, null, stepChanged);
+      updateStageCaption(step, null, forward, stepChanged);
     }
 
     function buildSectionJumps() {
