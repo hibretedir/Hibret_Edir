@@ -898,7 +898,7 @@
         if (finished) return;
         finished = true;
         setSpeaking(false);
-        onDone?.();
+        onDone?.(started);
       };
 
       const retry = () => {
@@ -940,8 +940,10 @@
         speechSynthesis.speak(u);
       };
 
-      speakNext();
-      if (attempt === 0) setTimeout(retry, 2200);
+      const start = () => speakNext();
+      if (attempt === 0) setTimeout(start, 80);
+      else start();
+      if (attempt === 0) setTimeout(retry, 2800);
     }
 
     function speakStep(step, onDone, attempt = 0) {
@@ -959,7 +961,7 @@
           }
         }
       }
-      speakHumanText(line, onDone, attempt);
+      speakHumanText(line, (didSpeak) => onDone?.(didSpeak !== false), attempt);
     }
 
     function speakPlainText(text, onDone, attempt = 0) {
@@ -1634,7 +1636,11 @@
       clearSchedule(); stopSpeech();
       if (!playing) return;
       if (voiceOn && speechOk) {
-        speakStep(STEPS[current], () => { if (playing) timer = setTimeout(advanceStep, VOICE_PAUSE); });
+        speakStep(STEPS[current], (ok) => {
+          if (!playing) return;
+          if (!ok) return;
+          timer = setTimeout(advanceStep, VOICE_PAUSE);
+        });
       } else {
         timer = setTimeout(advanceStep, INTERVAL);
       }
@@ -1649,8 +1655,14 @@
       lastFocusedPhase = -1;
       hideConclusionUI();
       setPlayAttention(false);
+      clearSchedule();
+      stopSpeech();
+      if (speechOk) speechSynthesis.resume();
       setPlaying(true);
-      goTo(0);
+      prevCurrent = 0;
+      current = 0;
+      render();
+      armTimer();
     }
 
     document.getElementById('playBtn').addEventListener('click', playShowcase);
@@ -1666,13 +1678,14 @@
       setVoice(true);
       buildSectionJumps();
       buildRing();
+      playing = false;
+      document.getElementById('playBtn').classList.remove('on');
       render();
       waitForVoices().then(() => {
         if (speechOk) speechSynthesis.resume();
         loadVoices();
-        playing = true;
-        document.getElementById('playBtn').classList.add('on');
-        goTo(0);
+        updateVoiceHint();
+        setPlayAttention(true);
       });
     }
     bootShowcase();
