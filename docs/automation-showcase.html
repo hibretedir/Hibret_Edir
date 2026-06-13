@@ -1003,7 +1003,13 @@
       }, 2400);
     }
 
+    function scrollMobileToTop() {
+      if (!window.matchMedia('(max-width: 768px)').matches) return;
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    }
+
     function scrollMobileWalkthroughIntoView() {
+      if (!playing) return;
       if (!window.matchMedia('(max-width: 768px)').matches) return;
       const anchor = document.querySelector('.section-jumps') || document.querySelector('.progress-wrap');
       if (!anchor) return;
@@ -1690,6 +1696,7 @@
             setPlaying(false);
             showIntroStage();
             setPlayAttention(true);
+            scrollMobileToTop();
             updateVoiceHint();
             return;
           }
@@ -1802,6 +1809,7 @@
     window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { buildRing(); render(); }, 120); });
 
     function bootShowcase() {
+      if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
       setVoice(true);
       buildSectionJumps();
       buildRing();
@@ -1812,6 +1820,7 @@
       setPlayAttention(true);
       showIntroStage();
       render();
+      scrollMobileToTop();
       updateVoiceHint();
       waitForVoices().then(() => {
         resumeSpeech();

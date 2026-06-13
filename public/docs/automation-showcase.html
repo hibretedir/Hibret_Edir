@@ -172,7 +172,7 @@
         box-shadow: 0 0 32px rgba(16,255,176,0.55), 0 0 64px rgba(16,255,176,0.2);
         transform: scale(1.02);
       }
-      .section-jumps { margin: 8px auto 10px; gap: 10px; }
+      .section-jumps { margin: 8px auto 10px; gap: 10px; scroll-margin-top: 10px; }
       .section-jump-item { display: flex; flex-direction: column; align-items: center; gap: 5px; }
       .section-jump-label {
         font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.1em;
@@ -1003,7 +1003,13 @@
       }, 2400);
     }
 
+    function scrollMobileToTop() {
+      if (!window.matchMedia('(max-width: 768px)').matches) return;
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    }
+
     function scrollMobileWalkthroughIntoView() {
+      if (!playing) return;
       if (!window.matchMedia('(max-width: 768px)').matches) return;
       const anchor = document.querySelector('.section-jumps') || document.querySelector('.progress-wrap');
       if (!anchor) return;
