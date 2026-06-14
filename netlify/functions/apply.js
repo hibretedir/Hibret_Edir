@@ -1828,7 +1828,12 @@ exports.handler = async (event) => {
     }
   }
 
-  if (wlPath && ['GET', 'POST'].includes(event.httpMethod)) {
+  const isWaitingListAdminRoute = wlPath && (
+    (event.httpMethod === 'GET' && !wlPath.id)
+    || (event.httpMethod === 'POST' && wlPath.id && (wlPath.action === 'invite' || wlPath.action === 'reject'))
+  );
+
+  if (isWaitingListAdminRoute) {
     const admin = verifyAdminRequest(event);
     if (!admin) {
       return json(401, { error: 'Admin authorization required. Please sign in.' });
