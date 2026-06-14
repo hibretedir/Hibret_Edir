@@ -1418,18 +1418,18 @@ function normalizeWaitingListRows(rows, slots) {
   if (!rows.length) return rows;
   let rank = 0;
   const remaining = slots?.invite_slots_remaining;
+  const qaOpen = slots?.qa_reserved_slot_open === true || isDemoQaReservedSlotOpenClient(slots);
   return rows.map((row) => {
     const copy = { ...row };
     if (!isWlQueueAwaiting(copy.status)) return copy;
     rank += 1;
     if (copy.pending_rank == null) copy.pending_rank = rank;
-    if (copy.eligible_for_invite === true) return copy;
-    if (remaining != null) {
-      const qaSlot = isDemoQaWaitingListRowClient(copy) && (
-        remaining > 0 || isDemoQaReservedSlotOpenClient(slots)
-      );
-      copy.eligible_for_invite = copy.pending_rank <= remaining || qaSlot;
-    } else if (copy.eligible_for_invite == null) {
+    const isQa = isDemoQaWaitingListRowClient(copy);
+    if (isQa && qaOpen) {
+      copy.eligible_for_invite = true;
+    } else if (remaining != null && copy.pending_rank <= remaining) {
+      copy.eligible_for_invite = true;
+    } else {
       copy.eligible_for_invite = false;
     }
     return copy;
@@ -2049,15 +2049,20 @@ function renderMembershipSlotsBannerHtml() {
   const ready = WAITING_LIST.filter(w => w.eligible_for_invite);
   const names = ready.slice(0, 5).map(w => esc(w.full_name || w.email || 'Applicant')).join(', ');
   const qaNote = DEMO_QA?.enabled && DEMO_QA?.email_full
-    ? ` QA test (${esc(DEMO_QA.email_hint || 'demo')}) may use the reserved slot.`
+    ? (s.qa_reserved_slot_open
+      ? ` Slot ${s.production_cap ?? (s.member_cap - 1)} is full — <strong>only ${esc(DEMO_QA.email_hint || 'QA test')}</strong> may use the reserved validation slot.`
+      : ` QA test (${esc(DEMO_QA.email_hint || 'demo')}) may use the reserved slot when open.`)
     : '';
   let slotsHtml;
   if (s.invite_slots_remaining <= 0) {
-    slotsHtml = `<div class="tracker-banner" role="status"><strong>${s.active_count} / ${s.member_cap} active members</strong> — no open slots right now.${
+    const reservedOnly = DEMO_QA?.enabled && s.qa_reserved_slot_open;
+    slotsHtml = `<div class="tracker-banner${reservedOnly ? ' wl-slots-banner' : ''}" role="status"><strong>${s.active_count} / ${s.production_cap ?? s.member_cap} active members</strong> — no open slots for the waiting list.${
+      reservedOnly ? ' One slot is reserved for system validation (QA only).' : ''
+    }${
       s.in_pipeline ? ` ${s.in_pipeline} already invited or applying.` : ''
-    } Raise <code>MEMBER_CAP</code> when the board approves more members.</div>`;
+    }${!reservedOnly ? ' Raise <code>MEMBER_CAP</code> when the board approves more members.' : ''}${qaNote}</div>`;
   } else {
-    slotsHtml = `<div class="tracker-banner wl-slots-banner" role="status"><strong>${s.active_count} / ${s.member_cap} active</strong> — <strong>${s.invite_slots_remaining}</strong> spot${s.invite_slots_remaining === 1 ? '' : 's'} open.${
+    slotsHtml = `<div class="tracker-banner wl-slots-banner" role="status"><strong>${s.active_count} / ${s.production_cap ?? s.member_cap} active</strong> — <strong>${s.invite_slots_remaining}</strong> spot${s.invite_slots_remaining === 1 ? '' : 's'} open.${
       s.in_pipeline ? ` (${s.in_pipeline} already invited or applying.)` : ''
     }${
     names ? ` Next in line: ${names}${ready.length > 5 ? ` +${ready.length - 5} more` : ''}.` : ' Waiting list is empty.'

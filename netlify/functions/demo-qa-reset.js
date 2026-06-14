@@ -49,6 +49,12 @@ function isQaReservedSlotConfigured() {
   return isDemoQaEnabled() && Number(process.env.MEMBER_CAP || 200) > 200;
 }
 
+/** Member cap for real applicants — excludes the reserved QA slot when configured. */
+function getProductionMemberCap() {
+  const cap = Number(process.env.MEMBER_CAP || 200);
+  return isQaReservedSlotConfigured() ? cap - 1 : cap;
+}
+
 /** True when active + invited/applying count is below full MEMBER_CAP (slot 201 available). */
 function isQaReservedSlotOpen(slots) {
   if (!slots) return false;
@@ -266,4 +272,6 @@ module.exports = {
   findDemoRecords,
   isDemoQaWaitingListRow,
   isDemoQaInviteEligible,
+  isQaReservedSlotConfigured,
+  getProductionMemberCap,
 };

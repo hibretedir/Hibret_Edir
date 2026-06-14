@@ -40,6 +40,9 @@ const {
   getDemoQaEmail,
   resetDemoQaCycle,
   isDemoQaInviteEligible,
+  isQaReservedSlotConfigured,
+  getProductionMemberCap,
+  isDemoQaWaitingListRow,
 } = require('./demo-qa-reset');
 const { buildMonitorHealthDashboard } = require('./demo-qa-dashboard');
 
@@ -1707,14 +1710,20 @@ async function getMembershipSlots(db) {
   const row = res.rows[0] || {};
   const active_count = Number(row.active_count || 0);
   const in_pipeline = Number(row.in_pipeline || 0);
-  const slots_available = Math.max(0, MEMBER_CAP - active_count);
+  const member_cap = MEMBER_CAP;
+  const production_cap = getProductionMemberCap();
+  const slots_available = Math.max(0, production_cap - active_count);
   const invite_slots_remaining = Math.max(0, slots_available - in_pipeline);
+  const qa_reserved_slot_open = isQaReservedSlotConfigured()
+    && active_count + in_pipeline < member_cap;
   return {
     active_count,
-    member_cap: MEMBER_CAP,
+    member_cap,
+    production_cap,
     slots_available,
     in_pipeline,
     invite_slots_remaining,
+    qa_reserved_slot_open,
   };
 }
 
@@ -1796,6 +1805,11 @@ async function inviteWaitingListEntry(id, body, actor) {
     getWaitingListPendingRank(db, id),
   ]);
   if (!isDemoQaInviteEligible(row, slots) && (!pendingRank || pendingRank > slots.invite_slots_remaining)) {
+    if (slots.qa_reserved_slot_open && !isDemoQaWaitingListRow(row)) {
+      return json(409, {
+        error: 'No member slots open for the waiting list. The reserved validation slot (QA test only) is still available — use System Health → Reset demo cycle, then invite the QA test email.',
+      });
+    }
     return json(409, {
       error: `No membership slots available (${slots.active_count}/${slots.member_cap} active${
         slots.in_pipeline ? `, ${slots.in_pipeline} already invited or applying` : ''

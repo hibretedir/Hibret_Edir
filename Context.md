@@ -1,6 +1,6 @@
 # Hibret Edir — Agent Context & Handoff
 
-**Last updated:** June 14, 2026 (local QA onboarding validated; System Health + PayPal sync fixes)  
+**Last updated:** June 14, 2026 (QA reserved slot enforced; waiting list invite policy)  
 **Purpose:** Onboard a new Cursor agent quickly. Read this file first, then `HIBRET_EDIR_PROJECT_HANDOFF (1).md` for deeper business rules and by-laws.
 
 **Current focus (next agent):** **Netlify deploy** of QA/system-health work when user approves. Finish **Twilio SMS** — account, buy SMS number, add `TWILIO_*` to `.env` + Netlify, `npm run test:notify -- --send`. SendGrid is **done**. See **`docs/notifications-setup.md`**. For onboarding QA before deploy: **`docs/system-validation-playbook.md`** + Admin **System Health → QA Testing**.
@@ -161,7 +161,7 @@ See `.env.example`. Critical ones:
 | `TEST_NOTIFY_EMAIL` / `TEST_NOTIFY_PHONE` | Optional — destinations for `npm run test:notify -- --send` |
 | `ADMIN_SITE_URL` | Links in board notification emails |
 | `PUBLIC_SITE_URL` | Short invite/apply links in emails (use `http://localhost:8888` locally; production URL on Netlify) |
-| `MEMBER_CAP` | Default 200; use **`201`** for QA = 200 members + 1 reserved validation slot |
+| `MEMBER_CAP` | Default 200; use **`201`** for QA = **200 production slots + 1 reserved validation slot** (slot 201 is QA-only — real waiting-list invites use cap 200) |
 | `DEMO_QA_ENABLED` | `true` to enable System Health QA + **Reset demo cycle** |
 | `DEMO_QA_EMAIL` / `DEMO_QA_PHONE` / `DEMO_QA_NAME` | Dedicated test identity (never a real member) |
 | `REGISTRATION_FEE` | `200` production; `1` for live PayPal QA smoke test |
@@ -390,7 +390,14 @@ Placeholders show `—` until API loads. Regenerate static JSON: `python scripts
 | Reset QA test | System Health → **Reset demo cycle** or `npm run demo:reset:apply` |
 | Mark invoice paid (dual control) | Board Requests → Mark Paid requests; invoice table **View in Approval** opens Board Requests → Pending |
 
-Slot math: `invite_slots_remaining = MEMBER_CAP − active − in_pipeline` (`Invited to Apply` + `Application Submitted`).
+Slot math (when `MEMBER_CAP=201` + `DEMO_QA_ENABLED`):
+
+- **`production_cap`** = 200 — used for **real** waiting-list invites (`invite_slots_remaining = production_cap − active − in_pipeline`).
+- **Slot 201** — reserved for **`DEMO_QA_EMAIL` only**; shows `qa_reserved_slot_open` when `active + in_pipeline < 201`.
+- Only the QA test row gets **Ready to Invite** / **Send Invitation** when production is full but the validation slot is open.
+- Server rejects non-QA invites if only the reserved slot remains (prevents board from accidentally inviting real applicants).
+
+Without QA mode: `invite_slots_remaining = MEMBER_CAP − active − in_pipeline` as before.
 
 **Data:** Live API + `invoices-snapshot.json` fallback when DB unavailable.
 
@@ -520,6 +527,13 @@ From by-laws / handoff:
 
 ## 12. Recent session changelog
 
+### June 14, 2026 — QA reserved slot (invite guard)
+
+- **`getProductionMemberCap()`** — when `MEMBER_CAP=201`, waiting-list invite math uses **200**, not 201.
+- **Only `DEMO_QA_EMAIL`** may be invited when production slots are full but validation slot 201 is open.
+- Admin banner clarifies “no open slots for waiting list” + QA-only reserved slot; no **Send Invitation** on real applicants in that state.
+- Server **409** if a board member tries to invite a non-QA row when only the reserved slot is available.
+
 ### June 14, 2026 — System Health, QA onboarding, PayPal sync fix
 
 - **Admin System Health** — sidebar split: **Dashboard** (integrations + health checks) and **QA Testing** (ONB step playbook); routes `#health-dashboard`, `#qa-testing`.
@@ -607,6 +621,7 @@ From by-laws / handoff:
 | PayPal sync duplicate invoice_number | Fixed June 2026 — orphan linking + REG-* null; restart dev and retry **Sync PayPal** |
 | Application address not split | Re-verify waiting list after deploy — `/verify` uses `parseAddressForForm` |
 | QA stuck “waiting for slot” | Restart `npm run dev` after `.env` change; confirm `DEMO_QA_ENABLED=true` |
+| Real applicant shows Ready to Invite but only QA slot open | Fixed June 2026 — production cap 200; only `DEMO_QA_EMAIL` gets invite when slot 201 is reserved |
 | Invite email 404 / long URL | Set `PUBLIC_SITE_URL`; use `/apply` short link |
 | PayPal registration invoice fails | Check `PAYPAL_CLIENT_ID`/`SECRET`; reuse `REG-{id}`; **Mark Registration Paid** fallback |
 | PayPal sync timeout on Netlify | Use Admin batched sync or `npm run sync:paypal`; background function for cron |
