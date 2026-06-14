@@ -1733,10 +1733,14 @@ async function rejectWaitingListEntry(id, body, actor) {
 function matchWaitingListAdminPath(path) {
   const parts = path.replace(/\/$/, '').split('/').filter(Boolean);
   if (parts[0] !== 'waiting-list') return null;
-  return {
-    id: parts[1] ? Number(parts[1]) : null,
-    action: parts[2] || null,
-  };
+  // Public routes: /waiting-list/status (handled in GET handler below)
+  if (parts[1] === 'status') return null;
+  if (!parts[1]) {
+    return { id: null, action: parts[2] || null };
+  }
+  const id = Number(parts[1]);
+  if (!Number.isFinite(id)) return null;
+  return { id, action: parts[2] || null };
 }
 
 function matchApplicationPath(path) {
