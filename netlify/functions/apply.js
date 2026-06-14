@@ -122,10 +122,10 @@ async function queryWaitingListOrdered(db) {
 /** Public status hides removed and already-active members; Admin shows full queue. */
 const WAITING_LIST_PUBLIC_HIDDEN = new Set(['Rejected', 'Canceled', 'Added as Member']);
 
-function rowToPublicStatusEntry(row, queuePosition) {
+function rowToPublicStatusEntry(row, displayRank) {
   const labels = publicWaitingListStatusLabels(row.status);
   return {
-    position: queuePosition,
+    position: displayRank,
     display_name: waitingListDisplayName(row),
     applied_date_text: formatWaitingListAppliedDate(row.applied_at),
     status: row.status,
@@ -134,6 +134,34 @@ function rowToPublicStatusEntry(row, queuePosition) {
     status_label_am: labels.am,
     added: isWaitingListPublicAdded(row),
   };
+}
+
+/** Same rank logic as Admin table: pending_rank for queue, else full queue_position. */
+function waitingListDisplayRank(queuePosition, pendingRank) {
+  return pendingRank ?? queuePosition;
+}
+
+function enrichWaitingListQueue(rows, slots = null) {
+  let pendingRank = 0;
+  return rows.map((row, idx) => {
+    const queue_position = idx + 1;
+    let pending_rank = null;
+    let eligible_for_invite = false;
+    if (isWaitingListQueueAwaiting(row.status)) {
+      pendingRank += 1;
+      pending_rank = pendingRank;
+      if (slots) {
+        eligible_for_invite = pendingRank <= slots.invite_slots_remaining;
+      }
+    }
+    return {
+      row,
+      queue_position,
+      pending_rank,
+      eligible_for_invite,
+      display_rank: waitingListDisplayRank(queue_position, pending_rank),
+    };
+  });
 }
 
 function markAddedEntries(entries) {
@@ -404,9 +432,10 @@ async function getWaitingListStatusFromDb() {
     return null;
   }
 
-  const entries = rows
-    .filter((row) => !WAITING_LIST_PUBLIC_HIDDEN.has(row.status))
-    .map((row, idx) => rowToPublicStatusEntry(row, idx + 1));
+  const enriched = enrichWaitingListQueue(rows);
+  const entries = enriched
+    .filter(({ row }) => !WAITING_LIST_PUBLIC_HIDDEN.has(row.status))
+    .map(({ row, display_rank }) => rowToPublicStatusEntry(row, display_rank));
 
   if (!entries.length) {
     return null;
@@ -416,7 +445,8 @@ async function getWaitingListStatusFromDb() {
 }
 
 function buildWaitingListStatusPayload(source, fromData) {
-  const nextEntry = fromData.entries.find((e) => !e.added);
+  const nextEntry = fromData.entries.find((e) => e.status === 'Pending' || e.status === 'Registered')
+    || fromData.entries.find((e) => !e.added);
   const nextPosition = nextEntry?.position;
   const addedCount = fromData.addedCount ?? fromData.entries.filter((e) => e.added).length;
   const updatedNote = fromData.updatedNote
@@ -1613,16 +1643,9 @@ async function listWaitingListAdmin() {
     queryWaitingListOrdered(db),
     getMembershipSlots(db),
   ]);
-  let pendingRank = 0;
-  const listRows = rows.map((row, idx) => {
-    const extras = { pending_rank: null, eligible_for_invite: false };
-    if (isWaitingListQueueAwaiting(row.status)) {
-      pendingRank += 1;
-      extras.pending_rank = pendingRank;
-      extras.eligible_for_invite = pendingRank <= slots.invite_slots_remaining;
-    }
-    return buildWaitingListRow(row, idx + 1, extras);
-  });
+  const listRows = enrichWaitingListQueue(rows, slots).map(({ row, queue_position, pending_rank, eligible_for_invite }) =>
+    buildWaitingListRow(row, queue_position, { pending_rank, eligible_for_invite })
+  );
   const pendingInvite = listRows.filter((r) => isWaitingListQueueAwaiting(r.status)).length;
   const invited = listRows.filter((r) => r.status === 'Invited to Apply').length;
   const eligible = listRows.filter((r) => r.eligible_for_invite);

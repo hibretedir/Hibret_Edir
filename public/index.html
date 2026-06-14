@@ -1076,7 +1076,7 @@ function renderWaitingListNextLine() {
   if (!el) return;
   const note = wlStatusMeta.updated_note;
   const waiting = wlStatusEntries
-    .filter((e) => !e.added)
+    .filter((e) => e.status === 'Pending' || e.status === 'Registered')
     .sort((a, b) => Number(a.position) - Number(b.position));
   const next3 = waiting.slice(0, 3);
   if (!next3.length) {
