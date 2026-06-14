@@ -4,8 +4,8 @@
 
 [build.environment]
   # PAYPAL_ENV is a mode flag (not a credential); "live" false-matches aria-live, liveNotifs, etc.
-  # SENDGRID_REPLY_TO / BOARD_NOTIFY_EMAIL are public board contact addresses (also in public/index.html).
-  SECRETS_SCAN_OMIT_KEYS = "PAYPAL_ENV,SENDGRID_REPLY_TO,BOARD_NOTIFY_EMAIL"
+  # SENDGRID_REPLY_TO / BOARD_NOTIFY_EMAIL / SENDGRID_FROM_EMAIL are public addresses (also in docs/notify.js).
+  SECRETS_SCAN_OMIT_KEYS = "PAYPAL_ENV,SENDGRID_REPLY_TO,BOARD_NOTIFY_EMAIL,SENDGRID_FROM_EMAIL"
 
 [functions]
   node_bundler = "esbuild"
