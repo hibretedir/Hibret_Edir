@@ -136,13 +136,16 @@ function rowToPublicStatusEntry(row, displayRank) {
   };
 }
 
-/** Same rank logic as Admin table: pending_rank for queue, else full queue_position. */
-function waitingListDisplayRank(queuePosition, pendingRank) {
-  return pendingRank ?? queuePosition;
+/** Same # as Admin/public: pending_rank for invite queue; pipeline rank once invited. */
+function waitingListDisplayRank({ pending_rank, active_pipeline_rank, queue_position }) {
+  if (pending_rank != null) return pending_rank;
+  if (active_pipeline_rank != null) return active_pipeline_rank;
+  return queue_position;
 }
 
 function enrichWaitingListQueue(rows, slots = null) {
   let pendingRank = 0;
+  let activePipelineRank = 0;
   return rows.map((row, idx) => {
     const queue_position = idx + 1;
     let pending_rank = null;
@@ -154,12 +157,23 @@ function enrichWaitingListQueue(rows, slots = null) {
         eligible_for_invite = pendingRank <= slots.invite_slots_remaining;
       }
     }
+    let active_pipeline_rank = null;
+    if (!WAITING_LIST_PUBLIC_HIDDEN.has(row.status)) {
+      activePipelineRank += 1;
+      active_pipeline_rank = activePipelineRank;
+    }
+    const display_rank = waitingListDisplayRank({
+      pending_rank,
+      active_pipeline_rank,
+      queue_position,
+    });
     return {
       row,
       queue_position,
       pending_rank,
+      active_pipeline_rank,
       eligible_for_invite,
-      display_rank: waitingListDisplayRank(queue_position, pending_rank),
+      display_rank,
     };
   });
 }
@@ -1599,6 +1613,8 @@ function buildWaitingListRow(row, queuePosition, extras = {}) {
     queue_position: queuePosition,
     has_application: row.has_application === true,
     pending_rank: extras.pending_rank ?? null,
+    active_pipeline_rank: extras.active_pipeline_rank ?? null,
+    display_rank: extras.display_rank ?? queuePosition,
     eligible_for_invite: extras.eligible_for_invite === true,
   };
 }
@@ -1643,8 +1659,13 @@ async function listWaitingListAdmin() {
     queryWaitingListOrdered(db),
     getMembershipSlots(db),
   ]);
-  const listRows = enrichWaitingListQueue(rows, slots).map(({ row, queue_position, pending_rank, eligible_for_invite }) =>
-    buildWaitingListRow(row, queue_position, { pending_rank, eligible_for_invite })
+  const listRows = enrichWaitingListQueue(rows, slots).map(({ row, queue_position, pending_rank, active_pipeline_rank, display_rank, eligible_for_invite }) =>
+    buildWaitingListRow(row, queue_position, {
+      pending_rank,
+      active_pipeline_rank,
+      display_rank,
+      eligible_for_invite,
+    })
   );
   const pendingInvite = listRows.filter((r) => isWaitingListQueueAwaiting(r.status)).length;
   const invited = listRows.filter((r) => r.status === 'Invited to Apply').length;

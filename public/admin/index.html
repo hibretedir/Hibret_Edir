@@ -2000,7 +2000,7 @@ function renderReadyToInviteCardsHtml(entries) {
   return `<div class="wl-ready-cards">${entries.map(w => `
     <div class="wl-ready-card">
       <div class="wl-ready-card-body">
-        <div class="wl-ready-card-rank">#${w.pending_rank || w.queue_position || w.id}</div>
+        <div class="wl-ready-card-rank">#${w.pending_rank || w.display_rank || w.queue_position || w.id}</div>
         <div class="wl-ready-card-info">
           <div class="wl-ready-card-name">${esc(w.full_name || '—')}</div>
           <div class="wl-ready-card-meta">${esc(w.email || '—')}${w.phone ? ` · ${esc(w.phone)}` : ''}</div>
@@ -2022,7 +2022,7 @@ function renderWaitingListRow(w, muted) {
   const canReject = !['Added as Member', 'Rejected'].includes(w.status);
   const statusLabel = w.eligible_for_invite ? 'Ready to Invite' : w.status;
   return `<tr class="data-row${w.eligible_for_invite ? ' wl-eligible-row' : ''}${muted ? ' wl-added-row' : ''}">
-    <td><span class="tracker-inv-num">#${w.pending_rank || w.queue_position || w.id}</span></td>
+    <td><span class="tracker-inv-num">#${w.display_rank ?? w.pending_rank ?? w.queue_position ?? w.id}</span></td>
     <td><div class="tracker-member-name">${esc(w.full_name || '—')}</div><div class="tracker-member-email">${esc(w.email || '—')}</div></td>
     <td>${esc(w.phone || '—')}</td>
     <td><span class="tracker-date">${esc(fmtDate(w.applied_at))}</span></td>
