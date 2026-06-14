@@ -322,7 +322,7 @@ Hash routing (`#announcement`, `#apply`, etc.). English + Amharic.
 
 - Hero **active member count**, per-death amount, payout amount → `apply/site-stats`
 - **Current announcement** → `apply/current-announcement` — full **memorial letter** (prayer/burial/payment) + summary box; data from `events.notes` JSON on latest Active event
-- **Waiting list status** → `apply/waiting-list/status` (same PostgreSQL queue as Admin — no static fallback when `DATABASE_URL` is set)
+- **Waiting list status** → `apply/waiting-list/status` (same PostgreSQL queue as Admin; hides Added/Rejected/Canceled; renumbers place in line)
 - Public labels: **Added** only for members; **Invitation Sent** for invited / in-progress applicants
 
 Placeholders show `—` until API loads. Regenerate static JSON: `python scripts/mark_added_waiting_list_members.py` (runs export at end) or import script.

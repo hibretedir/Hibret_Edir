@@ -119,7 +119,8 @@ async function queryWaitingListOrdered(db) {
   return result.rows;
 }
 
-const WAITING_LIST_PUBLIC_HIDDEN = new Set(['Rejected', 'Canceled']);
+/** Public status hides removed and already-active members; Admin shows full queue. */
+const WAITING_LIST_PUBLIC_HIDDEN = new Set(['Rejected', 'Canceled', 'Added as Member']);
 
 function rowToPublicStatusEntry(row, queuePosition) {
   const labels = publicWaitingListStatusLabels(row.status);
@@ -404,9 +405,8 @@ async function getWaitingListStatusFromDb() {
   }
 
   const entries = rows
-    .map((row, idx) => ({ row, queuePosition: idx + 1 }))
-    .filter(({ row }) => !WAITING_LIST_PUBLIC_HIDDEN.has(row.status))
-    .map(({ row, queuePosition }) => rowToPublicStatusEntry(row, queuePosition));
+    .filter((row) => !WAITING_LIST_PUBLIC_HIDDEN.has(row.status))
+    .map((row, idx) => rowToPublicStatusEntry(row, idx + 1));
 
   if (!entries.length) {
     return null;
