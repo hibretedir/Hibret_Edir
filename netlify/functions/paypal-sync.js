@@ -101,6 +101,23 @@ function mapPaypalStatus(status) {
   return 'Unpaid';
 }
 
+/** CRM invoice_number is numeric event invoice # only — not PayPal refs like REG-1. */
+function parseCrmInvoiceNumber(raw) {
+  if (raw == null || raw === '') return null;
+  const text = String(raw).trim();
+  if (/^REG-/i.test(text)) return null;
+  if (!/^\d+$/.test(text)) return null;
+  const n = Number(text);
+  return Number.isFinite(n) ? n : null;
+}
+
+function isRegistrationPaypalInvoice(inv) {
+  const ref = String(inv.detail?.invoice_number || '').trim();
+  if (/^REG-/i.test(ref)) return true;
+  const lines = (inv.items || []).flatMap((item) => [item.name, item.description].filter(Boolean));
+  return lines.some((line) => /registration fee|membership registration/i.test(String(line)));
+}
+
 function extractEventFromItems(inv) {
   const lines = (inv.items || []).flatMap((item) => [item.name, item.description].filter(Boolean));
   for (const line of lines) {
@@ -130,7 +147,9 @@ function normalizePaypalInvoice(inv) {
 
   return {
     paypal_invoice_id: inv.id,
-    invoice_number: inv.detail?.invoice_number ? Number(inv.detail.invoice_number) : null,
+    invoice_number: isRegistrationPaypalInvoice(inv)
+      ? null
+      : parseCrmInvoiceNumber(inv.detail?.invoice_number),
     paypal_name: name,
     email,
     event_number,
@@ -169,12 +188,139 @@ function findMemberIdFromMaps(inv, byEmail, byPaypal) {
   return null;
 }
 
+async function sanitizeInvoiceNumbers(client, rows) {
+  const nums = [...new Set(rows.map((row) => row.invoice_number).filter((n) => n != null))];
+  const ownersByNum = new Map();
+  if (nums.length) {
+    const existing = await client.query(
+      `SELECT invoice_number, paypal_invoice_id
+       FROM invoices
+       WHERE invoice_number = ANY($1::int[])`,
+      [nums]
+    );
+    for (const row of existing.rows) {
+      const num = Number(row.invoice_number);
+      if (!ownersByNum.has(num)) ownersByNum.set(num, new Set());
+      ownersByNum.get(num).add(row.paypal_invoice_id);
+    }
+  }
+
+  const usedInBatch = new Map();
+  return rows.map((row) => {
+    const num = row.invoice_number;
+    if (num == null) return row;
+
+    const dbOwners = ownersByNum.get(num);
+    if (dbOwners) {
+      const sameOwnerOnly = dbOwners.size === 1 && dbOwners.has(row.paypal_invoice_id);
+      if (!sameOwnerOnly) {
+        return { ...row, invoice_number: null };
+      }
+    }
+
+    const batchOwner = usedInBatch.get(num);
+    if (batchOwner && batchOwner !== row.paypal_invoice_id) {
+      return { ...row, invoice_number: null };
+    }
+
+    usedInBatch.set(num, row.paypal_invoice_id);
+    return row;
+  });
+}
+
+async function applyPaypalRowToInvoice(client, invoiceId, inv) {
+  await client.query(
+    `UPDATE invoices SET
+       paypal_invoice_id = COALESCE(paypal_invoice_id, $2),
+       member_id = COALESCE($3, member_id),
+       event_id = COALESCE($4, event_id),
+       status = CASE
+         WHEN $5 IN ('Paid', 'Cancelled') THEN $5
+         WHEN ${SYNC_PROTECT_LOCAL_PAID_SQL} AND $5 = 'Unpaid' THEN status
+         ELSE $5
+       END,
+       amount = $6,
+       amount_due = CASE
+         WHEN $5 IN ('Paid', 'Cancelled') THEN $7
+         WHEN ${SYNC_PROTECT_LOCAL_PAID_SQL} AND $5 = 'Unpaid'
+           AND LOWER(TRIM(COALESCE(status, ''))) = 'paid' THEN 0
+         ELSE $7
+       END,
+       sent_date = COALESCE($8, sent_date),
+       paid_date = CASE
+         WHEN $5 = 'Paid' THEN COALESCE($9, paid_date)
+         WHEN ${SYNC_PROTECT_LOCAL_PAID_SQL} AND $5 = 'Unpaid'
+           AND LOWER(TRIM(COALESCE(status, ''))) = 'paid' THEN paid_date
+         ELSE COALESCE($9, paid_date)
+       END,
+       payment_method = CASE
+         WHEN $10 = 'Zelle & BofA' THEN 'Zelle & BofA'
+         WHEN LOWER(COALESCE(payment_method, '')) IN ('zelle', 'bofa') THEN payment_method
+         WHEN ${SYNC_PROTECT_LOCAL_PAID_SQL} AND $5 = 'Unpaid'
+           AND payment_method IS NOT NULL THEN payment_method
+         WHEN $10 IS NOT NULL THEN $10
+         ELSE payment_method
+       END,
+       paypal_link = COALESCE($11, paypal_link),
+       recipient_name = COALESCE(NULLIF($12, ''), recipient_name),
+       updated_at = NOW()
+     WHERE id = $1`,
+    [
+      invoiceId,
+      inv.paypal_invoice_id,
+      inv.member_id,
+      inv.event_id,
+      inv.status,
+      inv.amount,
+      inv.amount_due,
+      inv.sent_date,
+      inv.paid_date,
+      inv.payment_method,
+      inv.paypal_link,
+      inv.recipient_name,
+    ]
+  );
+}
+
+/** Legacy seeded rows often have invoice_number but no paypal_invoice_id — link instead of inserting duplicates. */
+async function linkOrphanInvoices(client, rows) {
+  const nums = [...new Set(rows.map((row) => row.invoice_number).filter((n) => n != null))];
+  if (!nums.length) return rows;
+
+  const orphans = await client.query(
+    `SELECT id, invoice_number
+     FROM invoices
+     WHERE invoice_number = ANY($1::int[]) AND paypal_invoice_id IS NULL`,
+    [nums]
+  );
+  if (!orphans.rows.length) return rows;
+
+  const orphanByNum = new Map(orphans.rows.map((row) => [Number(row.invoice_number), row.id]));
+  const remaining = [];
+
+  for (const inv of rows) {
+    const orphanId = inv.invoice_number != null ? orphanByNum.get(inv.invoice_number) : null;
+    if (orphanId != null) {
+      await applyPaypalRowToInvoice(client, orphanId, inv);
+      orphanByNum.delete(inv.invoice_number);
+    } else {
+      remaining.push(inv);
+    }
+  }
+
+  return remaining;
+}
+
 async function upsertInvoiceBatch(client, rows) {
   if (!rows.length) return;
 
+  const linkedRows = await linkOrphanInvoices(client, rows);
+  const safeRows = await sanitizeInvoiceNumbers(client, linkedRows);
+  if (!safeRows.length) return;
+
   const values = [];
   const params = [];
-  rows.forEach((inv, index) => {
+  safeRows.forEach((inv, index) => {
     const offset = index * 12;
     values.push(
       `($${offset + 1},$${offset + 2},$${offset + 3},$${offset + 4},$${offset + 5},$${offset + 6},$${offset + 7},$${offset + 8},$${offset + 9},$${offset + 10},$${offset + 11},$${offset + 12})`
@@ -201,7 +347,16 @@ async function upsertInvoiceBatch(client, rows) {
        amount, amount_due, sent_date, paid_date, payment_method, paypal_link, recipient_name
      ) VALUES ${values.join(', ')}
      ON CONFLICT (paypal_invoice_id) DO UPDATE SET
-       invoice_number = COALESCE(EXCLUDED.invoice_number, invoices.invoice_number),
+       invoice_number = CASE
+         WHEN EXCLUDED.invoice_number IS NULL THEN invoices.invoice_number
+         WHEN invoices.invoice_number = EXCLUDED.invoice_number THEN invoices.invoice_number
+         WHEN EXISTS (
+           SELECT 1 FROM invoices i2
+           WHERE i2.invoice_number = EXCLUDED.invoice_number
+             AND i2.paypal_invoice_id IS DISTINCT FROM EXCLUDED.paypal_invoice_id
+         ) THEN invoices.invoice_number
+         ELSE EXCLUDED.invoice_number
+       END,
        member_id = COALESCE(EXCLUDED.member_id, invoices.member_id),
        event_id = COALESCE(EXCLUDED.event_id, invoices.event_id),
        status = CASE
@@ -469,3 +624,7 @@ exports.handler = async (event) => {
 exports.runPayPalSyncFullBatched = runPayPalSyncFullBatched;
 exports.verifyCronSecret = verifyCronSecret;
 exports.getLosAngelesHour = getLosAngelesHour;
+exports.normalizePaypalInvoice = normalizePaypalInvoice;
+exports.isRegistrationPaypalInvoice = isRegistrationPaypalInvoice;
+exports.sanitizeInvoiceNumbers = sanitizeInvoiceNumbers;
+exports.syncInvoicesToDb = syncInvoicesToDb;

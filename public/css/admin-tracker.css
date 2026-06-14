@@ -1252,6 +1252,16 @@ body.app-admin.tracker {
   line-height: 1.45;
 }
 
+.review-checklist-hint {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  font-size: 13px;
+  color: var(--tk-gold, #fcdd09);
+  background: rgba(252, 221, 9, 0.08);
+  border: 1px solid rgba(252, 221, 9, 0.35);
+  border-radius: 6px;
+}
+
 .review-check {
   display: flex;
   flex-wrap: wrap;

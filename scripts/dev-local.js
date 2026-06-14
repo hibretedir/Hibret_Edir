@@ -23,6 +23,7 @@ const SPA_ROUTES = [
   ['/admin', '/admin/index.html'],
   ['/portal', '/portal/index.html'],
   ['/application', '/application/index.html'],
+  ['/apply', '/application/index.html'],
 ];
 
 const MIME = {
@@ -121,18 +122,28 @@ function sendLambdaResponse(res, result) {
 
 const handlerCache = new Map();
 
+function clearFunctionModuleCache() {
+  const root = `${FUNCTIONS}${path.sep}`;
+  for (const key of Object.keys(require.cache)) {
+    if (key.startsWith(root)) delete require.cache[key];
+  }
+}
+
+function functionsBundleMtime() {
+  let max = 0;
+  for (const f of FN_NAMES) {
+    const p = path.join(FUNCTIONS, `${f}.js`);
+    max = Math.max(max, fs.statSync(p).mtimeMs);
+  }
+  return max;
+}
+
 function getHandler(name) {
   if (!FN_NAMES.has(name)) return null;
   const modPath = path.join(FUNCTIONS, `${name}.js`);
-  const mtime = fs.statSync(modPath).mtimeMs;
-  const cacheKey = `${name}:${mtime}`;
+  const cacheKey = `${name}:${functionsBundleMtime()}`;
   if (handlerCache.has(cacheKey)) return handlerCache.get(cacheKey);
-  try {
-    const resolved = require.resolve(modPath);
-    if (require.cache[resolved]) delete require.cache[resolved];
-  } catch {
-    /* first load */
-  }
+  clearFunctionModuleCache();
   // eslint-disable-next-line import/no-dynamic-require, global-require
   const mod = require(modPath);
   const handler = mod.handler;
@@ -202,6 +213,9 @@ async function handleFunction(req, res, fnName, pathname, searchParams) {
 loadEnvFile();
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'hibret-local-dev-secret';
 process.env.NODE_ENV = process.env.NODE_ENV || 'development';
+if (!process.env.PUBLIC_SITE_URL) {
+  process.env.PUBLIC_SITE_URL = `http://localhost:${PORT}`;
+}
 
 const server = http.createServer(async (req, res) => {
   const host = req.headers.host || `localhost:${PORT}`;
@@ -225,6 +239,15 @@ const server = http.createServer(async (req, res) => {
   res.end('Not found');
 });
 
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} is already in use — another dev server is still running.`);
+    console.error(`  Windows: netstat -ano | findstr :${PORT}   then   taskkill /PID <pid> /F`);
+    process.exit(1);
+  }
+  throw err;
+});
+
 server.listen(PORT, () => {
   const loaded = [...FN_NAMES].filter((n) => getHandler(n));
   console.log(`Local dev server on http://localhost:${PORT}`);
@@ -232,4 +255,11 @@ server.listen(PORT, () => {
   console.log(`  Portal: http://localhost:${PORT}/portal`);
   console.log(`  Loaded functions: ${loaded.join(', ')}`);
   console.log('  (Google Drive mode — Netlify CLI bypassed)');
+  const qaOn = process.env.DEMO_QA_ENABLED === 'true';
+  const cap = process.env.MEMBER_CAP || '200';
+  if (qaOn) {
+    console.log(`  QA mode: DEMO_QA_EMAIL=${process.env.DEMO_QA_EMAIL || '(unset)'} MEMBER_CAP=${cap}`);
+  } else if (Number(cap) > 200) {
+    console.warn('  Warning: MEMBER_CAP>200 but DEMO_QA_ENABLED is not true — QA invite bypass off');
+  }
 });

@@ -1,0 +1,91 @@
+/* Monitor Health — Admin → Security */
+.mh-tabs { margin-bottom: 14px; }
+.mh-panel { display: flex; flex-direction: column; gap: 14px; }
+.mh-intro { line-height: 1.55; }
+.mh-muted { font-size: 12px; opacity: 0.85; }
+.mh-health-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+}
+.mh-health-card {
+  background: var(--tk-surface, rgba(255,255,255,0.03));
+  border: 1px solid var(--tk-border2, rgba(255,255,255,0.08));
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.mh-health-label { font-size: 12px; font-weight: 600; margin-bottom: 8px; }
+.mh-health-detail { font-size: 11px; color: var(--tk-muted); margin-top: 8px; line-height: 1.4; }
+.mh-meta-row {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+  font-size: 12px; color: var(--tk-muted);
+}
+.mh-meta-row a { color: var(--tk-orange, #e8a020); text-decoration: none; }
+.mh-phase {
+  margin-bottom: 20px;
+  border-left: 3px solid var(--mh-phase-color, #10ffb0);
+  padding-left: 14px;
+}
+.mh-phase-title { font-size: 15px; font-weight: 600; margin-bottom: 10px; }
+.mh-phase-num {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: rgba(255,255,255,0.08); font-size: 11px; margin-right: 6px;
+}
+.mh-steps { display: flex; flex-direction: column; gap: 8px; }
+.mh-step {
+  background: var(--tk-surface, rgba(255,255,255,0.03));
+  border: 1px solid var(--tk-border2, rgba(255,255,255,0.08));
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.mh-step-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.mh-step-id { font-family: ui-monospace, monospace; font-size: 11px; color: var(--tk-muted); }
+.mh-step-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.mh-step-msg { font-size: 12px; color: var(--tk-muted); line-height: 1.45; }
+.mh-step-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.mh-step-btn { font-size: 11px !important; padding: 6px 12px !important; text-decoration: none; display: inline-block; }
+.mh-step-current {
+  border-color: var(--tk-orange, #e8a020) !important;
+  box-shadow: 0 0 0 1px rgba(232, 160, 32, 0.35);
+}
+.mh-step-blocked-card { opacity: 0.72; }
+.mh-current-step { margin-bottom: 14px; line-height: 1.5; }
+.mh-step-section { margin: 8px 0; }
+.mh-guide-lbl {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--tk-muted);
+  margin-bottom: 4px;
+}
+.mh-prereq-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 12px;
+}
+.mh-prereq-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 3px 0;
+  line-height: 1.4;
+}
+.mh-prereq-mark { flex-shrink: 0; width: 14px; font-weight: 700; }
+.mh-prereq-ok .mh-prereq-mark { color: #22c55e; }
+.mh-prereq-no .mh-prereq-mark { color: #ef4444; }
+.mh-prereq-unknown .mh-prereq-mark { color: var(--tk-muted); }
+.mh-step-guide {
+  font-size: 12px;
+  color: var(--tk-muted);
+  line-height: 1.45;
+  margin: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.mh-test-cred { font-size: 12px; display: inline-block; margin-top: 6px; }
+.mh-test-cred code { font-size: 12px; }

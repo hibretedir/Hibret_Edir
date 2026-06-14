@@ -30,8 +30,9 @@
 | ONB-05 | Approve & send invoice | Live | Admin **Approve & Send Invoice** | `apply.js`, `paypal-registration-invoice.js`, `notify.js` | `membership_applications`, `invoices`, `audit_log` | Applicant invoice email |
 | ONB-06 | Registration paid → member | Live | PayPal sync or **Mark Registration Paid** | `paypal-sync.js`, `membership-completion.js`, `notify.js` | `members`, `beneficiaries`, `payments`, `invoices`, `waiting_list`, `membership_applications`, `audit_log` | Welcome (when configured) |
 | ONB-07 | Application rejected | Live | Admin reject | `apply.js`, `notify.js` | `membership_applications`, `waiting_list`, `audit_log` | Applicant |
+| ONB-08 | System validation reset | Live | Admin **Reset demo cycle** or `npm run demo:reset:apply` | `demo-qa-reset.js`, `apply.js` | `members`, `membership_applications`, `waiting_list`, `invoices`, `audit_log` | — |
 
-**Slot math:** `MEMBER_CAP − active_members − in_pipeline` — enforced on invite (`apply.js`).
+**Slot math:** `MEMBER_CAP − active_members − in_pipeline` — enforced on invite (`apply.js`). With `MEMBER_CAP=201`, one slot is reserved for QA validation (`docs/system-validation-playbook.md`).
 
 **Detail:** [`membership-onboarding-workflow.md`](membership-onboarding-workflow.md)
 
@@ -99,6 +100,8 @@
 | GOV-06 | Approval tab: Waiting List | Live | Admin UI | `apply.js` | `waiting_list` | — |
 | GOV-07 | Approval tab: Applications | Live | Membership only | `apply.js` | `membership_applications` | — |
 | GOV-08 | Approval tab: Board Requests | Live | Mark paid + beneficiary | `apply.js` | `invoice_mark_paid_requests`, `member_change_requests` | — |
+| GOV-09 | System Health dashboard | Live | Admin → **System Health → Health & Tests** | `demo-qa-dashboard.js`, `apply.js` | (read-only probes + demo state) | — |
+| GOV-10 | Demo cycle reset | Live | System Health **Test** tab or Waiting List banner | `demo-qa-reset.js` | (see ONB-08) | — |
 
 ---
 

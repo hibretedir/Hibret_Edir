@@ -1689,6 +1689,14 @@ body.site-public .sg-card.sg-card-accent-red:active {
   color: rgba(255, 255, 255, 0.85);
 }
 
+.site-public .id-upload-link.id-upload-file {
+  border-color: rgba(7, 137, 48, 0.85);
+  background: rgba(7, 137, 48, 0.32);
+  color: #d4ffe0;
+  font-weight: 700;
+  box-shadow: 0 0 0 1px rgba(7, 137, 48, 0.35);
+}
+
 .site-public .id-upload-link:hover {
   background: rgba(252, 221, 9, 0.18);
   border-color: var(--gold);
@@ -1699,10 +1707,52 @@ body.site-public .sg-card.sg-card-accent-red:active {
   border-color: rgba(255, 255, 255, 0.35);
 }
 
+.site-public .id-upload-link.id-upload-file:hover {
+  background: rgba(7, 137, 48, 0.48);
+  border-color: #0ea841;
+  color: #fff;
+}
+
 .site-public .id-upload-link.uploaded {
   border-color: rgba(7, 137, 48, 0.5);
   background: rgba(7, 137, 48, 0.15);
   color: #9ae6b0;
+}
+
+.site-public .id-upload-link.id-upload-file.uploaded {
+  border-color: rgba(252, 221, 9, 0.65);
+  background: rgba(252, 221, 9, 0.18);
+  color: var(--gold);
+  box-shadow: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .site-public .id-upload-camera {
+    display: none !important;
+  }
+  .site-public .id-help-mobile {
+    display: none !important;
+  }
+  .site-public .id-help-desktop {
+    display: block !important;
+  }
+}
+
+.site-public .id-help-desktop {
+  display: none;
+}
+
+.site-public .submit-feedback {
+  margin-top: 20px;
+  margin-bottom: 16px;
+  scroll-margin-top: calc(var(--nav-h, 64px) + 20px);
+}
+
+.site-public .submit-feedback.ok {
+  font-weight: 600;
+  font-size: 15px;
+  padding: 16px 18px;
+  border-width: 2px;
 }
 
 .site-public .id-preview-inline {

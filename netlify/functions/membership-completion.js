@@ -7,7 +7,13 @@ const { notifyApplicationApproved } = require('./notify');
 const { syncApplicationApproved } = require('./sync');
 const { logActivity } = require('./audit');
 
-const REGISTRATION_FEE = 200;
+function getRegistrationFee() {
+  const raw = process.env.REGISTRATION_FEE;
+  const n = raw != null && raw !== '' ? Number(raw) : 200;
+  return Number.isFinite(n) && n > 0 ? n : 200;
+}
+
+const REGISTRATION_FEE = getRegistrationFee();
 
 function parseJsonField(value, fallback) {
   if (value == null) return fallback;
@@ -235,6 +241,7 @@ async function processPaidRegistrationInvoices(db, options = {}) {
 }
 
 module.exports = {
+  getRegistrationFee,
   REGISTRATION_FEE,
   completeMembershipFromApplication,
   processPaidRegistrationInvoices,

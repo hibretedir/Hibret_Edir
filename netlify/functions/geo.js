@@ -30,6 +30,87 @@ function haversineMiles(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+function titleCaseCity(city) {
+  return String(city || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\b([a-z])/g, (m) => m.toUpperCase());
+}
+
+function buildStreetFromCensusComponents(c) {
+  if (!c) return '';
+  const parts = [
+    c.fromAddress,
+    c.preDirection,
+    c.preType,
+    c.streetName,
+    c.suffixType,
+    c.suffixDirection,
+    c.postDirection,
+  ].filter((p) => p && String(p).trim());
+  return parts.join(' ').trim();
+}
+
+function extractUnitSuffix(line) {
+  const m = String(line || '').match(/,\s*((?:Apt\.?|Unit|Ste\.?|Suite|#)\s*[\w-]+)/i);
+  return m ? m[1].trim() : '';
+}
+
+/** Split a one-line US address into street, city, state, zip (best-effort). */
+function parseUsAddressLine(raw) {
+  const line = String(raw || '').trim().replace(/\s+/g, ' ');
+  if (!line) return { address: '', city: '', state: 'CA', zip: '' };
+
+  const tail = line.match(/(?:,\s*|\s+)([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)\s*$/);
+  if (!tail) {
+    return { address: line, city: '', state: 'CA', zip: '' };
+  }
+
+  const state = tail[1].toUpperCase();
+  const zip = tail[2];
+  let rest = line.slice(0, tail.index).trim().replace(/,\s*$/, '');
+
+  const aptCity = rest.match(
+    /^(.+?),\s*((?:Apt\.?|Unit|Ste\.?|Suite|#)\s*[\w-]+)\s+([A-Za-z][A-Za-z\s.-]+)$/i
+  );
+  if (aptCity) {
+    return {
+      address: `${aptCity[1].trim()}, ${aptCity[2].trim()}`,
+      city: titleCaseCity(aptCity[3].trim()),
+      state,
+      zip,
+    };
+  }
+
+  const lastComma = rest.lastIndexOf(',');
+  if (lastComma >= 0) {
+    const street = rest.slice(0, lastComma).trim();
+    const city = rest.slice(lastComma + 1).trim();
+    if (city && !/^\d+$/.test(city)) {
+      return { address: street, city: titleCaseCity(city), state, zip };
+    }
+  }
+
+  const words = rest.split(/\s+/);
+  if (words.length >= 3) {
+    for (let n = 2; n <= 3 && words.length > n; n += 1) {
+      const cityWords = words.slice(-n);
+      const cityCandidate = cityWords.join(' ');
+      if (
+        !/\d/.test(cityCandidate)
+        && !/^(dr|st|ave|rd|blvd|ln|way|apt|unit|ste|suite)$/i.test(cityWords[0])
+      ) {
+        const street = words.slice(0, -n).join(' ');
+        if (street) {
+          return { address: street, city: titleCaseCity(cityCandidate), state, zip };
+        }
+      }
+    }
+  }
+
+  return { address: rest, city: '', state, zip };
+}
+
 async function geocodeWithCensus(address) {
   const url =
     'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?' +
@@ -41,12 +122,44 @@ async function geocodeWithCensus(address) {
   const data = await fetchJson(url);
   const match = data?.result?.addressMatches?.[0];
   if (!match?.coordinates) return null;
+  const c = match.addressComponents || {};
+  const street = buildStreetFromCensusComponents(c);
+  const zip = c.zip ? String(c.zip) : '';
   return {
     lat: match.coordinates.y,
     lng: match.coordinates.x,
     formatted: match.matchedAddress || address,
     source: 'census',
+    components: {
+      street,
+      city: c.city ? String(c.city).trim() : '',
+      state: c.state ? String(c.state).trim().toUpperCase() : '',
+      zip,
+    },
   };
+}
+
+/** Parse waiting-list one-line address into application form fields. */
+async function parseAddressForForm(fullAddress) {
+  const line = String(fullAddress || '').trim();
+  if (!line) return { address: '', city: '', state: 'CA', zip: '' };
+
+  const census = await geocodeWithCensus(line);
+  if (census?.components?.city) {
+    let address = census.components.street || line;
+    const unit = extractUnitSuffix(line);
+    if (unit && !address.toLowerCase().includes(unit.toLowerCase())) {
+      address = `${address.replace(/,\s*$/, '')}, ${unit}`;
+    }
+    return {
+      address,
+      city: titleCaseCity(census.components.city),
+      state: census.components.state || 'CA',
+      zip: census.components.zip || '',
+    };
+  }
+
+  return parseUsAddressLine(line);
 }
 
 async function geocodeWithNominatim(address) {
@@ -115,4 +228,7 @@ module.exports = {
   checkAddressRadius,
   geocodeAddress,
   haversineMiles,
+  parseUsAddressLine,
+  parseAddressForForm,
+  titleCaseCity,
 };

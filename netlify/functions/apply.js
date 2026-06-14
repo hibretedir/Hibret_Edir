@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { getDb } = require('./db');
-const { checkAddressRadius } = require('./geo');
+const { checkAddressRadius, parseAddressForForm } = require('./geo');
 const {
   notifyWaitingListInvited,
   notifyApplicationSubmitted,
@@ -34,6 +34,14 @@ const {
   fetchApplicationForCompletion,
   REGISTRATION_FEE,
 } = require('./membership-completion');
+const {
+  isDemoQaEnabled,
+  getDemoQaStatus,
+  getDemoQaEmail,
+  resetDemoQaCycle,
+  isDemoQaInviteEligible,
+} = require('./demo-qa-reset');
+const { buildMonitorHealthDashboard } = require('./demo-qa-dashboard');
 
 const MEMBER_CAP = Number(process.env.MEMBER_CAP || 200);
 const WAITING_LIST_PIPELINE_STATUSES = ['Invited to Apply', 'Application Submitted'];
@@ -154,7 +162,8 @@ function enrichWaitingListQueue(rows, slots = null) {
       pendingRank += 1;
       pending_rank = pendingRank;
       if (slots) {
-        eligible_for_invite = pendingRank <= slots.invite_slots_remaining;
+        eligible_for_invite = pendingRank <= slots.invite_slots_remaining
+          || isDemoQaInviteEligible(row, slots);
       }
     }
     let active_pipeline_rank = null;
@@ -349,6 +358,8 @@ async function verifyApproved(body) {
     });
   }
 
+  const parsedAddress = await parseAddressForForm(row.address);
+
   return json(200, {
     ok: true,
     waiting_list_id: row.id,
@@ -357,7 +368,10 @@ async function verifyApproved(body) {
     full_name: row.full_name,
     email: row.email,
     phone: row.phone,
-    address: row.address,
+    address: parsedAddress.address || row.address,
+    city: parsedAddress.city || '',
+    state: parsedAddress.state || 'CA',
+    zip: parsedAddress.zip || '',
   });
 }
 
@@ -864,6 +878,15 @@ async function approveForPayment(id, body, actor) {
   }
 
   let invoiceId = row.registration_invoice_id || null;
+  if (!invoiceId && paypalResult.paypal_invoice_id) {
+    const existing = await db.query(
+      `SELECT id FROM invoices
+       WHERE paypal_invoice_id = $1 OR membership_application_id = $2
+       ORDER BY id DESC LIMIT 1`,
+      [paypalResult.paypal_invoice_id, id]
+    );
+    invoiceId = existing.rows[0]?.id || null;
+  }
   if (!invoiceId) {
     const invInsert = await db.query(
       `INSERT INTO invoices (
@@ -873,7 +896,7 @@ async function approveForPayment(id, body, actor) {
        RETURNING id`,
       [
         paypalResult.paypal_invoice_id || null,
-        paypalResult.invoice_number || null,
+        null,
         id,
         paypalResult.status || 'Unpaid',
         REGISTRATION_FEE,
@@ -884,6 +907,31 @@ async function approveForPayment(id, body, actor) {
       ]
     );
     invoiceId = invInsert.rows[0].id;
+  } else {
+    await db.query(
+      `UPDATE invoices
+       SET paypal_invoice_id = COALESCE(paypal_invoice_id, $2),
+           membership_application_id = COALESCE(membership_application_id, $3),
+           status = $4,
+           amount = $5,
+           amount_due = $6,
+           sent_date = COALESCE(sent_date, $7),
+           paypal_link = COALESCE(paypal_link, $8),
+           recipient_name = COALESCE(recipient_name, $9),
+           updated_at = NOW()
+       WHERE id = $1`,
+      [
+        invoiceId,
+        paypalResult.paypal_invoice_id || null,
+        id,
+        paypalResult.status || 'Unpaid',
+        REGISTRATION_FEE,
+        REGISTRATION_FEE,
+        paypalResult.sent_date || new Date().toISOString().slice(0, 10),
+        paypalResult.paypal_link || null,
+        paypalResult.recipient_name || row.member_full_name,
+      ]
+    );
   }
 
   await db.query(
@@ -1042,6 +1090,29 @@ function sanitizeIdDocumentsOptional(idDocuments, spouseName) {
   return payload;
 }
 
+function validateMembershipFields(app) {
+  const ben = app.beneficiary_member || {};
+  const benRequired = [
+    ['name', 'Full Name'],
+    ['relationship', 'Relationship'],
+    ['phone', 'Phone'],
+    ['email', 'Email'],
+    ['address', 'Address'],
+  ];
+  for (const [key, label] of benRequired) {
+    if (!String(ben[key] || '').trim()) {
+      return `Death Beneficiary (For Member): ${label} is required.`;
+    }
+  }
+  const emergency = (app.emergency_contacts || []).filter(
+    (row) => String(row?.name || '').trim() && String(row?.phone || '').trim()
+  );
+  if (!emergency.length) {
+    return 'At least one emergency contact must include full name and phone.';
+  }
+  return null;
+}
+
 async function submitMembership(body) {
   const { waiting_list_id, ...app } = body;
   if (!waiting_list_id) {
@@ -1083,6 +1154,11 @@ async function submitMembership(body) {
   const idCheck = sanitizeIdDocumentsOptional(app.id_documents, spouseName);
   if (typeof idCheck === 'string') {
     return json(400, { error: idCheck });
+  }
+
+  const fieldError = validateMembershipFields(app);
+  if (fieldError) {
+    return json(400, { error: fieldError });
   }
 
   const insertResult = await db.query(
@@ -1673,6 +1749,7 @@ async function listWaitingListAdmin() {
   return json(200, {
     waiting_list: listRows,
     slots,
+    demo_qa: getDemoQaStatus(),
     next_to_invite: eligible.map((r) => ({
       id: r.id,
       full_name: r.full_name,
@@ -1718,7 +1795,7 @@ async function inviteWaitingListEntry(id, body, actor) {
     getMembershipSlots(db),
     getWaitingListPendingRank(db, id),
   ]);
-  if (!pendingRank || pendingRank > slots.invite_slots_remaining) {
+  if (!isDemoQaInviteEligible(row, slots) && (!pendingRank || pendingRank > slots.invite_slots_remaining)) {
     return json(409, {
       error: `No membership slots available (${slots.active_count}/${slots.member_cap} active${
         slots.in_pipeline ? `, ${slots.in_pipeline} already invited or applying` : ''
@@ -1795,6 +1872,15 @@ async function rejectWaitingListEntry(id, body, actor) {
   });
 
   return json(200, { ok: true, message: 'Removed from waiting list.' });
+}
+
+async function handleDemoQaReset(actor) {
+  if (!isDemoQaEnabled()) {
+    return json(403, { error: 'System validation reset is not enabled (DEMO_QA_ENABLED).' });
+  }
+  const db = getDb();
+  const result = await resetDemoQaCycle(db, { actor });
+  return json(200, result);
 }
 
 function matchWaitingListAdminPath(path) {
@@ -1896,6 +1982,41 @@ exports.handler = async (event) => {
         return json(503, { error: 'Database is not configured.' });
       }
       return json(500, { error: 'Could not process change request.' });
+    }
+  }
+
+  if ((path === '/qa/dashboard' || path === '/qa/dashboard/') && event.httpMethod === 'GET') {
+    const admin = verifyAdminRequest(event);
+    if (!admin) {
+      return json(401, { error: 'Admin authorization required. Please sign in.' });
+    }
+    try {
+      const db = getDb();
+      const dashboard = await buildMonitorHealthDashboard(db);
+      return json(200, dashboard);
+    } catch (err) {
+      console.error('qa dashboard error:', err);
+      if (err.message?.includes('DATABASE_URL')) {
+        return json(503, { error: 'Database is not configured.' });
+      }
+      return json(500, { error: 'Could not load monitor health dashboard.' });
+    }
+  }
+
+  if ((path === '/demo-qa/reset' || path === '/demo-qa/reset/') && event.httpMethod === 'POST') {
+    const admin = verifyAdminRequest(event);
+    if (!admin) {
+      return json(401, { error: 'Admin authorization required. Please sign in.' });
+    }
+    try {
+      const actor = await resolveAdminActor(admin);
+      return await handleDemoQaReset(actor);
+    } catch (err) {
+      console.error('demo qa reset error:', err);
+      if (err.message?.includes('DATABASE_URL')) {
+        return json(503, { error: 'Database is not configured.' });
+      }
+      return json(400, { error: err.message || 'Could not reset demo cycle.' });
     }
   }
 

@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="/css/admin-tracker.css?v=admin30">
+<link rel="stylesheet" href="/css/admin-tracker-mh.css?v=1">
 </head>
 <body class="app-admin tracker">
 
@@ -101,6 +102,19 @@
       </button>
     </div>
     <div class="sidebar-section">
+      <div class="sidebar-label">System Health</div>
+      <button type="button" class="sidebar-nav accent-green" id="nav-health-dashboard" onclick="switchView('health-dashboard')">
+        <span class="sidebar-nav-icon">◌</span>
+        <span>Dashboard</span>
+        <span class="sidebar-badge" id="sb-health-dashboard">—</span>
+      </button>
+      <button type="button" class="sidebar-nav accent-green" id="nav-qa-testing" onclick="switchView('qa-testing')">
+        <span class="sidebar-nav-icon">✓</span>
+        <span>QA Testing</span>
+        <span class="sidebar-badge" id="sb-qa-testing">—</span>
+      </button>
+    </div>
+    <div class="sidebar-section">
       <div class="sidebar-label">Security</div>
       <button type="button" class="sidebar-nav" id="nav-board-access" onclick="switchView('board-access')">
         <span class="sidebar-nav-icon">🔐</span>
@@ -147,6 +161,7 @@
   <button type="button" data-view="messages" onclick="switchView('messages')">Messages</button>
   <button type="button" data-view="events" onclick="switchView('events')">Summary</button>
   <button type="button" data-view="payouts" onclick="switchView('payouts')">Payouts</button>
+  <button type="button" data-view="health-dashboard" onclick="switchView('health-dashboard')">Health</button>
   <button type="button" data-view="activity" onclick="switchView('activity')">Log</button>
 </nav>
 
@@ -187,6 +202,15 @@
     </button>
     <button type="button" class="sidebar-nav accent-gold" data-view="payouts" onclick="switchView('payouts')">
       <span class="sidebar-nav-icon">$</span><span>Payout Fund</span><span class="sidebar-badge" id="mob-sb-payouts">—</span>
+    </button>
+  </div>
+  <div class="sidebar-section">
+    <div class="sidebar-label">System Health</div>
+    <button type="button" class="sidebar-nav accent-green" data-view="health-dashboard" onclick="switchView('health-dashboard')">
+      <span class="sidebar-nav-icon">◌</span><span>Dashboard</span><span class="sidebar-badge" id="mob-sb-health-dashboard">—</span>
+    </button>
+    <button type="button" class="sidebar-nav accent-green" data-view="qa-testing" onclick="switchView('qa-testing')">
+      <span class="sidebar-nav-icon">✓</span><span>QA Testing</span><span class="sidebar-badge" id="mob-sb-qa-testing">—</span>
     </button>
   </div>
   <div class="sidebar-section">
@@ -390,6 +414,9 @@ const INVOICES = [];
 const APPLICATIONS = [];
 const WAITING_LIST = [];
 let MEMBERSHIP_SLOTS = null;
+let DEMO_QA = null;
+let MONITOR_HEALTH = null;
+let REGISTRATION_FEE_DISPLAY = 200;
 const CONTACT_MESSAGES = [];
 const PIN_RESET_REQUESTS = [];
 const RECEIPTS = [];
@@ -1375,6 +1402,18 @@ function isWlQueueAwaiting(status) {
   return status === 'Pending' || status === 'Registered';
 }
 
+function isDemoQaWaitingListRowClient(row) {
+  if (!DEMO_QA?.enabled || !DEMO_QA?.email_full) return false;
+  return String(row.email || '').trim().toLowerCase() === String(DEMO_QA.email_full).trim().toLowerCase();
+}
+
+function isDemoQaReservedSlotOpenClient(slots) {
+  if (!DEMO_QA?.reserved_slot || !slots) return false;
+  const cap = Number(slots.member_cap || 201);
+  const committed = Number(slots.active_count || 0) + Number(slots.in_pipeline || 0);
+  return committed < cap;
+}
+
 function normalizeWaitingListRows(rows, slots) {
   if (!rows.length) return rows;
   let rank = 0;
@@ -1384,8 +1423,12 @@ function normalizeWaitingListRows(rows, slots) {
     if (!isWlQueueAwaiting(copy.status)) return copy;
     rank += 1;
     if (copy.pending_rank == null) copy.pending_rank = rank;
+    if (copy.eligible_for_invite === true) return copy;
     if (remaining != null) {
-      copy.eligible_for_invite = copy.pending_rank <= remaining;
+      const qaSlot = isDemoQaWaitingListRowClient(copy) && (
+        remaining > 0 || isDemoQaReservedSlotOpenClient(slots)
+      );
+      copy.eligible_for_invite = copy.pending_rank <= remaining || qaSlot;
     } else if (copy.eligible_for_invite == null) {
       copy.eligible_for_invite = false;
     }
@@ -1397,6 +1440,7 @@ async function fetchWaitingList() {
   try {
     const res = await apiGet('apply/waiting-list');
     MEMBERSHIP_SLOTS = res?.slots || null;
+    DEMO_QA = res?.demo_qa || null;
     WAITING_LIST.splice(
       0,
       WAITING_LIST.length,
@@ -1661,6 +1705,8 @@ function trackerHeaderHtml(stats) {
     : currentView === 'events' ? 'Event Summary'
     : currentView === 'payouts' ? 'Payout Fund'
     : currentView === 'board-access' ? 'Board Access'
+    : currentView === 'health-dashboard' ? 'System Health — Dashboard'
+    : currentView === 'qa-testing' ? 'QA Testing'
     : currentView === 'activity' ? 'Activity Log'
     : 'Invoice Payment Tracker';
   const showOutstanding = currentView === 'invoices';
@@ -1680,6 +1726,12 @@ function trackerHeaderHtml(stats) {
     : currentView === 'events' ? `${stats.events} passed away · ${stats.total} active member invoices`
     : currentView === 'payouts' ? `${PAYOUTS.filter(p => p.status !== 'Paid Out').length} open · $15,000 per event`
     : currentView === 'board-access' ? `${BOARD_MEMBERS.filter(b => b.is_active).length} active · ${BOARD_MEMBERS.filter(b => b.is_active && !b.has_password).length} pending setup`
+    : currentView === 'health-dashboard' ? (MONITOR_HEALTH?.summary
+      ? `${MONITOR_HEALTH.summary.health_pass}/${MONITOR_HEALTH.summary.health_total} systems OK · integrations & test member`
+      : 'Integrations, test member & environment checks')
+    : currentView === 'qa-testing' ? (MONITOR_HEALTH?.summary
+      ? `Onboarding ${MONITOR_HEALTH.summary.onboarding_progress}${MONITOR_HEALTH.current_step ? ` · current ${MONITOR_HEALTH.current_step.step_id}` : ''}`
+      : 'Step-by-step validation playbook')
     : currentView === 'activity' ? `${ACTIVITY.length} recent actions logged`
     : `${stats.total} invoices · ${stats.unpaid} unpaid`;
   return `
@@ -1779,8 +1831,20 @@ function updateSidebar() {
   if (footerEl) footerEl.textContent = footerText;
   const mobFooter = document.getElementById('mobSidebarFooter');
   if (mobFooter) mobFooter.textContent = footerText;
+  const dashBadge = document.getElementById('sb-health-dashboard');
+  const mobDashBadge = document.getElementById('mob-sb-health-dashboard');
+  const qaBadge = document.getElementById('sb-qa-testing');
+  const mobQaBadge = document.getElementById('mob-sb-qa-testing');
+  const healthSummary = MONITOR_HEALTH?.summary
+    ? `${MONITOR_HEALTH.summary.health_pass}/${MONITOR_HEALTH.summary.health_total}`
+    : '—';
+  const qaSummary = MONITOR_HEALTH?.summary?.onboarding_progress || '—';
+  if (dashBadge) dashBadge.textContent = healthSummary;
+  if (mobDashBadge) mobDashBadge.textContent = healthSummary;
+  if (qaBadge) qaBadge.textContent = qaSummary;
+  if (mobQaBadge) mobQaBadge.textContent = qaSummary;
 
-  ['members', 'invoices', 'applications', 'receipts', 'messages', 'events', 'payouts', 'board-access', 'activity'].forEach(v => {
+  ['members', 'invoices', 'applications', 'receipts', 'messages', 'events', 'payouts', 'board-access', 'health-dashboard', 'qa-testing', 'activity'].forEach(v => {
     const el = document.getElementById('nav-' + v);
     if (el) el.classList.toggle('active', currentView === v);
   });
@@ -1869,6 +1933,14 @@ async function switchView(v) {
     const ok = await fetchBoardMembers();
     if (!ok) {
       document.getElementById('mainArea').innerHTML = `<div class="tracker-banner" role="alert">Could not load board access — sign in as board admin if required.</div>`;
+      return;
+    }
+  } else if (v === 'health-dashboard' || v === 'qa-testing') {
+    showMainLoading(v === 'health-dashboard' ? 'Loading system health…' : 'Loading QA testing…');
+    try {
+      await fetchMonitorHealth();
+    } catch (e) {
+      document.getElementById('mainArea').innerHTML = `<div class="tracker-banner" role="alert">${esc(e.message || 'Could not load system health.')}</div>`;
       return;
     }
   } else if (v === 'payouts' && !adminSectionsLoaded.payouts) {
@@ -1973,19 +2045,51 @@ function getWaitingListFiltered() {
 
 function renderMembershipSlotsBannerHtml() {
   const s = MEMBERSHIP_SLOTS;
-  if (!s) return '';
+  if (!s) return renderDemoQaBannerHtml();
   const ready = WAITING_LIST.filter(w => w.eligible_for_invite);
   const names = ready.slice(0, 5).map(w => esc(w.full_name || w.email || 'Applicant')).join(', ');
+  const qaNote = DEMO_QA?.enabled && DEMO_QA?.email_full
+    ? ` QA test (${esc(DEMO_QA.email_hint || 'demo')}) may use the reserved slot.`
+    : '';
+  let slotsHtml;
   if (s.invite_slots_remaining <= 0) {
-    return `<div class="tracker-banner" role="status"><strong>${s.active_count} / ${s.member_cap} active members</strong> — no open slots right now.${
+    slotsHtml = `<div class="tracker-banner" role="status"><strong>${s.active_count} / ${s.member_cap} active members</strong> — no open slots right now.${
       s.in_pipeline ? ` ${s.in_pipeline} already invited or applying.` : ''
     } Raise <code>MEMBER_CAP</code> when the board approves more members.</div>`;
-  }
-  return `<div class="tracker-banner wl-slots-banner" role="status"><strong>${s.active_count} / ${s.member_cap} active</strong> — <strong>${s.invite_slots_remaining}</strong> spot${s.invite_slots_remaining === 1 ? '' : 's'} open.${
-    s.in_pipeline ? ` (${s.in_pipeline} already invited or applying.)` : ''
-  }${
+  } else {
+    slotsHtml = `<div class="tracker-banner wl-slots-banner" role="status"><strong>${s.active_count} / ${s.member_cap} active</strong> — <strong>${s.invite_slots_remaining}</strong> spot${s.invite_slots_remaining === 1 ? '' : 's'} open.${
+      s.in_pipeline ? ` (${s.in_pipeline} already invited or applying.)` : ''
+    }${
     names ? ` Next in line: ${names}${ready.length > 5 ? ` +${ready.length - 5} more` : ''}.` : ' Waiting list is empty.'
-  }</div>`;
+  }${qaNote}</div>`;
+  }
+  return slotsHtml + renderDemoQaBannerHtml();
+}
+
+function renderDemoQaBannerHtml() {
+  if (!DEMO_QA?.enabled) return '';
+  const hint = DEMO_QA.email_hint ? ` (${esc(DEMO_QA.email_hint)})` : '';
+  const capNote = DEMO_QA.reserved_slot
+    ? ` Cap ${DEMO_QA.member_cap} includes one reserved validation slot.`
+    : '';
+  return `<div class="tracker-banner wl-slots-banner demo-qa-banner" role="status" style="margin-top:8px;display:flex;flex-wrap:wrap;align-items:center;gap:10px">
+    <span><strong>System validation</strong>${hint}${capNote} After a full test run, reset so the same email can join the waiting list again.</span>
+    <button type="button" class="btn secondary" onclick="resetDemoQaCycle()">Reset demo cycle</button>
+  </div>`;
+}
+
+async function resetDemoQaCycle() {
+  if (!confirm('Reset the system validation demo cycle?\\n\\nThis will deactivate the demo member (if any), delete the demo application, and reject the waiting list entry so you can sign up again with the same email.')) return;
+  try {
+    const res = await apiPost('apply/demo-qa/reset', {});
+    await fetchApprovalData();
+    if (currentView === 'applications') renderApplicationsView();
+    else if (currentView === 'members') updateMembersList();
+    updateSidebar();
+    showAdminToast(res.message || 'Demo cycle reset.', 'ok');
+  } catch (e) {
+    alert(e.message || 'Could not reset demo cycle.');
+  }
 }
 
 function toggleWlShowAdded() {
@@ -2545,6 +2649,64 @@ function reviewCheckRow(id, label, hint, checked, autoOk) {
   </label>`;
 }
 
+function getRegistrationFeeDisplay() {
+  const fromHealth = Number(MONITOR_HEALTH?.registration_fee);
+  if (Number.isFinite(fromHealth) && fromHealth > 0) return fromHealth;
+  if (Number.isFinite(REGISTRATION_FEE_DISPLAY) && REGISTRATION_FEE_DISPLAY > 0) return REGISTRATION_FEE_DISPLAY;
+  const app = APPLICATIONS.find(a => a.id === reviewingApplicationId);
+  const fromInv = Number(app?.registration_invoice?.amount);
+  if (Number.isFinite(fromInv) && fromInv > 0) return fromInv;
+  return 200;
+}
+
+async function ensureRegistrationFeeKnown() {
+  if (Number(MONITOR_HEALTH?.registration_fee) > 0) {
+    REGISTRATION_FEE_DISPLAY = Number(MONITOR_HEALTH.registration_fee);
+    return;
+  }
+  try {
+    const d = await apiGet('apply/qa/dashboard');
+    MONITOR_HEALTH = MONITOR_HEALTH || d;
+    if (!DEMO_QA) DEMO_QA = d?.demo || null;
+    if (Number(d?.registration_fee) > 0) REGISTRATION_FEE_DISPLAY = Number(d.registration_fee);
+  } catch { /* optional */ }
+}
+
+function isRegistrationInvoicePaid(app) {
+  if (!app) return false;
+  if (app.registration_fee_paid === true) return true;
+  const st = String(app.registration_invoice?.status || '').toLowerCase();
+  return st === 'paid';
+}
+
+function configureMembershipReviewButtons(app) {
+  const approveBtn = document.getElementById('appApproveBtn');
+  const markPaidBtn = document.getElementById('appMarkPaidBtn');
+  if (!approveBtn || !markPaidBtn || !app) return;
+
+  const terminal = app.status === 'Approved' || app.status === 'Rejected';
+  if (terminal) {
+    approveBtn.style.display = 'none';
+    markPaidBtn.style.display = 'none';
+    return;
+  }
+
+  if (app.status === 'Awaiting Payment') {
+    const paid = isRegistrationInvoicePaid(app);
+    approveBtn.textContent = 'Approve & Add to CRM';
+    approveBtn.style.display = paid ? '' : 'none';
+    approveBtn.disabled = false;
+    markPaidBtn.style.display = paid ? 'none' : '';
+    markPaidBtn.disabled = false;
+    return;
+  }
+
+  markPaidBtn.style.display = 'none';
+  approveBtn.textContent = 'Approve & Send Invoice';
+  approveBtn.style.display = '';
+  updateApproveButtonState();
+}
+
 function updateApproveButtonState() {
   const btn = document.getElementById('appApproveBtn');
   if (!btn) return;
@@ -2561,17 +2723,30 @@ function updateApproveButtonState() {
   }
   const markPaidBtn = document.getElementById('appMarkPaidBtn');
   if (app?.status === 'Awaiting Payment') {
-    btn.style.display = 'none';
+    const paid = isRegistrationInvoicePaid(app);
+    btn.textContent = 'Approve & Add to CRM';
+    btn.style.display = paid ? '' : 'none';
+    btn.disabled = false;
     if (markPaidBtn) {
-      markPaidBtn.style.display = '';
+      markPaidBtn.style.display = paid ? 'none' : '';
       markPaidBtn.disabled = false;
     }
     return;
   }
   if (markPaidBtn) markPaidBtn.style.display = 'none';
+  btn.textContent = 'Approve & Send Invoice';
   btn.style.display = app.status === 'Approved' || app.status === 'Rejected' ? 'none' : '';
   const all = ['chk_name_match', 'chk_fields_complete', 'chk_id_uploaded'].every(id => document.getElementById(id)?.checked);
-  btn.disabled = !all || app?.status === 'Awaiting Payment';
+  btn.disabled = !all;
+  const hint = document.getElementById('appReviewHint');
+  if (hint) {
+    if (all) {
+      hint.style.display = 'none';
+    } else {
+      hint.style.display = 'block';
+      hint.textContent = 'Check all three review items above to enable Approve & Send Invoice.';
+    }
+  }
 }
 
 function changeRequestApiId(appOrId) {
@@ -2611,10 +2786,9 @@ async function openApplicationReview(id) {
 
   const isMarkPaid = app.kind === 'mark_paid';
   const isBenChange = app.kind === 'beneficiary_change';
-  document.getElementById('appApproveBtn').style.display = (isBenChange || isMarkPaid) ? '' : '';
   document.getElementById('appApproveBtn').textContent = isMarkPaid
     ? 'Approve & Mark Paid'
-    : isBenChange ? 'Approve Beneficiary' : 'Approve & Add to CRM';
+    : isBenChange ? 'Approve Beneficiary' : 'Approve & Send Invoice';
   document.querySelector('#applicationModal .btn.danger').textContent = isMarkPaid
     ? 'Reject Request'
     : isBenChange ? 'Reject Change' : 'Reject';
@@ -2694,11 +2868,14 @@ async function openApplicationReview(id) {
 
   const awaitingPay = app.status === 'Awaiting Payment';
   const regInv = app.registration_invoice || {};
+  const regPaid = isRegistrationInvoicePaid(app);
   const invoiceBlock = awaitingPay ? `
     <div class="tracker-banner wl-slots-banner" style="margin-top:12px" role="status">
-      <strong>Awaiting $200 registration payment.</strong>
-      ${regInv.paypal_link ? ` <a href="${esc(regInv.paypal_link)}" target="_blank" rel="noopener">Open PayPal invoice</a>.` : ' PayPal invoice on file.'}
-      Member is added automatically when PayPal confirms payment (or use Mark Registration Paid for Zelle/BofA).
+      ${regPaid
+        ? '<strong>Registration payment received.</strong> Click <strong>Approve &amp; Add to CRM</strong> to create the member record.'
+        : `<strong>Awaiting $${regInv.amount != null ? regInv.amount : getRegistrationFeeDisplay()} registration payment.</strong>
+           ${regInv.paypal_link ? ` <a href="${esc(regInv.paypal_link)}" target="_blank" rel="noopener">Open PayPal invoice</a>.` : ' PayPal invoice on file.'}
+           Use <strong>Mark Registration Paid</strong> for Zelle/BofA after payment is verified.`}
     </div>` : '';
 
   document.getElementById('appModalTitle').textContent = app.member_full_name || 'Application';
@@ -2724,7 +2901,8 @@ async function openApplicationReview(id) {
     </div>
     <div class="review-checklist">
       <h4>Board Review Checklist</h4>
-      <p class="review-checklist-sub">Confirm each item, then click <strong>Approve &amp; Send Invoice</strong>. The $200 PayPal invoice is sent after vetting. Membership activates when payment is received.</p>
+      <p class="review-checklist-sub">Confirm each item below (check all three), then click <strong>Approve &amp; Send Invoice</strong>. That sends the registration PayPal invoice to the applicant. <strong>Approve &amp; Add to CRM</strong> only appears after payment is received.</p>
+      <p class="review-checklist-hint" id="appReviewHint" style="display:none"></p>
       ${reviewCheckRow('chk_name_match', 'Name matches waiting list record', auto.name_match ? 'Names appear to match' : 'Compare names side by side', cl.name_match, auto.name_match)}
       ${reviewCheckRow('chk_fields_complete', 'Application has full name, phone, address, and beneficiary', auto.fields_complete ? 'All required fields present' : 'Missing required fields', cl.fields_complete, auto.fields_complete)}
       ${reviewCheckRow('chk_id_uploaded', 'California ID uploaded', auto.id_uploaded ? 'ID file on file' : 'No ID uploaded yet', cl.id_uploaded, auto.id_uploaded)}
@@ -2741,15 +2919,18 @@ async function openApplicationReview(id) {
     const el = document.getElementById(id);
     if (el) el.disabled = awaitingPay || app.status === 'Approved' || app.status === 'Rejected';
   });
-  if (awaitingPay) {
-    approveBtn.style.display = 'none';
-    if (markPaidBtn) markPaidBtn.style.display = '';
-  } else {
-    if (markPaidBtn) markPaidBtn.style.display = 'none';
-    approveBtn.style.display = app.status === 'Approved' || app.status === 'Rejected' ? 'none' : '';
-    approveBtn.disabled = app.status === 'Approved' || app.status === 'Rejected';
+  configureMembershipReviewButtons(app);
+
+  if (!awaitingPay && auto.name_match && auto.fields_complete && auto.id_uploaded) {
+    ['chk_name_match', 'chk_fields_complete', 'chk_id_uploaded'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el && !el.checked) {
+        el.checked = true;
+        el.parentElement?.classList.add('on');
+      }
+    });
+    updateApproveButtonState();
   }
-  updateApproveButtonState();
 
   appReviewNotesBaseline = String(app.notes || '');
   openModal('applicationModal');
@@ -2824,12 +3005,17 @@ async function approveApplicationReview() {
     }
     return;
   }
+  if (app?.status === 'Awaiting Payment' && isRegistrationInvoicePaid(app)) {
+    return completeRegistrationReview();
+  }
   const checklist = getReviewChecklistFromModal();
   if (!['name_match', 'fields_complete', 'id_uploaded'].every(k => checklist[k])) {
     alert('Check all three review items before sending the registration invoice.');
     return;
   }
-  if (!confirm('Approve this application and send the $200 PayPal registration invoice?')) return;
+  await ensureRegistrationFeeKnown();
+  const fee = getRegistrationFeeDisplay();
+  if (!confirm(`Send the $${fee} PayPal registration invoice to ${app?.member_full_name || 'this applicant'}?\n\nThey are not added to Members until payment is received.`)) return;
   try {
     await apiPatch('apply/applications/' + reviewingApplicationId, {
       review_checklist: checklist,
@@ -2850,7 +3036,9 @@ async function completeRegistrationReview() {
   if (!reviewingApplicationId) return;
   const app = APPLICATIONS.find(a => a.id === reviewingApplicationId);
   if (app?.status !== 'Awaiting Payment') return;
-  if (!confirm(`Mark $200 registration fee paid and add ${app.member_full_name || 'this applicant'} to active members?`)) return;
+  await ensureRegistrationFeeKnown();
+  const fee = getRegistrationFeeDisplay();
+  if (!confirm(`Mark $${fee} registration fee paid and add ${app.member_full_name || 'this applicant'} to active members?`)) return;
   try {
     const res = await apiPost('apply/applications/' + reviewingApplicationId + '/complete', {
       payment_method: 'Zelle & BofA',
@@ -3690,6 +3878,227 @@ function boardAccessStatusLabel(b) {
   return { text: 'Active', cls: 'paid' };
 }
 
+async function fetchMonitorHealth() {
+  MONITOR_HEALTH = await apiGet('apply/qa/dashboard');
+  DEMO_QA = MONITOR_HEALTH?.demo || null;
+  if (Number(MONITOR_HEALTH?.registration_fee) > 0) {
+    REGISTRATION_FEE_DISPLAY = Number(MONITOR_HEALTH.registration_fee);
+  }
+  return MONITOR_HEALTH;
+}
+
+function copyQaTestCredential(elementId) {
+  const el = document.getElementById(elementId);
+  const text = el ? el.textContent.trim() : '';
+  if (!text) return;
+  navigator.clipboard.writeText(text).then(() => {
+    showAdminToast('Copied: ' + text, 'ok');
+  }).catch(() => {
+    prompt('Copy:', text);
+  });
+}
+
+function switchMonitorHealthTab(tab) {
+  switchView(tab === 'test' ? 'qa-testing' : 'health-dashboard');
+}
+
+function renderCurrentMonitorHealthView() {
+  if (currentView === 'qa-testing') renderQaTestingView();
+  else renderHealthDashboardView();
+}
+
+function renderHealthDashboardView() {
+  const d = MONITOR_HEALTH;
+  if (!d) {
+    document.getElementById('mainArea').innerHTML = trackerHeaderHtml({ total: 0, unpaid: 0, totalOwed: 0, events: 0, lateInvoices: 0, paidSession: 0, uniqueMembers: 0 })
+      + '<div class="tracker-banner">Loading system health…</div>';
+    return;
+  }
+  const stats = { total: 0, unpaid: 0, totalOwed: 0, events: 0, lateInvoices: 0, paidSession: 0, uniqueMembers: 0 };
+  document.getElementById('mainArea').innerHTML = `
+    ${trackerHeaderHtml(stats)}
+    ${!d.demo?.enabled ? `<div class="tracker-banner" role="status">Set <code>DEMO_QA_ENABLED=true</code> and <code>DEMO_QA_EMAIL</code> on Netlify for full test-member reset. Dashboard health checks still run.</div>` : ''}
+    ${renderMonitorHealthDashboardPanel(d)}`;
+  updateSidebar();
+}
+
+function renderQaTestingView() {
+  const d = MONITOR_HEALTH;
+  if (!d) {
+    document.getElementById('mainArea').innerHTML = trackerHeaderHtml({ total: 0, unpaid: 0, totalOwed: 0, events: 0, lateInvoices: 0, paidSession: 0, uniqueMembers: 0 })
+      + '<div class="tracker-banner">Loading QA testing…</div>';
+    return;
+  }
+  const stats = { total: 0, unpaid: 0, totalOwed: 0, events: 0, lateInvoices: 0, paidSession: 0, uniqueMembers: 0 };
+  document.getElementById('mainArea').innerHTML = `
+    ${trackerHeaderHtml(stats)}
+    ${!d.demo?.enabled ? `<div class="tracker-banner" role="status">Set <code>DEMO_QA_ENABLED=true</code> and <code>DEMO_QA_EMAIL</code> for the guided QA playbook and reset button.</div>` : ''}
+    ${renderMonitorHealthTestPanel(d)}`;
+  updateSidebar();
+}
+
+function renderMonitorHealthView() {
+  renderHealthDashboardView();
+}
+
+function qaCheckStatusLabel(status) {
+  const map = {
+    pass: 'Pass',
+    ready: 'Ready',
+    warn: 'Check',
+    fail: 'Fail',
+    planned: 'Planned',
+    partial: 'Partial',
+  };
+  return map[status] || status;
+}
+
+function qaCheckStatusClass(status) {
+  if (status === 'pass') return 'paid';
+  if (status === 'ready') return 'warn';
+  if (status === 'fail') return 'unpaid';
+  if (status === 'planned') return 'cancelled';
+  return 'warn';
+}
+
+function renderDemoQaResetButtonHtml() {
+  if (!MONITOR_HEALTH?.demo?.enabled) return '';
+  return `<button type="button" class="btn secondary mh-step-btn" onclick="monitorHealthResetDemo()">Reset demo cycle</button>`;
+}
+
+function renderMonitorHealthDashboardPanel(d) {
+  const healthCards = (d.health || []).map(h => `
+    <div class="mh-health-card mh-health-${esc(h.status)}">
+      <div class="mh-health-label">${esc(h.label)}</div>
+      <div class="mh-health-status"><span class="tracker-status ${qaCheckStatusClass(h.status)}"><span class="tracker-status-dot"></span>${esc(qaCheckStatusLabel(h.status))}</span></div>
+      <div class="mh-health-detail">${esc(h.detail || '')}</div>
+    </div>`).join('');
+
+  const pipe = d.pipeline || {};
+  return `
+    <div class="mh-panel">
+      <div class="tracker-banner wl-slots-banner mh-intro">
+        <strong>Test member</strong> — ${esc(d.demo?.name || 'System Test Member')}
+        ${d.demo?.email_full ? `<br><span class="mh-test-cred">Email: <code id="qaTestEmail">${esc(d.demo.email_full)}</code> <button type="button" class="btn secondary mh-step-btn" onclick="copyQaTestCredential('qaTestEmail')">Copy</button></span>` : ''}
+        ${d.demo?.phone ? `<span class="mh-test-cred"> · Phone: <code id="qaTestPhone">${esc(d.demo.phone)}</code> <button type="button" class="btn secondary mh-step-btn" onclick="copyQaTestCredential('qaTestPhone')">Copy</button></span>` : ''}
+        <br><span class="mh-muted">Pipeline: ${esc(pipe.label || '—')} · Reg fee $${esc(String(d.registration_fee ?? 200))} · Cap ${esc(String(d.slots?.member_cap ?? '—'))}</span>
+        ${d.demo?.enabled ? `<div class="mh-reset-row" style="margin-top:10px;display:flex;flex-wrap:wrap;align-items:center;gap:10px"><span class="mh-muted">After a full test run, reset so the same email can join again.</span>${renderDemoQaResetButtonHtml()}</div>` : ''}
+      </div>
+      <div class="mh-health-grid">${healthCards}</div>
+      <div class="mh-meta-row">
+        <span>Updated ${esc(d.generated_at ? new Date(d.generated_at).toLocaleString() : '—')}</span>
+        <button type="button" class="btn secondary mh-step-btn" onclick="refreshMonitorHealth()">↻ Refresh</button>
+        <a href="${esc(d.links?.showcase || '/docs/automation-showcase.html')}" target="_blank" rel="noopener">Meridian showcase ↗</a>
+      </div>
+    </div>`;
+}
+
+function renderMonitorHealthTestPanel(d) {
+  const cur = d.current_step;
+  const curBanner = cur
+    ? `<div class="tracker-banner wl-slots-banner mh-current-step" role="status">
+        <strong>Test one step at a time</strong> — Current: <strong>${esc(cur.step_id)}</strong> ${esc(cur.title)}
+        <span class="mh-muted"> · Refresh after each step</span>
+        ${d.demo?.enabled ? `<span class="mh-reset-inline" style="margin-left:12px">${renderDemoQaResetButtonHtml()}</span>` : ''}
+      </div>`
+    : `<div class="tracker-banner mh-current-step" role="status"><strong>All live steps passing</strong> — ${d.demo?.enabled ? renderDemoQaResetButtonHtml() : 'run Reset demo cycle'} to test again from ONB-01.</div>`;
+
+  const phases = d.phases || [];
+  return curBanner + phases.map(phase => {
+    const steps = (phase.steps || []).map(step => {
+      const c = step.check || {};
+      const isCurrent = cur && cur.step_id === step.id;
+      const prereq = step.prerequisite_status?.items || [];
+      const prereqHtml = prereq.length
+        ? `<ul class="mh-prereq-list">${prereq.map(p => `
+            <li class="mh-prereq-${p.unknown ? 'unknown' : p.ok ? 'ok' : 'no'}">
+              <span class="mh-prereq-mark">${p.unknown ? '○' : p.ok ? '✓' : '✗'}</span>
+              ${esc(p.label)}
+            </li>`).join('')}</ul>`
+        : '';
+      const actions = [];
+      if (step.action === 'reset' || step.id === 'ONB-08') {
+        if (d.demo?.enabled) {
+          actions.push(`<button type="button" class="btn secondary mh-step-btn" onclick="monitorHealthResetDemo()">Reset demo cycle</button>`);
+        }
+      } else if (step.link && step.mode !== 'planned' && step.can_test !== false) {
+        actions.push(`<a class="btn primary mh-step-btn" href="${esc(step.link)}" target="_blank" rel="noopener">${esc(step.link_label || 'Open')}</a>`);
+      } else if (step.link && step.mode !== 'planned') {
+        actions.push(`<span class="mh-step-blocked">Complete prerequisites above first</span>`);
+      }
+      if (step.id === 'EVT-01') {
+        actions.push(`<button type="button" class="btn secondary mh-step-btn" onclick="monitorHealthSyncPayPal()">Sync PayPal</button>`);
+      }
+      if (step.mode !== 'planned') {
+        actions.push(`<button type="button" class="btn secondary mh-step-btn" onclick="refreshMonitorHealth()">↻ Re-check</button>`);
+      }
+      const guideHtml = (step.how_to_test || step.pass_criteria) ? `
+        <div class="mh-step-guide">
+          ${step.how_to_test ? `<div><span class="mh-guide-lbl">How to test</span> ${esc(step.how_to_test)}</div>` : ''}
+          ${step.pass_criteria ? `<div><span class="mh-guide-lbl">Pass when</span> ${esc(step.pass_criteria)}</div>` : ''}
+        </div>` : '';
+      return `<div class="mh-step mh-step-${esc(c.status || 'warn')}${isCurrent ? ' mh-step-current' : ''}${step.can_test === false ? ' mh-step-blocked-card' : ''}">
+        <div class="mh-step-head">
+          <span class="mh-step-id">${esc(step.id)}</span>
+          <span class="tracker-status ${qaCheckStatusClass(c.status)}"><span class="tracker-status-dot"></span>${esc(qaCheckStatusLabel(c.status))}</span>
+        </div>
+        <div class="mh-step-title">${esc(step.title)}</div>
+        ${prereq.length ? `<div class="mh-step-section"><span class="mh-guide-lbl">Needs</span>${prereqHtml}</div>` : ''}
+        ${guideHtml}
+        <div class="mh-step-msg">${esc(c.message || '')}</div>
+        ${actions.length ? `<div class="mh-step-actions">${actions.join('')}</div>` : ''}
+      </div>`;
+    }).join('');
+    return `<section class="mh-phase" style="--mh-phase-color:${phase.color}">
+      <h3 class="mh-phase-title"><span class="mh-phase-num">${phase.phase}</span> ${esc(phase.title)}</h3>
+      <div class="mh-steps">${steps}</div>
+    </section>`;
+  }).join('');
+}
+
+async function refreshMonitorHealth() {
+  try {
+    await fetchMonitorHealth();
+    renderCurrentMonitorHealthView();
+    showAdminToast('System health refreshed.', 'ok');
+  } catch (e) {
+    alert(e.message || 'Could not refresh.');
+  }
+}
+
+async function monitorHealthResetDemo() {
+  if (!confirm('Reset the system validation demo cycle? Same as Waiting List → Reset demo cycle.')) return;
+  try {
+    const res = await apiPost('apply/demo-qa/reset', {});
+    await Promise.all([fetchMonitorHealth(), fetchApprovalData()]);
+    renderCurrentMonitorHealthView();
+    if (currentView === 'applications') renderApplicationsView();
+    else if (currentView === 'members') updateMembersList();
+    updateSidebar();
+    showAdminToast(res.message || 'Demo cycle reset.', 'ok');
+  } catch (e) {
+    alert(e.message || 'Reset failed.');
+  }
+}
+
+async function monitorHealthSyncPayPal() {
+  try {
+    await syncPayPalInvoices();
+    await fetchMonitorHealth();
+    renderCurrentMonitorHealthView();
+  } catch (e) {
+    alert(e.message || 'PayPal sync failed.');
+  }
+}
+
+function applyAdminRouteFromUrl() {
+  let hash = (location.hash || '').replace(/^#/, '').trim();
+  if (hash === 'monitor-health' || hash === 'system-health') hash = 'health-dashboard';
+  if (!hash) return;
+  const valid = ['members', 'invoices', 'applications', 'receipts', 'messages', 'events', 'payouts', 'board-access', 'health-dashboard', 'qa-testing', 'activity'];
+  if (valid.includes(hash)) switchView(hash);
+}
+
 function renderBoardAccessView() {
   const stats = getStats();
   const rows = BOARD_MEMBERS.length ? BOARD_MEMBERS.map(b => {
@@ -3809,6 +4218,8 @@ function render() {
   else if (currentView === 'messages') renderMessagesView();
   else if (currentView === 'payouts') renderPayoutsView();
   else if (currentView === 'board-access') renderBoardAccessView();
+  else if (currentView === 'health-dashboard') renderHealthDashboardView();
+  else if (currentView === 'qa-testing') renderQaTestingView();
   else if (currentView === 'activity') renderActivityView();
   else renderInvoicesView();
 }
@@ -4211,6 +4622,7 @@ async function bootAdmin() {
     adminDataError = e.message || 'Could not load admin data.';
     document.getElementById('mainArea').innerHTML = `<div class="tracker-banner" role="alert">${esc(adminDataError)}</div>`;
   }
+  applyAdminRouteFromUrl();
   if (adminBackgroundFetch) adminBackgroundFetch = null;
   adminBackgroundFetch = Promise.all([
     fetchAdminSecondary(),

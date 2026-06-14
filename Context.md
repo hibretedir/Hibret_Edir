@@ -1,9 +1,9 @@
 # Hibret Edir — Agent Context & Handoff
 
-**Last updated:** June 13, 2026 (SendGrid live; Twilio SMS setup next)  
+**Last updated:** June 14, 2026 (local QA onboarding validated; System Health + PayPal sync fixes)  
 **Purpose:** Onboard a new Cursor agent quickly. Read this file first, then `HIBRET_EDIR_PROJECT_HANDOFF (1).md` for deeper business rules and by-laws.
 
-**Current focus (next agent):** Finish **Twilio SMS** — account, buy SMS number, add `TWILIO_*` to `.env` + Netlify, `npm run test:notify -- --send`. SendGrid is **done** (test email confirmed in inbox). See **`docs/notifications-setup.md`**.
+**Current focus (next agent):** **Netlify deploy** of QA/system-health work when user approves. Finish **Twilio SMS** — account, buy SMS number, add `TWILIO_*` to `.env` + Netlify, `npm run test:notify -- --send`. SendGrid is **done**. See **`docs/notifications-setup.md`**. For onboarding QA before deploy: **`docs/system-validation-playbook.md`** + Admin **System Health → QA Testing**.
 
 ---
 
@@ -57,17 +57,19 @@ hibretedir/
 │   ├── auth.js                    # PIN, board login, PIN reset requests
 │   ├── admin-auth.js              # Shared JWT verify helpers
 │   ├── portal.js                  # Members, invoices, profile, stats, activity
-│   ├── apply.js                   # Waiting list, applications, site-stats, announcement
+│   ├── apply.js                   # Waiting list, applications, site-stats, announcement, QA dashboard
+│   ├── demo-qa-dashboard.js       # System Health API + ONB validation steps
+│   ├── demo-qa-reset.js           # QA demo cycle reset (DEMO_QA_EMAIL only)
 │   ├── membership-completion.js   # Create active member after registration payment
-│   ├── paypal-registration-invoice.js  # $200 PayPal invoice on board approve
+│   ├── paypal-registration-invoice.js  # Registration PayPal invoice on board approve
 │   ├── receipts.js                # Member receipt upload + admin review
 │   ├── payouts.js                 # $15K payout document workflow
 │   ├── notify.js                  # SendGrid + Twilio
 │   ├── sync.js                    # Cross-entity sync + audit triggers (NOT PayPal)
 │   ├── audit.js                   # Activity log read/write
 │   ├── db.js                      # pg Pool singleton + timeouts
-│   ├── geo.js                     # Address / radius helpers
-│   ├── paypal-sync.js             # PayPal pull → PostgreSQL (GET list, POST batch sync)
+│   ├── geo.js                     # Address geocode, radius check, parseUsAddressLine for application prefill
+│   ├── paypal-sync.js             # PayPal pull → PostgreSQL; orphan invoice linking; registration invoice_number=null
 │   ├── paypal-sync-scheduled.js   # Netlify cron trigger (hourly; sync 9 AM & 6 PM Pacific)
 │   ├── paypal-sync-background.js  # Full batched PayPal pull (long-running)
 │   ├── paypal-env.js              # Local .env loader + PayPal API base URL
@@ -78,6 +80,7 @@ hibretedir/
 ├── db/schema.sql                  # PostgreSQL schema + idempotent migrations
 ├── docs/
 │   ├── membership-onboarding-workflow.md
+│   ├── system-validation-playbook.md  # QA slot 201, demo reset, full onboarding test cycle
 │   ├── automation-registry.md         # Catalog of all automations (IDs, triggers, files)
 │   ├── automation-showcase.html       # Portfolio / case-study site (share on business website)
 │   ├── notifications-setup.md         # SendGrid + Twilio setup & test checklist
@@ -85,7 +88,9 @@ hibretedir/
 │   └── scheduled-paypal-sync.md
 ├── scripts/
 │   ├── start-dev.js               # Dev entry (delegates to dev-local.js)
-│   ├── dev-local.js               # Local server: public/ + functions (no Netlify CLI cache)
+│   ├── dev-local.js               # Local server: public/ + functions; QA banner; /apply redirect
+│   ├── demo_cycle_reset.js        # npm run demo:reset / demo:reset:apply
+│   ├── test_qa_invite_local.js    # npm run test:qa-invite
 │   ├── sync_paypal.js             # Full PayPal sync from terminal (no 60s limit)
 │   ├── run_schema.js              # npm run db:migrate
 │   ├── seed_from_exports.py
@@ -155,6 +160,11 @@ See `.env.example`. Critical ones:
 | `BOARD_NOTIFY_EMAIL` / `BOARD_NOTIFY_PHONE` | Comma-separated board alert recipients |
 | `TEST_NOTIFY_EMAIL` / `TEST_NOTIFY_PHONE` | Optional — destinations for `npm run test:notify -- --send` |
 | `ADMIN_SITE_URL` | Links in board notification emails |
+| `PUBLIC_SITE_URL` | Short invite/apply links in emails (use `http://localhost:8888` locally; production URL on Netlify) |
+| `MEMBER_CAP` | Default 200; use **`201`** for QA = 200 members + 1 reserved validation slot |
+| `DEMO_QA_ENABLED` | `true` to enable System Health QA + **Reset demo cycle** |
+| `DEMO_QA_EMAIL` / `DEMO_QA_PHONE` / `DEMO_QA_NAME` | Dedicated test identity (never a real member) |
+| `REGISTRATION_FEE` | `200` production; `1` for live PayPal QA smoke test |
 
 **SendGrid production values (June 2026):**
 
@@ -282,13 +292,15 @@ Base URL: `/.netlify/functions/<name>`
 | POST | `/waiting-list/:id/invite` | Admin | Send invitation |
 | POST | `/waiting-list/:id/reject` | Admin | Remove → status `Rejected` |
 | GET/PATCH | `/applications/:id` | Admin | List / save review checklist |
-| POST | `/applications/:id/approve-for-payment` | Admin | Vet + send $200 PayPal invoice → `Awaiting Payment` |
+| POST | `/applications/:id/approve-for-payment` | Admin | Vet + send PayPal registration invoice → `Awaiting Payment` |
 | POST | `/applications/:id/complete` | Admin | Mark registration paid (Zelle) → create member |
 | POST | `/applications/:id/reject` | Admin | Reject application |
+| GET | `/qa/dashboard` | Admin | System Health + ONB step status |
+| POST | `/demo-qa/reset` | Admin | Reset QA demo cycle (DEMO_QA_EMAIL only) |
 
-**Membership onboarding (live):** invite → apply → board review (3 checks) → **Approve & Send Invoice** → PayPal $200 → member created on payment (PayPal sync or **Mark Registration Paid**). See **`docs/membership-onboarding-workflow.md`**.
+**Membership onboarding (live):** invite → apply → board review (3 checks) → **Approve & Send Invoice** → PayPal registration fee → **member created automatically on PayPal paid** (sync or completion job). **Mark Registration Paid** / **Approve & Add to CRM** = fallback for Zelle/BofA. See **`docs/membership-onboarding-workflow.md`** and **`docs/system-validation-playbook.md`**.
 
-**Registration payment completion:** `paypal-sync.js` calls `processPaidRegistrationInvoices()` after sync. Core logic in `membership-completion.js`.
+**QA test identity (local, June 2026):** `hibretedirtest@gmail.com` · `3103867475` · `Hibret Edir QA Test` · `REGISTRATION_FEE=1` · `MEMBER_CAP=201`. Full cycle validated locally (waiting list → invite → apply → approve → PayPal $1 → sync → active member). Reset: `npm run demo:reset:apply` or Admin **Reset demo cycle**.
 
 ### PayPal sync
 
@@ -304,7 +316,11 @@ See **`docs/scheduled-paypal-sync.md`** for schedule explanation.
 
 **PayPal member matching:** Recipient name matched **before** email on sync (`paypal-sync.js`).
 
+**PayPal sync — invoice_number collisions (June 2026):** Event invoices use numeric `invoice_number`; registration refs (`REG-*`) store **`null`**. Legacy CRM rows may have a number but no `paypal_invoice_id` — sync **updates those orphans** instead of inserting duplicates. `sanitizeInvoiceNumbers()` drops numbers already taken by another PayPal invoice.
+
 **Payment stats:** `PAID` → PayPal; `MARKED_AS_PAID` → Zelle & BofA (`payment-methods.js`).
+
+**Registration payment completion:** `paypal-sync.js` calls `processPaidRegistrationInvoices()` after sync. Core logic in `membership-completion.js`.
 
 ### `receipts.js`, `payouts.js`, `notify.js`, `sync.js`
 
@@ -347,6 +363,7 @@ Placeholders show `—` until API loads. Regenerate static JSON: `python scripts
 |---------|-------|
 | Main | Members CRM, Invoices, Approval, Receipts, Messages |
 | Reports | Event Summary, Payout Fund |
+| System Health | **Dashboard** (integrations, test member, health checks) · **QA Testing** (ONB step playbook) |
 | Security | Activity Log |
 
 **Live stats bar:** Unpaid, Paid (PayPal), Zelle & BofA, Late — colors: green / green / red.
@@ -368,7 +385,9 @@ Placeholders show `—` until API loads. Regenerate static JSON: `python scripts
 | Action | Where |
 |--------|-------|
 | Vet new member | Applications → 3 checks (name, fields, ID) → **Approve & Send Invoice** |
-| Zelle registration | Applications → **Mark Registration Paid** when Awaiting Payment |
+| Zelle registration | Applications → **Mark Registration Paid** when Awaiting Payment (unpaid) |
+| After PayPal paid | Member auto-created on sync; **Approve & Add to CRM** only if sync lag / manual pay |
+| Reset QA test | System Health → **Reset demo cycle** or `npm run demo:reset:apply` |
 | Mark invoice paid (dual control) | Board Requests → Mark Paid requests; invoice table **View in Approval** opens Board Requests → Pending |
 
 Slot math: `invite_slots_remaining = MEMBER_CAP − active − in_pipeline` (`Invited to Apply` + `Application Submitted`).
@@ -378,6 +397,8 @@ Slot math: `invite_slots_remaining = MEMBER_CAP − active − in_pipeline` (`In
 ### Membership application (`public/application/index.html`)
 
 Waiting list verify gate (email + phone, must be **Invited to Apply**) → full form → `POST apply/membership`.
+
+**June 2026:** `/verify` returns parsed **address, city, state, zip** from waiting-list one-liner (`geo.parseAddressForForm`). **Upload CA ID** button styled green (required). Desktop hides **Take photo**; mobile keeps both. Death beneficiary + emergency contact validation (client + server). Submit confirmation above button.
 
 ### Waiting list status page (`public/waiting-list-status/index.html`)
 
@@ -440,6 +461,8 @@ Auth, portal, admin CRM, applications, waiting list, notifications, audit, payou
 ### Still partial / ops
 
 - [ ] **Twilio SMS** — **IN PROGRESS** — SendGrid done; follow `docs/notifications-setup.md` § Twilio
+- [x] **Local E2E onboarding QA** — full cycle with `DEMO_QA_*` + `MEMBER_CAP=201` + `$1` PayPal (June 14, 2026)
+- [ ] **Netlify env for QA** — set `DEMO_QA_*`, `MEMBER_CAP=201`, `PUBLIC_SITE_URL`, `REGISTRATION_FEE` when deploying
 - [ ] Admin create event → bulk PayPal invoices via API
 - [ ] All members have portal PINs (ops)
 - [ ] Fix mislinked `member_id` on bulk-imported invoices (recipient match covers portal; admin may still show wrong owner on some rows)
@@ -460,7 +483,7 @@ Auth, portal, admin CRM, applications, waiting list, notifications, audit, payou
 | 4-month waiting period tracking | Not started |
 | Reporting (event collection, delinquency) | Not started |
 | Receipt storage at scale | Base64 in Postgres OK for now |
-| End-to-end onboarding test | Mock user + $1 PayPal invoice planned; not run yet |
+| End-to-end onboarding test | **Done locally** (June 2026) — see `docs/system-validation-playbook.md`; production repeat after Netlify deploy |
 
 **Done (June 2026):** Registration fee PayPal on board approve → member on payment — see `docs/membership-onboarding-workflow.md`.
 
@@ -496,6 +519,19 @@ From by-laws / handoff:
 ---
 
 ## 12. Recent session changelog
+
+### June 14, 2026 — System Health, QA onboarding, PayPal sync fix
+
+- **Admin System Health** — sidebar split: **Dashboard** (integrations + health checks) and **QA Testing** (ONB step playbook); routes `#health-dashboard`, `#qa-testing`.
+- **QA demo cycle** — `demo-qa-reset.js`, `demo-qa-dashboard.js`; `DEMO_QA_ENABLED`, reserved slot **`MEMBER_CAP=201`**; QA email bypasses queue rank when slot open; **`npm run demo:reset:apply`**.
+- **Full local onboarding validated** — waiting list → invite → apply → approve → PayPal $1 → paid → active member (auto on payment); reset and repeat.
+- **Application form** — address prefill splits city/state/zip (`geo.js`); green **Upload CA ID**; beneficiary/emergency required fields; server validation in `apply.js`.
+- **PayPal registration invoice** — extract ID from Location header; reuse existing `REG-{id}` invoice; store `invoice_number: null` in CRM.
+- **PayPal sync** — `REG-*` → null; link orphan rows (number but no PayPal ID); sanitize duplicate `invoice_number` across PayPal invoices (~2.3k pull).
+- **Invites / email** — `PUBLIC_SITE_URL`, short `/apply` link, SendGrid click tracking off; `notify.js` HTML invite.
+- **Dev** — `dev-local.js` port-in-use message, function cache bust, QA banner; `/apply` redirect.
+- **Docs** — `docs/system-validation-playbook.md`.
+- **Scripts** — `demo_cycle_reset.js`, `test_qa_invite_local.js`, `test_invite_email.js`, `npm run test:qa-invite`.
 
 ### June 13, 2026 — SendGrid live + Twilio next
 
@@ -568,7 +604,11 @@ From by-laws / handoff:
 | Notifications not sending (SMS) | Twilio not configured — set `TWILIO_*`; trial accounts require verified recipient numbers |
 | Email goes to spam | Domain auth on `hibretedir.com` required; From must be `@hibretedir.com`; avoid Gmail as From |
 | Invited person shows “Added” on public list | Regenerate JSON; ensure API uses status not position — see `isWaitingListPublicAdded()` in `apply.js` |
-| PayPal registration invoice fails | Check `PAYPAL_CLIENT_ID`/`SECRET`; use **Mark Registration Paid** as fallback |
+| PayPal sync duplicate invoice_number | Fixed June 2026 — orphan linking + REG-* null; restart dev and retry **Sync PayPal** |
+| Application address not split | Re-verify waiting list after deploy — `/verify` uses `parseAddressForForm` |
+| QA stuck “waiting for slot” | Restart `npm run dev` after `.env` change; confirm `DEMO_QA_ENABLED=true` |
+| Invite email 404 / long URL | Set `PUBLIC_SITE_URL`; use `/apply` short link |
+| PayPal registration invoice fails | Check `PAYPAL_CLIENT_ID`/`SECRET`; reuse `REG-{id}`; **Mark Registration Paid** fallback |
 | PayPal sync timeout on Netlify | Use Admin batched sync or `npm run sync:paypal`; background function for cron |
 | Public announcement shows only summary, no service details | `events.notes` empty — run `node scripts/set_event_announcement.js <event#>` |
 | `npm run db:migrate` timeout to Render | Retry; `run_schema.js` has 60s connect / 120s query / 3 retries |
@@ -581,6 +621,7 @@ From by-laws / handoff:
 
 - **`docs/notifications-setup.md`** — SendGrid + Twilio account setup, Netlify env, test commands.
 - **`docs/membership-onboarding-workflow.md`** — Full onboarding pipeline (board + dev spec).
+- **`docs/system-validation-playbook.md`** — QA slot 201, demo reset, repeatable onboarding test.
 - **`docs/automation-registry.md`** — Master catalog of all automations (IDs, triggers, tables, files, status).
 - **`docs/automation-showcase.html`** — Meridian portfolio case study (`/docs/automation-showcase.html`); mirror to `public/docs/`.
 - **`docs/board-meeting-handout.html`** — Printable board summary (Ctrl+P).
@@ -595,12 +636,12 @@ From by-laws / handoff:
 
 ---
 
-## 15. Next agent priorities (June 13, 2026)
+## 15. Next agent priorities (June 14, 2026)
 
-1. **Twilio SMS (current)** — Create Twilio account, buy US SMS number, add `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` to `.env` + Netlify, redeploy. Run `npm run test:notify -- --send`. Upgrade from trial for production member texts. A2P 10DLC / Wix `twilio-domain-verification` TXT optional for later volume.
-2. **Production smoke-test** — After Netlify redeploy with SendGrid: Admin → Waiting List → **Send Invitation** → confirm email (and SMS once Twilio live).
-3. **Event announcement UI** — `scripts/set_event_announcement.js` exists; optional admin UI.
-4. **E2E onboarding test** — waiting list → invite → apply → approve → PayPal invoice → member active.
+1. **Deploy to Netlify** (when user ready) — set `PUBLIC_SITE_URL`, `MEMBER_CAP=201`, `DEMO_QA_*`, `REGISTRATION_FEE=1` for QA or `200` for production; redeploy.
+2. **Twilio SMS** — Create Twilio account, buy US SMS number, add `TWILIO_*` to `.env` + Netlify, redeploy. Run `npm run test:notify -- --send`.
+3. **Production smoke-test** — Admin → Waiting List → **Send Invitation** → confirm email (and SMS once Twilio live).
+4. **Event announcement UI** — `scripts/set_event_announcement.js` exists; optional admin UI.
 5. **EVT-06** — Admin create event + bulk PayPal invoices.
 6. **EVT-08** — Payment reminders.
 

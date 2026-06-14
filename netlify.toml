@@ -58,6 +58,16 @@
   status = 200
 
 [[redirects]]
+  from = "/apply"
+  to = "/application/index.html"
+  status = 302
+
+[[redirects]]
+  from = "/apply/*"
+  to = "/application/index.html"
+  status = 302
+
+[[redirects]]
   from = "/waiting-list-status"
   to = "/#waitingliststatus"
   status = 302

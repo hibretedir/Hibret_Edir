@@ -83,8 +83,8 @@
               <label class="am">የአባሉ ሙሉ ስም *</label>
               <input type="text" name="member_full_name" id="memberFullName">
               <div class="id-upload-actions">
-                <button type="button" class="id-upload-link" id="memberIdCamera"><span class="en">Take photo</span><span class="am">ፎቶ ይነሱ</span></button>
-                <button type="button" class="id-upload-link id-upload-secondary" id="memberIdFile"><span class="en">Upload CA ID</span><span class="am">መታወቂያ ይስቀሉ</span></button>
+                <button type="button" class="id-upload-link id-upload-camera" id="memberIdCamera"><span class="en">Take photo</span><span class="am">ፎቶ ይነሱ</span></button>
+                <button type="button" class="id-upload-link id-upload-file" id="memberIdFile"><span class="en">Upload CA ID</span><span class="am">መታወቂያ ይስቀሉ</span></button>
               </div>
               <input type="file" id="memberIdCameraInput" accept="image/*" capture="environment" hidden>
               <input type="file" id="memberIdFileInput" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf" hidden>
@@ -95,16 +95,18 @@
               <label class="am">የትዳር ጋባን ሙሉ ስም</label>
               <input type="text" name="spouse_full_name" id="spouseFullName">
               <div class="id-upload-actions" id="spouseIdActions" hidden>
-                <button type="button" class="id-upload-link" id="spouseIdCamera"><span class="en">Take photo</span><span class="am">ፎቶ ይነሱ</span></button>
-                <button type="button" class="id-upload-link id-upload-secondary" id="spouseIdFile"><span class="en">Upload CA ID</span><span class="am">መታወቂያ ይስቀሉ</span></button>
+                <button type="button" class="id-upload-link id-upload-camera" id="spouseIdCamera"><span class="en">Take photo</span><span class="am">ፎቶ ይነሱ</span></button>
+                <button type="button" class="id-upload-link id-upload-file" id="spouseIdFile"><span class="en">Upload CA ID</span><span class="am">መታወቂያ ይስቀሉ</span></button>
               </div>
               <input type="file" id="spouseIdCameraInput" accept="image/*" capture="environment" hidden>
               <input type="file" id="spouseIdFileInput" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf" hidden>
               <div class="id-preview id-preview-inline" id="spouseIdPreview" hidden></div>
             </div>
           </div>
-          <p class="form-fine en">California ID required for each adult — take a photo with your phone or upload a scan (JPG, PNG, or PDF, max 5 MB).</p>
-          <p class="form-fine am">ለכל አዋቂ የካሊፎርኒያ መታወቂያ ያስፈልጋል — በስልክ ፎቶ ይነሱ ወይም ስካን ይስቀሉ (JPG, PNG, PDF · ከ5 MB በታች)።</p>
+          <p class="form-fine en id-help-mobile">California ID required for each adult — take a photo with your phone or upload a scan (JPG, PNG, or PDF, max 5 MB).</p>
+          <p class="form-fine en id-help-desktop">California ID required for each adult — upload a scan (JPG, PNG, or PDF, max 5 MB).</p>
+          <p class="form-fine am id-help-mobile">ለכל አዋቂ የካሊፎርኒያ መታወቂያ ያስፈልጋል — በስልክ ፎቶ ይነሱ ወይም ስካን ይስቀሉ (JPG, PNG, PDF · ከ5 MB በታች)።</p>
+          <p class="form-fine am id-help-desktop">ለכל አዋቂ የካሊፎርኒያ መታወቂያ ያስፈልጋል — ስካን ይስቀሉ (JPG, PNG, PDF · ከ5 MB በታች)።</p>
           <div class="fg">
             <label class="en">Permanent Address</label>
             <label class="am">ዘላቂ አድራሻ</label>
@@ -143,14 +145,14 @@
           <h4 class="ben-subhead en">For Member</h4>
           <h4 class="ben-subhead am">ለአባል</h4>
           <div class="fg-row">
-            <div class="fg"><label class="en">Full Name</label><label class="am">ሙሉ ስም</label><input type="text" name="ben_m_name"></div>
-            <div class="fg"><label class="en">Relationship</label><label class="am">ግንኙነት</label><input type="text" name="ben_m_rel"></div>
+            <div class="fg"><label class="en">Full Name *</label><label class="am">ሙሉ ስም *</label><input type="text" name="ben_m_name" required></div>
+            <div class="fg"><label class="en">Relationship *</label><label class="am">ግንኙነት *</label><input type="text" name="ben_m_rel" required></div>
           </div>
           <div class="fg-row">
-            <div class="fg"><label class="en">Phone</label><label class="am">ስልክ</label><input type="tel" name="ben_m_phone"></div>
-            <div class="fg"><label class="en">Email</label><label class="am">ኢሜይል</label><input type="email" name="ben_m_email"></div>
+            <div class="fg"><label class="en">Phone *</label><label class="am">ስልክ *</label><input type="tel" name="ben_m_phone" required></div>
+            <div class="fg"><label class="en">Email *</label><label class="am">ኢሜይል *</label><input type="email" name="ben_m_email" required></div>
           </div>
-          <div class="fg"><label class="en">Address</label><label class="am">አድራሻ</label><input type="text" name="ben_m_address"></div>
+          <div class="fg"><label class="en">Address *</label><label class="am">አድራሻ *</label><input type="text" name="ben_m_address" required></div>
 
           <h4 class="ben-subhead en">For Spouse</h4>
           <h4 class="ben-subhead am">ለትዳር</h4>
@@ -173,7 +175,8 @@
 
         <p class="form-fine en">It is the member's responsibility to keep beneficiary and contact information current.</p>
         <p class="form-fine am">ተጠቃሚ እና ተጠሪ መረጃ ሁልጊዜ ወቅታዊ መሆን የአባሉ ኃላፊነት ነው።</p>
-        <button type="submit" class="form-submit"><span class="en">Submit Membership Application →</span><span class="am">ማመልከቻ ያስገቡ →</span></button>
+        <div class="form-msg submit-feedback" id="submitFeedback" style="display:none" role="status" aria-live="polite"></div>
+        <button type="submit" class="form-submit" id="submitBtn"><span class="en">Submit Membership Application →</span><span class="am">ማመልከቻ ያስገቡ →</span></button>
       </form>
     </div>
 
@@ -229,6 +232,23 @@ function showMsg(id, text, ok) {
   el.style.display = text ? 'block' : 'none';
 }
 
+function showMemberFeedback(text, ok, { scroll = true } = {}) {
+  showMsg('memberMsg', text, ok);
+  const near = document.getElementById('submitFeedback');
+  if (near) {
+    near.textContent = text;
+    near.className = 'form-msg submit-feedback ' + (ok ? 'ok' : 'err');
+    near.style.display = text ? 'block' : 'none';
+    if (scroll && text) {
+      requestAnimationFrame(() => {
+        near.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    }
+  } else if (scroll && text) {
+    document.getElementById('memberMsg')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
+
 function buildRepeatRows(containerId, count, fields, namePrefix) {
   const c = document.getElementById(containerId);
   c.innerHTML = '';
@@ -269,16 +289,17 @@ function buildEmergencyBlocks() {
   const c = document.getElementById('emergencyBlocks');
   c.innerHTML = '';
   for (let i = 0; i < 2; i++) {
+    const req = i === 0 ? ' *' : '';
     c.innerHTML += `
       <div class="em-block">
-        <h4 class="en">Contact ${i + 1}</h4>
-        <h4 class="am">ተጠሪ ${i + 1}</h4>
+        <h4 class="en">Contact ${i + 1}${i === 0 ? ' (required)' : ''}</h4>
+        <h4 class="am">ተጠሪ ${i + 1}${i === 0 ? ' (ያስፈልጋል)' : ''}</h4>
         <div class="fg-row">
-          <div class="fg"><label class="en">Full Name</label><label class="am">ሙሉ ስም</label><input type="text" name="ec_name_${i}"></div>
+          <div class="fg"><label class="en">Full Name${req}</label><label class="am">ሙሉ ስም${req}</label><input type="text" name="ec_name_${i}"></div>
           <div class="fg"><label class="en">Relationship</label><label class="am">ግንኙነት</label><input type="text" name="ec_rel_${i}"></div>
         </div>
         <div class="fg-row">
-          <div class="fg"><label class="en">Phone</label><label class="am">ስልክ</label><input type="tel" name="ec_phone_${i}"></div>
+          <div class="fg"><label class="en">Phone${req}</label><label class="am">ስልክ${req}</label><input type="tel" name="ec_phone_${i}"></div>
           <div class="fg"><label class="en">Email</label><label class="am">ኢሜይል</label><input type="email" name="ec_email_${i}"></div>
         </div>
         <div class="fg"><label class="en">Address</label><label class="am">አድራሻ</label><input type="text" name="ec_address_${i}"></div>
@@ -365,11 +386,11 @@ async function handleIdFile(which, file) {
   if (!file) return;
   const okType = file.type === 'application/pdf' || file.type.startsWith('image/');
   if (!okType) {
-    showMsg('memberMsg', 'ID must be a photo (JPG, PNG) or PDF.', false);
+    showMemberFeedback('ID must be a photo (JPG, PNG) or PDF.', false);
     return;
   }
   if (file.size > MAX_ID_BYTES) {
-    showMsg('memberMsg', 'ID file is too large (maximum 5 MB).', false);
+    showMemberFeedback('ID file is too large (maximum 5 MB).', false);
     return;
   }
   const dataUrl = await readFileAsDataUrl(file);
@@ -447,6 +468,9 @@ async function verifyApproval(e) {
     document.getElementById('waitingListId').value = data.waiting_list_id;
     document.getElementById('memberFullName').value = data.full_name || '';
     document.getElementById('memAddress').value = data.address || '';
+    document.getElementById('memCity').value = data.city || '';
+    document.getElementById('memState').value = data.state || 'CA';
+    document.getElementById('memZip').value = data.zip || '';
     document.getElementById('memCell').value = data.phone || '';
     document.getElementById('memEmail').value = data.email || '';
     const banner = document.getElementById('wlLinkedBanner');
@@ -483,9 +507,37 @@ function collectEmergency() {
       email: document.querySelector(`[name="ec_email_${i}"]`)?.value?.trim(),
       address: document.querySelector(`[name="ec_address_${i}"]`)?.value?.trim(),
     };
-    if (row.name || row.phone) rows.push(row);
+    if (row.name || row.phone || row.email || row.relationship || row.address) rows.push(row);
   }
   return rows;
+}
+
+function validateMembershipForm(fd) {
+  const benFields = [
+    ['ben_m_name', 'Full Name'],
+    ['ben_m_rel', 'Relationship'],
+    ['ben_m_phone', 'Phone'],
+    ['ben_m_email', 'Email'],
+    ['ben_m_address', 'Address'],
+  ];
+  for (const [name, label] of benFields) {
+    if (!String(fd.get(name) || '').trim()) {
+      return `Death Beneficiary (For Member): ${label} is required.`;
+    }
+  }
+  const emergency = collectEmergency();
+  const complete = emergency.filter((r) => r.name && r.phone);
+  if (!complete.length) {
+    return 'At least one emergency contact must include full name and phone.';
+  }
+  if (!idUploads.member) {
+    return 'Please upload your California ID before submitting.';
+  }
+  const spouseName = String(fd.get('spouse_full_name') || '').trim();
+  if (spouseName && !idUploads.spouse) {
+    return 'Please upload your spouse\'s California ID.';
+  }
+  return null;
 }
 
 async function submitMembership(e) {
@@ -493,8 +545,13 @@ async function submitMembership(e) {
   const fd = new FormData(e.target);
   const waitingListId = parseInt(fd.get('waiting_list_id'), 10);
   if (!waitingListId) {
-    showMsg('memberMsg', 'Please link your waiting list record above (email + phone) before submitting.', false);
+    showMemberFeedback('Please link your waiting list record above (email + phone) before submitting.', false);
     document.getElementById('verifyPanel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  const validationError = validateMembershipForm(fd);
+  if (validationError) {
+    showMemberFeedback(validationError, false);
     return;
   }
   const spouseName = String(fd.get('spouse_full_name') || '').trim();
@@ -535,7 +592,9 @@ async function submitMembership(e) {
       ...(spouseName && idUploads.spouse ? { spouse: idUploads.spouse } : {}),
     },
   };
-  showMsg('memberMsg', 'Submitting…', true);
+  showMemberFeedback('Submitting…', true, { scroll: false });
+  const submitBtn = document.getElementById('submitBtn');
+  if (submitBtn) submitBtn.disabled = true;
   try {
     const res = await fetch(APPLY_API + '/membership', {
       method: 'POST',
@@ -544,13 +603,16 @@ async function submitMembership(e) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      showMsg('memberMsg', data.error || 'Submission failed.', false);
+      showMemberFeedback(data.error || 'Submission failed.', false);
+      if (submitBtn) submitBtn.disabled = false;
       return;
     }
-    showMsg('memberMsg', data.message || 'Application submitted!', true);
+    const successText = data.message || 'Application submitted! The board will review your information. You do not need to submit again.';
+    showMemberFeedback(successText, true);
     e.target.querySelectorAll('button, input, textarea, select').forEach(el => { el.disabled = true; });
   } catch {
-    showMsg('memberMsg', 'Network error. Please call (424) 547-5594.', false);
+    showMemberFeedback('Network error. Please call (424) 547-5594.', false);
+    if (submitBtn) submitBtn.disabled = false;
   }
 }
 </script>

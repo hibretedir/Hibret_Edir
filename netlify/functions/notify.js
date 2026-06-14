@@ -40,6 +40,15 @@ function fromSms() {
   return process.env.TWILIO_FROM || process.env.TWILIO_PHONE || null;
 }
 
+/** Member-facing links (application, portal). Prefer PUBLIC_SITE_URL; avoid broken custom domains. */
+function getPublicSiteUrl() {
+  const raw = process.env.PUBLIC_SITE_URL
+    || process.env.URL
+    || (process.env.NODE_ENV === 'development' ? `http://localhost:${process.env.PORT || 8888}` : null)
+    || 'https://hibret-edir.netlify.app';
+  return String(raw).replace(/\/$/, '');
+}
+
 function getNotifyConfig() {
   const sendgridKey = process.env.SENDGRID_API_KEY;
   const twilioSid = process.env.TWILIO_ACCOUNT_SID;
@@ -60,7 +69,7 @@ function getNotifyConfig() {
   };
 }
 
-async function sendEmail({ to, subject, text, html }) {
+async function sendEmail({ to, subject, text, html, disableTracking = true }) {
   const key = process.env.SENDGRID_API_KEY;
   if (!key) {
     console.warn('[notify] SENDGRID_API_KEY not set — email skipped:', subject, '→', to);
@@ -75,6 +84,12 @@ async function sendEmail({ to, subject, text, html }) {
   };
   if (html) {
     body.content.push({ type: 'text/html', value: html });
+  }
+  if (disableTracking) {
+    body.tracking_settings = {
+      click_tracking: { enable: false },
+      open_tracking: { enable: false },
+    };
   }
   const res = await fetchFn('https://api.sendgrid.com/v3/mail/send', {
     method: 'POST',
@@ -137,10 +152,10 @@ async function logNotification(db, { memberId, type, message, status }) {
   }
 }
 
-async function notifyMember({ db, memberId, email, phone, subject, text, smsText }) {
+async function notifyMember({ db, memberId, email, phone, subject, text, html, smsText }) {
   const results = [];
   if (email) {
-    const r = await sendEmail({ to: email, subject, text });
+    const r = await sendEmail({ to: email, subject, text, html });
     results.push(r);
     await logNotification(db, {
       memberId,
@@ -316,29 +331,39 @@ async function notifyBeneficiaryChangeRejected(db, member, beneficiary, notes) {
 
 async function notifyWaitingListInvited(db, row) {
   const name = row.full_name || `${row.first_name || ''} ${row.last_name || ''}`.trim() || 'Applicant';
-  const siteUrl = (process.env.URL || 'https://hibretedir.com').replace(/\/$/, '');
-  const applyUrl = `${siteUrl}/application/`;
+  const applyUrl = `${getPublicSiteUrl()}/apply`;
+  const text = [
+    `Hello ${name},`,
+    '',
+    'Great news — the Hibret Edir board has invited you to complete the full membership application.',
+    '',
+    `Apply here: ${applyUrl}`,
+    '',
+    'Use the same email and phone from your waiting list sign-up to verify your spot.',
+    '',
+    'After you submit the application, the board will review your information and California ID.',
+    'If approved, you will receive a PayPal invoice for the $200 registration fee. Membership activates when payment is received.',
+    '',
+    'Questions? Call (424) 547-5594.',
+  ].join('\n');
+  const html = [
+    `<p>Hello ${name},</p>`,
+    '<p>Great news — the Hibret Edir board has invited you to complete the full membership application.</p>',
+    `<p><a href="${applyUrl}">Apply for membership</a></p>`,
+    '<p>Use the same email and phone from your waiting list sign-up to verify your spot.</p>',
+    '<p>After you submit the application, the board will review your information and California ID.',
+    ' If approved, you will receive a PayPal invoice for the registration fee. Membership activates when payment is received.</p>',
+    '<p>Questions? Call (424) 547-5594.</p>',
+  ].join('\n');
   await notifyMember({
     db,
     memberId: null,
     email: row.email,
     phone: row.phone,
     subject: 'Hibret Edir — invited to apply for membership',
-    text: [
-      `Hello ${name},`,
-      '',
-      'Great news — the Hibret Edir board has invited you to complete the full membership application.',
-      '',
-      `Apply here: ${applyUrl}`,
-      '',
-      'Use the same email and phone from your waiting list sign-up to verify your spot.',
-      '',
-      'After you submit the application, the board will review your information and California ID.',
-      'If approved, you will receive a PayPal invoice for the $200 registration fee. Membership activates when payment is received.',
-      '',
-      'Questions? Call (424) 547-5594.',
-    ].join('\n'),
-    smsText: `Hibret Edir: You're invited to apply for membership. Open ${applyUrl} and verify with your waiting list email/phone.`,
+    text,
+    html,
+    smsText: `Hibret Edir: You're invited to apply. ${applyUrl} — verify with your waiting list email/phone.`,
   });
 }
 
@@ -419,6 +444,7 @@ module.exports = {
   sendEmail,
   sendSms,
   getNotifyConfig,
+  getPublicSiteUrl,
   logNotification,
   notifyMember,
   notifyBoard,
