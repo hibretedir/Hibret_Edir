@@ -1192,27 +1192,18 @@ async function loadWaitingListStatus() {
     filterWaitingList();
   }
 
-  async function loadStaticWaitingList() {
-    const res = await fetch('/waiting-list-public.json?_=' + Date.now());
-    const data = await res.json();
-    if (!res.ok || !data.entries?.length) throw new Error('Could not load list');
-    await applyPayload(data);
-  }
-
   try {
     const res = await fetch(APPLY_API + '/waiting-list/status?_=' + Date.now());
     const data = await res.json().catch(() => ({}));
-    if (res.ok && Array.isArray(data.entries) && data.entries.length) {
+    if (res.ok && Array.isArray(data.entries)) {
       await applyPayload(data);
       return;
     }
+    const errText = data.error || (res.status === 503
+      ? 'Waiting list is temporarily unavailable.'
+      : 'Could not load waiting list.');
+    showWlError(errText + ' Call (424) 547-5594 if this continues.');
   } catch {
-    /* try static file */
-  }
-
-  try {
-    await loadStaticWaitingList();
-  } catch (err) {
     showWlError(document.documentElement.lang === 'am'
       ? 'ዝርዝሩ አሁን አይገኝም። ቆይተው ይሞክሩ ወይም (424) 547-5594 ይደውሉ።'
       : 'Waiting list is not available yet. Please try again later or call (424) 547-5594.');

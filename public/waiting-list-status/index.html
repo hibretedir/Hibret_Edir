@@ -136,23 +136,12 @@ async function loadStatus() {
   try {
     const res = await fetch(STATUS_API + '?_=' + Date.now());
     const data = await res.json().catch(() => ({}));
-    if (res.ok && Array.isArray(data.entries) && data.entries.length) {
+    if (res.ok && Array.isArray(data.entries)) {
       showData(data);
       return;
     }
-  } catch {
-    /* try static file */
-  }
-
-  try {
-    const res = await fetch('/waiting-list-public.json?_=' + Date.now());
-    const data = await res.json();
-    if (!res.ok || !data.entries?.length) throw new Error('Could not load list');
-    showData({
-      ...data,
-      source: 'static',
-      count: data.count || data.entries.length,
-    });
+    msg.textContent = data.error || 'Could not load waiting list. Try Refresh or call (424) 547-5594.';
+    msg.classList.add('err');
   } catch (err) {
     msg.textContent = err.message || 'Could not load waiting list.';
     msg.classList.add('err');

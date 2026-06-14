@@ -91,6 +91,50 @@ function isWaitingListPublicAdded(row) {
   return row.status === 'Added as Member';
 }
 
+function waitingListDisplayName(row) {
+  return row.full_name
+    || `${row.first_name || ''} ${row.last_name || ''}`.trim()
+    || row.email
+    || '—';
+}
+
+function formatWaitingListAppliedDate(appliedAt) {
+  if (!appliedAt) return null;
+  return new Date(appliedAt).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'America/Los_Angeles',
+  });
+}
+
+/** Single DB query — same order for Admin waiting list and public status. */
+async function queryWaitingListOrdered(db) {
+  const result = await db.query(
+    `SELECT wl.*,
+      EXISTS (SELECT 1 FROM membership_applications ma WHERE ma.waiting_list_id = wl.id) AS has_application
+     FROM waiting_list wl
+     ORDER BY wl.applied_at ASC NULLS LAST, wl.id ASC`
+  );
+  return result.rows;
+}
+
+const WAITING_LIST_PUBLIC_HIDDEN = new Set(['Rejected', 'Canceled']);
+
+function rowToPublicStatusEntry(row, queuePosition) {
+  const labels = publicWaitingListStatusLabels(row.status);
+  return {
+    position: queuePosition,
+    display_name: waitingListDisplayName(row),
+    applied_date_text: formatWaitingListAppliedDate(row.applied_at),
+    status: row.status,
+    status_label: labels.en,
+    status_label_en: labels.en,
+    status_label_am: labels.am,
+    added: isWaitingListPublicAdded(row),
+  };
+}
+
 function markAddedEntries(entries) {
   return (entries || []).map((entry) => {
     const added = entry.status
@@ -350,49 +394,19 @@ async function getCurrentAnnouncementFromDb() {
 
 async function getWaitingListStatusFromDb() {
   const db = getDb();
-  const [joinedThrough, addedCount] = await Promise.all([
+  const [rows, joinedThrough, addedCount] = await Promise.all([
+    queryWaitingListOrdered(db),
     getWaitingListAddedThrough(db),
     getWaitingListAddedCount(db),
   ]);
-  const result = await db.query(
-    `SELECT full_name, first_name, last_name, email, status, applied_at
-     FROM waiting_list
-     ORDER BY applied_at ASC NULLS LAST, id ASC`
-  );
-  if (!result.rows.length) {
+  if (!rows.length) {
     return null;
   }
 
-  const hidden = new Set(['Rejected', 'Canceled']);
-  const entries = result.rows
-    .map((row, idx) => ({
-      row,
-      queuePosition: idx + 1,
-    }))
-    .filter(({ row }) => !hidden.has(row.status))
-    .map(({ row, queuePosition }) => {
-      const labels = publicWaitingListStatusLabels(row.status);
-      return {
-        position: queuePosition,
-        display_name: row.full_name
-          || `${row.first_name || ''} ${row.last_name || ''}`.trim()
-          || row.email
-          || '—',
-        applied_date_text: row.applied_at
-          ? new Date(row.applied_at).toLocaleDateString('en-US', {
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-              timeZone: 'America/Los_Angeles',
-            })
-          : null,
-        status: row.status,
-        status_label: labels.en,
-        status_label_en: labels.en,
-        status_label_am: labels.am,
-        added: isWaitingListPublicAdded(row),
-      };
-    });
+  const entries = rows
+    .map((row, idx) => ({ row, queuePosition: idx + 1 }))
+    .filter(({ row }) => !WAITING_LIST_PUBLIC_HIDDEN.has(row.status))
+    .map(({ row, queuePosition }) => rowToPublicStatusEntry(row, queuePosition));
 
   if (!entries.length) {
     return null;
@@ -423,6 +437,16 @@ function buildWaitingListStatusPayload(source, fromData) {
 }
 
 async function getWaitingListStatus() {
+  if (!process.env.DATABASE_URL) {
+    const fromStatic = loadStaticWaitingListStatus();
+    if (fromStatic?.entries?.length) {
+      return buildWaitingListStatusPayload('static', fromStatic);
+    }
+    return json(503, {
+      error: 'Waiting list is not available. Contact the board at (424) 547-5594.',
+    });
+  }
+
   try {
     const fromDb = await getWaitingListStatusFromDb();
     if (fromDb?.entries?.length) {
@@ -431,18 +455,22 @@ async function getWaitingListStatus() {
         updatedAt: new Date().toISOString(),
       });
     }
+    return json(200, {
+      ok: true,
+      source: 'database',
+      count: 0,
+      added_through_position: 0,
+      added_count: 0,
+      updated_note: 'No one on the waiting list yet.',
+      updated_at: new Date().toISOString(),
+      entries: [],
+    });
   } catch (err) {
     console.error('waiting list status DB read failed:', err.message || err);
+    return json(503, {
+      error: 'Could not load waiting list. Try again later or call (424) 547-5594.',
+    });
   }
-
-  const fromStatic = loadStaticWaitingListStatus();
-  if (fromStatic?.entries?.length) {
-    return buildWaitingListStatusPayload(fromStatic.source || 'static', fromStatic);
-  }
-
-  return json(503, {
-    error: 'Waiting list has not been loaded yet. Contact the board at (424) 547-5594.',
-  });
 }
 
 const MAX_ID_BYTES = 5 * 1024 * 1024;
@@ -1525,7 +1553,7 @@ function matchChangeRequestPath(path) {
 function buildWaitingListRow(row, queuePosition, extras = {}) {
   return {
     id: row.id,
-    full_name: row.full_name || `${row.first_name || ''} ${row.last_name || ''}`.trim(),
+    full_name: waitingListDisplayName(row),
     first_name: row.first_name,
     last_name: row.last_name,
     email: row.email,
@@ -1581,17 +1609,12 @@ async function getWaitingListPendingRank(db, waitingListId) {
 
 async function listWaitingListAdmin() {
   const db = getDb();
-  const [result, slots] = await Promise.all([
-    db.query(
-      `SELECT wl.*,
-        EXISTS (SELECT 1 FROM membership_applications ma WHERE ma.waiting_list_id = wl.id) AS has_application
-       FROM waiting_list wl
-       ORDER BY wl.applied_at ASC NULLS LAST, wl.id ASC`
-    ),
+  const [rows, slots] = await Promise.all([
+    queryWaitingListOrdered(db),
     getMembershipSlots(db),
   ]);
   let pendingRank = 0;
-  const rows = result.rows.map((row, idx) => {
+  const listRows = rows.map((row, idx) => {
     const extras = { pending_rank: null, eligible_for_invite: false };
     if (isWaitingListQueueAwaiting(row.status)) {
       pendingRank += 1;
@@ -1600,11 +1623,11 @@ async function listWaitingListAdmin() {
     }
     return buildWaitingListRow(row, idx + 1, extras);
   });
-  const pendingInvite = rows.filter((r) => isWaitingListQueueAwaiting(r.status)).length;
-  const invited = rows.filter((r) => r.status === 'Invited to Apply').length;
-  const eligible = rows.filter((r) => r.eligible_for_invite);
+  const pendingInvite = listRows.filter((r) => isWaitingListQueueAwaiting(r.status)).length;
+  const invited = listRows.filter((r) => r.status === 'Invited to Apply').length;
+  const eligible = listRows.filter((r) => r.eligible_for_invite);
   return json(200, {
-    waiting_list: rows,
+    waiting_list: listRows,
     slots,
     next_to_invite: eligible.map((r) => ({
       id: r.id,
@@ -1616,7 +1639,7 @@ async function listWaitingListAdmin() {
       pending_invite: pendingInvite,
       invited,
       eligible_to_invite: eligible.length,
-      total: rows.length,
+      total: listRows.length,
     },
   });
 }
