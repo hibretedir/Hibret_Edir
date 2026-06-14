@@ -1,7 +1,9 @@
 # Hibret Edir — Agent Context & Handoff
 
-**Last updated:** June 12, 2026 (Meridian automation showcase, docs hub, automation registry)  
+**Last updated:** June 13, 2026 (SendGrid live; Twilio SMS setup next)  
 **Purpose:** Onboard a new Cursor agent quickly. Read this file first, then `HIBRET_EDIR_PROJECT_HANDOFF (1).md` for deeper business rules and by-laws.
+
+**Current focus (next agent):** Finish **Twilio SMS** — account, buy SMS number, add `TWILIO_*` to `.env` + Netlify, `npm run test:notify -- --send`. SendGrid is **done** (test email confirmed in inbox). See **`docs/notifications-setup.md`**.
 
 ---
 
@@ -24,7 +26,7 @@
 | Member auth | Phone + 4-digit PIN (bcrypt + JWT) |
 | Board auth | Email + password (JWT), opt-in via env |
 | Payments | PayPal REST API |
-| Email / SMS | SendGrid / Twilio (graceful skip if unset) |
+| Email / SMS | SendGrid (live) / Twilio (pending — code ready, keys not set) |
 
 **Contacts:** (424) 547-5594 · hibretedirtext@gmail.com · hibretedirautomation@gmail.com  
 **Live URLs:** hibretedir.com · `/portal` · `/admin` · `/application` · `/docs/`
@@ -78,6 +80,7 @@ hibretedir/
 │   ├── membership-onboarding-workflow.md
 │   ├── automation-registry.md         # Catalog of all automations (IDs, triggers, files)
 │   ├── automation-showcase.html       # Portfolio / case-study site (share on business website)
+│   ├── notifications-setup.md         # SendGrid + Twilio setup & test checklist
 │   ├── board-meeting-handout.html
 │   └── scheduled-paypal-sync.md
 ├── scripts/
@@ -92,8 +95,8 @@ hibretedir/
 │   ├── seed_waiting_list_public.py
 │   ├── set_event_announcement.js  # Prayer/burial/payment details on events.notes (public announcement)
 │   ├── build_invoice_snapshot.py
-│   └── build_members_snapshot.py
-│   └── (many compare/audit scripts for ops — optional)
+│   ├── build_members_snapshot.py
+│   └── test_notifications.js      # npm run test:notify — verify SendGrid/Twilio config
 ├── data/                          # Gitignored exports — not in repo
 ├── .env.example
 ├── netlify.toml                   # Redirects, function timeouts, scheduled cron, secrets scan omit
@@ -147,12 +150,24 @@ See `.env.example`. Critical ones:
 | `PAYPAL_CLIENT_ID` / `PAYPAL_SECRET` | PayPal sync |
 | `PAYPAL_ENV` | `sandbox` or production (empty/non-sandbox = production API). Not a secret — omitted from Netlify secrets scan via `netlify.toml` |
 | `CRON_SECRET` | **Required on Netlify** for scheduled + background PayPal sync |
-| `SENDGRID_API_KEY` / `SENDGRID_FROM_EMAIL` | Email |
-| `TWILIO_*` | SMS |
-| `BOARD_NOTIFY_EMAIL` / `BOARD_NOTIFY_PHONE` | Board alerts |
+| `SENDGRID_API_KEY` / `SENDGRID_FROM_EMAIL` / `SENDGRID_REPLY_TO` | Email (SendGrid v3) — **live** |
+| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` / `TWILIO_FROM` | SMS (E.164 Twilio number, e.g. `+14245551234`) — **not set yet** |
+| `BOARD_NOTIFY_EMAIL` / `BOARD_NOTIFY_PHONE` | Comma-separated board alert recipients |
+| `TEST_NOTIFY_EMAIL` / `TEST_NOTIFY_PHONE` | Optional — destinations for `npm run test:notify -- --send` |
 | `ADMIN_SITE_URL` | Links in board notification emails |
 
-Notifications **skip gracefully** when SendGrid/Twilio are unset.
+**SendGrid production values (June 2026):**
+
+| Variable | Value |
+|----------|--------|
+| `SENDGRID_FROM_EMAIL` | `notifications@hibretedir.com` |
+| `SENDGRID_REPLY_TO` | `hibretedirtext@gmail.com` |
+
+**DNS:** Domain auth for `hibretedir.com` is on **Wix DNS** (nameservers `NS0/NS1.WIXDNS.NET`) — site still on Wix; Netlify cutover not done. SendGrid CNAMEs + `_dmarc` TXT added in Wix. **Keep these records** when migrating DNS to Netlify.
+
+**Twilio:** `TWILIO_FROM` must be a **Twilio-purchased** number — not the board line `(424) 547-5594`. Trial accounts can only SMS verified numbers until upgraded.
+
+Notifications **skip gracefully** when Twilio is unset; email sends when SendGrid is configured.
 
 ---
 
@@ -370,7 +385,7 @@ Full queue table with **Status** column (same API as home page).
 
 **Docs (board + marketing):** `docs/membership-onboarding-workflow.md` · `docs/automation-registry.md` (all workflows) · `docs/automation-showcase.html` (Meridian portfolio — **keep in sync with** `public/docs/`) · `docs/board-meeting-handout.html` · deployed at `/docs/` (`public/docs/index.html` hub).
 
-**Meridian showcase** (`/docs/automation-showcase.html`): Ethio AI Solutions marketing case study. First-person AI agent **Meridian** narrates onboarding → memorial → payout with animated walkthrough. Browser **Web Speech API** (male UK English when available — quality varies by visitor OS/browser; Netlify does not provide TTS). Cycle-end conclusion promotes Ethio AI Solutions. TTS pronunciation map: Hibret → Hehbret, Edir → Eder; Ethio spoken as written.
+**Meridian showcase** (`/docs/automation-showcase.html`): Ethio AI Solutions marketing case study. First-person AI agent **Meridian** narrates onboarding → memorial → payout with animated walkthrough. Browser **Web Speech API** (male UK English when available). **Mobile (June 13):** scroll to top on load/PLAY/loop; phase-2 scroll to terminal dots (ring stays visible); speech-gated slide advance; scroll-before-speech on phase 2 to avoid iOS freeze. **Closing CTA:** free consultation after `www.EthioAiSolutions.com`; banner links switch to [ethioaisolutions.com/contact](https://ethioaisolutions.com/contact) after closing pitch. TTS: Hibret → Hehbret, Edir → Eder, ID → `I D` (no pause).
 
 ---
 
@@ -413,9 +428,18 @@ Auth, portal, admin CRM, applications, waiting list, notifications, audit, payou
 - [x] **`dev-local.js`** — Serve `/docs/` directory `index.html` locally
 - [x] **Sync rule** — Edit `docs/automation-showcase.html` then copy to `public/docs/` before deploy (no build step)
 
+### June 2026 — Notifications (SendGrid live)
+
+- [x] **SendGrid domain auth** — `hibretedir.com` DNS in Wix (`em2759`, `s1._domainkey`, `s2._domainkey`, `_dmarc`)
+- [x] **Single sender verified** — FROM `notifications@hibretedir.com`, REPLY `hibretedirtext@gmail.com`
+- [x] **`notify.js`** — `reply_to` in SendGrid payload; defaults + `SENDGRID_REPLY_TO` env
+- [x] **`npm run test:notify`** — config check + `--send` live test; email confirmed in inbox
+- [x] **Netlify env** — `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`, `SENDGRID_REPLY_TO` (redeploy after set)
+- [ ] **Twilio SMS** — account + number + `TWILIO_*` on Netlify; then smoke-test invite SMS
+
 ### Still partial / ops
 
-- [ ] **SendGrid / Twilio** — not configured yet; notifications skip gracefully (manual comms for invites)
+- [ ] **Twilio SMS** — **IN PROGRESS** — SendGrid done; follow `docs/notifications-setup.md` § Twilio
 - [ ] Admin create event → bulk PayPal invoices via API
 - [ ] All members have portal PINs (ops)
 - [ ] Fix mislinked `member_id` on bulk-imported invoices (recipient match covers portal; admin may still show wrong owner on some rows)
@@ -473,6 +497,21 @@ From by-laws / handoff:
 
 ## 12. Recent session changelog
 
+### June 13, 2026 — SendGrid live + Twilio next
+
+- **SendGrid:** Domain auth on Wix DNS; single sender verified; API key in `.env` + Netlify; test email to `hibretedirtext@gmail.com` landed in inbox.
+- **Deliverability:** Use `@hibretedir.com` From (not Gmail); Reply-To board Gmail; domain auth > single sender for production.
+- **Code:** `notify.js` Reply-To; `.env.example` updated; `SENDGRID_REPLY_TO` env var.
+- **Wix cutover note:** DNS still on Wix while old site live — SendGrid records safe to keep through Netlify migration.
+- **Next:** Twilio — buy SMS number, set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM`, test with `npm run test:notify -- --send`.
+
+### June 13, 2026 — Meridian showcase polish + notifications kickoff
+
+- **Meridian mobile fixes:** phase-2 scroll (terminal dots, ring visible, Ethio AI banner); scroll-to-top on load/PLAY/pause/loop; speech-driven slide advance (no timer cutoff); phase-2 scroll-before-speech (fixes iOS freeze at Memorial).
+- **Meridian CTA:** closing pitch mentions free consultation; `www.EthioAiSolutions.com` → contact booking after pitch completes.
+- **TTS:** ID spelled `I D` (no comma pause).
+- **Next:** SendGrid + Twilio — see `docs/notifications-setup.md`, `scripts/test_notifications.js`.
+
 ### June 12, 2026 — Meridian showcase & docs hub
 
 - **Meridian marketing page** — `/docs/automation-showcase.html`: first-person AI agent voice, animated workflow, cycle-end Ethio AI Solutions pitch.
@@ -525,7 +564,9 @@ From by-laws / handoff:
 | `paypal-sync-scheduled` missing | Code not deployed — push latest `main` |
 | New function 404 locally | Restart `npm run dev` |
 | Receipts / PIN reset empty | Run `npm run db:migrate` |
-| Notifications not sending | SendGrid/Twilio unset (expected locally and until configured) |
+| Notifications not sending (email) | Run `npm run test:notify`; check Netlify env + redeploy; verify SendGrid domain auth in Wix DNS |
+| Notifications not sending (SMS) | Twilio not configured — set `TWILIO_*`; trial accounts require verified recipient numbers |
+| Email goes to spam | Domain auth on `hibretedir.com` required; From must be `@hibretedir.com`; avoid Gmail as From |
 | Invited person shows “Added” on public list | Regenerate JSON; ensure API uses status not position — see `isWaitingListPublicAdded()` in `apply.js` |
 | PayPal registration invoice fails | Check `PAYPAL_CLIENT_ID`/`SECRET`; use **Mark Registration Paid** as fallback |
 | PayPal sync timeout on Netlify | Use Admin batched sync or `npm run sync:paypal`; background function for cron |
@@ -538,6 +579,7 @@ From by-laws / handoff:
 
 ## 14. Related documents
 
+- **`docs/notifications-setup.md`** — SendGrid + Twilio account setup, Netlify env, test commands.
 - **`docs/membership-onboarding-workflow.md`** — Full onboarding pipeline (board + dev spec).
 - **`docs/automation-registry.md`** — Master catalog of all automations (IDs, triggers, tables, files, status).
 - **`docs/automation-showcase.html`** — Meridian portfolio case study (`/docs/automation-showcase.html`); mirror to `public/docs/`.
@@ -550,3 +592,18 @@ From by-laws / handoff:
 ---
 
 *Maintained for Cursor agents. Update this file when completing major features or changing architecture.*
+
+---
+
+## 15. Next agent priorities (June 13, 2026)
+
+1. **Twilio SMS (current)** — Create Twilio account, buy US SMS number, add `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` to `.env` + Netlify, redeploy. Run `npm run test:notify -- --send`. Upgrade from trial for production member texts. A2P 10DLC / Wix `twilio-domain-verification` TXT optional for later volume.
+2. **Production smoke-test** — After Netlify redeploy with SendGrid: Admin → Waiting List → **Send Invitation** → confirm email (and SMS once Twilio live).
+3. **Event announcement UI** — `scripts/set_event_announcement.js` exists; optional admin UI.
+4. **E2E onboarding test** — waiting list → invite → apply → approve → PayPal invoice → member active.
+5. **EVT-06** — Admin create event + bulk PayPal invoices.
+6. **EVT-08** — Payment reminders.
+
+**SendGrid (done):** `notifications@hibretedir.com` / Reply `hibretedirtext@gmail.com` / DNS on Wix.
+
+**Do not regress Meridian showcase:** speech-gated advance, phase-2 scroll-before-speech, contact links after closing pitch (`ETHIO_CONTACT`).

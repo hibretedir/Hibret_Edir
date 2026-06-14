@@ -29,11 +29,35 @@ function boardPhones() {
 }
 
 function fromEmail() {
-  return process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || 'hibretedirautomation@gmail.com';
+  return process.env.SENDGRID_FROM_EMAIL || process.env.SENDGRID_FROM || 'notifications@hibretedir.com';
+}
+
+function replyToEmail() {
+  return process.env.SENDGRID_REPLY_TO || process.env.SENDGRID_REPLY || 'hibretedirtext@gmail.com';
 }
 
 function fromSms() {
   return process.env.TWILIO_FROM || process.env.TWILIO_PHONE || null;
+}
+
+function getNotifyConfig() {
+  const sendgridKey = process.env.SENDGRID_API_KEY;
+  const twilioSid = process.env.TWILIO_ACCOUNT_SID;
+  const twilioToken = process.env.TWILIO_AUTH_TOKEN;
+  const smsFrom = fromSms();
+  return {
+    email: {
+      configured: Boolean(sendgridKey),
+      from: fromEmail(),
+      replyTo: replyToEmail(),
+      boardRecipients: boardEmails(),
+    },
+    sms: {
+      configured: Boolean(twilioSid && twilioToken && smsFrom),
+      from: smsFrom,
+      boardRecipients: boardPhones(),
+    },
+  };
 }
 
 async function sendEmail({ to, subject, text, html }) {
@@ -45,6 +69,7 @@ async function sendEmail({ to, subject, text, html }) {
   const body = {
     personalizations: [{ to: [{ email: to }] }],
     from: { email: fromEmail(), name: 'Hibret Edir' },
+    reply_to: { email: replyToEmail(), name: 'Hibret Edir' },
     subject,
     content: [{ type: 'text/plain', value: text || subject }],
   };
@@ -393,6 +418,7 @@ async function notifyApplicationRejected(db, app, notes) {
 module.exports = {
   sendEmail,
   sendSms,
+  getNotifyConfig,
   logNotification,
   notifyMember,
   notifyBoard,
