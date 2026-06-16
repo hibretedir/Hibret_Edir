@@ -4,6 +4,12 @@ const {
   verifyAdminRequest,
   buildActorFromAdmin,
 } = require('./admin-auth');
+const {
+  loadBoardMemberAccess,
+  assertCanWriteAll,
+  assertCanApprovePayout,
+  assertNotesOnlyUpdate,
+} = require('./board-permissions');
 const { stampBoardNote, mergeBoardNotes } = require('./board-notes');
 
 const headers = {
@@ -296,11 +302,31 @@ async function createPayout(body, actor) {
   return json(201, { payout: buildPayoutSummary(joined.rows[0]) });
 }
 
-async function updatePayout(id, body, actor) {
+async function updatePayout(id, body, actor, access) {
   const db = getDb();
   const existing = await db.query('SELECT * FROM event_payouts WHERE id = $1 LIMIT 1', [id]);
   if (!existing.rows[0]) return json(404, { error: 'Payout case not found.' });
   const row = existing.rows[0];
+
+  if (!access?.canWriteAll) {
+    const notesErr = assertNotesOnlyUpdate(body, ['notes']);
+    if (notesErr) return json(notesErr === 'Nothing to save.' ? 400 : 403, { error: notesErr });
+    const merged = mergeBoardNotes(row.notes, body.notes, actor?.actor_label || 'Board');
+    await db.query(
+      `UPDATE event_payouts SET notes = $1, updated_at = NOW() WHERE id = $2`,
+      [String(merged || '').slice(0, 4000) || null, id]
+    );
+    await logActivity(db, {
+      ...actor,
+      action: 'payout.notes_updated',
+      entity_type: 'event_payout',
+      table_name: 'event_payouts',
+      record_id: id,
+      member_id: row.member_id,
+      summary: `Payout notes updated for ${row.deceased_name}`,
+    });
+    return getPayout(id, true);
+  }
 
   if (row.status === 'Paid Out' && !body.force) {
     return json(400, { error: 'This payout is already marked paid out.' });
@@ -513,6 +539,8 @@ exports.handler = async (event) => {
   const path = getPath(event);
   const route = matchPayoutPath(path);
   const actor = await resolveAdminActor(admin);
+  const db = getDb();
+  const access = await loadBoardMemberAccess(db, admin);
 
   try {
     if (event.httpMethod === 'GET' && route.isRoot) {
@@ -522,15 +550,21 @@ exports.handler = async (event) => {
       return await getPayout(route.id, true);
     }
     if (event.httpMethod === 'POST' && route.isRoot) {
+      const denied = assertCanWriteAll(access);
+      if (denied) return json(403, { error: denied });
       return await createPayout(parseBody(event), actor);
     }
     if (event.httpMethod === 'PATCH' && route.id && !route.action) {
-      return await updatePayout(route.id, parseBody(event), actor);
+      return await updatePayout(route.id, parseBody(event), actor, access);
     }
     if (event.httpMethod === 'POST' && route.id && route.action === 'approve') {
+      const denied = assertCanApprovePayout(access);
+      if (denied) return json(403, { error: denied });
       return await approvePayout(route.id, actor, admin);
     }
     if (event.httpMethod === 'POST' && route.id && route.action === 'mark-paid') {
+      const denied = assertCanApprovePayout(access);
+      if (denied) return json(403, { error: denied });
       return await markPayoutPaid(route.id, parseBody(event), actor);
     }
     return json(404, { error: 'Not found' });

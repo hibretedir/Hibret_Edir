@@ -1748,6 +1748,30 @@ body.site-public .sg-card.sg-card-accent-red:active {
   scroll-margin-top: calc(var(--nav-h, 64px) + 20px);
 }
 
+.site-public .app-signature-section {
+  border-color: rgba(7, 137, 48, 0.35);
+}
+
+.site-public .app-signature-check {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  cursor: pointer;
+}
+
+.site-public .app-signature-check input {
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+.site-public .app-signature-date {
+  opacity: 0.85;
+  cursor: default;
+}
+
 .site-public .submit-feedback.ok {
   font-weight: 600;
   font-size: 15px;

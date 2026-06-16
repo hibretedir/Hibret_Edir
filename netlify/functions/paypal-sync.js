@@ -6,6 +6,7 @@ const { getDb } = require('./db');
 const { invalidateInvoiceStatsCache } = require('./invoice-stats-cache');
 const { paymentMethodFromPaypalStatus, SYNC_PROTECT_LOCAL_PAID_SQL } = require('./payment-methods');
 const { verifyAdminRequest } = require('./admin-auth');
+const { loadBoardMemberAccess, assertCanSyncPaypal } = require('./board-permissions');
 const { loadLocalEnv, paypalApiBase } = require('./paypal-env');
 const { getPayPalAccessToken, fetchPayPalInvoiceDetail } = require('./paypal-client');
 
@@ -96,9 +97,26 @@ async function fetchAllPaypalInvoices(accessToken) {
 
 function mapPaypalStatus(status) {
   const s = String(status || '').toUpperCase();
-  if (s === 'PAID' || s === 'MARKED_AS_PAID' || s === 'PARTIALLY_PAID') return 'Paid';
+  if (s === 'PAID' || s === 'MARKED_AS_PAID') return 'Paid';
+  if (s === 'PARTIALLY_PAID') return 'Partially Paid';
   if (s.startsWith('CANCEL') || s === 'REFUNDED' || s === 'REFUND') return 'Cancelled';
   return 'Unpaid';
+}
+
+function paypalAmountDue(inv, status, amountTotal) {
+  if (status === 'Paid') return 0;
+  const breakdown = inv.amount?.breakdown;
+  const outstanding = breakdown?.outstanding_balance?.value ?? breakdown?.amount_due?.value;
+  if (outstanding != null && outstanding !== '') return Number(outstanding);
+  if (status === 'Partially Paid') {
+    const total = Number(inv.amount?.value || amountTotal);
+    const paid = (inv.payments?.transactions || []).reduce(
+      (sum, tx) => sum + Number(tx.amount?.value || 0),
+      0
+    );
+    if (paid > 0 && paid < total) return Math.max(0, total - paid);
+  }
+  return Number(inv.amount?.value || amountTotal);
 }
 
 /** CRM invoice_number is numeric event invoice # only — not PayPal refs like REG-1. */
@@ -141,7 +159,8 @@ function normalizePaypalInvoice(inv) {
   const status = mapPaypalStatus(inv.status);
   const paidTx = inv.payments?.transactions?.[0];
   const payerView = (inv.links || []).find((link) => link.rel === 'payer-view')?.href;
-  const payment_method = status === 'Paid'
+  const amountTotal = Number(inv.amount?.breakdown?.item_total?.value || inv.amount?.value || 110);
+  const payment_method = status === 'Paid' || status === 'Partially Paid'
     ? paymentMethodFromPaypalStatus(inv.status)
     : null;
 
@@ -155,10 +174,10 @@ function normalizePaypalInvoice(inv) {
     event_number,
     deceased_name,
     status,
-    amount: Number(inv.amount?.breakdown?.item_total?.value || inv.amount?.value || 110),
-    amount_due: status === 'Paid' ? 0 : Number(inv.amount?.value || 110),
+    amount: amountTotal,
+    amount_due: paypalAmountDue(inv, status, amountTotal),
     sent_date: inv.detail?.invoice_date || null,
-    paid_date: status === 'Paid'
+    paid_date: status === 'Paid' || status === 'Partially Paid'
       ? (paidTx?.payment_date ? String(paidTx.payment_date).slice(0, 10) : inv.detail?.invoice_date || null)
       : null,
     payment_method,
@@ -235,20 +254,21 @@ async function applyPaypalRowToInvoice(client, invoiceId, inv) {
        member_id = COALESCE($3, member_id),
        event_id = COALESCE($4, event_id),
        status = CASE
-         WHEN $5 IN ('Paid', 'Cancelled') THEN $5
+         WHEN $5 IN ('Paid', 'Cancelled', 'Partially Paid') THEN $5
          WHEN ${SYNC_PROTECT_LOCAL_PAID_SQL} AND $5 = 'Unpaid' THEN status
          ELSE $5
        END,
        amount = $6,
        amount_due = CASE
-         WHEN $5 IN ('Paid', 'Cancelled') THEN $7
+         WHEN $5 = 'Paid' THEN 0
+         WHEN $5 IN ('Cancelled', 'Partially Paid') THEN $7
          WHEN ${SYNC_PROTECT_LOCAL_PAID_SQL} AND $5 = 'Unpaid'
            AND LOWER(TRIM(COALESCE(status, ''))) = 'paid' THEN 0
          ELSE $7
        END,
        sent_date = COALESCE($8, sent_date),
        paid_date = CASE
-         WHEN $5 = 'Paid' THEN COALESCE($9, paid_date)
+         WHEN $5 IN ('Paid', 'Partially Paid') THEN COALESCE($9, paid_date)
          WHEN ${SYNC_PROTECT_LOCAL_PAID_SQL} AND $5 = 'Unpaid'
            AND LOWER(TRIM(COALESCE(status, ''))) = 'paid' THEN paid_date
          ELSE COALESCE($9, paid_date)
@@ -360,20 +380,21 @@ async function upsertInvoiceBatch(client, rows) {
        member_id = COALESCE(EXCLUDED.member_id, invoices.member_id),
        event_id = COALESCE(EXCLUDED.event_id, invoices.event_id),
        status = CASE
-         WHEN EXCLUDED.status IN ('Paid', 'Cancelled') THEN EXCLUDED.status
+         WHEN EXCLUDED.status IN ('Paid', 'Cancelled', 'Partially Paid') THEN EXCLUDED.status
          WHEN ${SYNC_PROTECT_LOCAL_PAID_SQL} AND EXCLUDED.status = 'Unpaid' THEN invoices.status
          ELSE EXCLUDED.status
        END,
        amount = EXCLUDED.amount,
        amount_due = CASE
-         WHEN EXCLUDED.status IN ('Paid', 'Cancelled') THEN EXCLUDED.amount_due
+         WHEN EXCLUDED.status = 'Paid' THEN 0
+         WHEN EXCLUDED.status IN ('Cancelled', 'Partially Paid') THEN EXCLUDED.amount_due
          WHEN ${SYNC_PROTECT_LOCAL_PAID_SQL} AND EXCLUDED.status = 'Unpaid'
            AND LOWER(TRIM(COALESCE(invoices.status, ''))) = 'paid' THEN 0
          ELSE EXCLUDED.amount_due
        END,
        sent_date = COALESCE(EXCLUDED.sent_date, invoices.sent_date),
        paid_date = CASE
-         WHEN EXCLUDED.status = 'Paid' THEN COALESCE(EXCLUDED.paid_date, invoices.paid_date)
+         WHEN EXCLUDED.status IN ('Paid', 'Partially Paid') THEN COALESCE(EXCLUDED.paid_date, invoices.paid_date)
          WHEN ${SYNC_PROTECT_LOCAL_PAID_SQL} AND EXCLUDED.status = 'Unpaid'
            AND LOWER(TRIM(COALESCE(invoices.status, ''))) = 'paid' THEN invoices.paid_date
          ELSE COALESCE(EXCLUDED.paid_date, invoices.paid_date)
@@ -393,11 +414,39 @@ async function upsertInvoiceBatch(client, rows) {
   );
 }
 
+async function reconcilePartialPayments(client, paypalItems) {
+  let fixed = 0;
+  for (const raw of paypalItems) {
+    if (String(raw.status || '').toUpperCase() !== 'PARTIALLY_PAID') continue;
+    const inv = normalizePaypalInvoice(raw);
+    if (!inv.paypal_invoice_id) continue;
+    const result = await client.query(
+      `UPDATE invoices SET
+         status = 'Partially Paid',
+         amount = $2,
+         amount_due = $3,
+         paid_date = COALESCE($4, paid_date),
+         payment_method = COALESCE($5, payment_method),
+         updated_at = NOW()
+       WHERE paypal_invoice_id = $1
+         AND (
+           LOWER(TRIM(COALESCE(status, ''))) <> 'partially paid'
+           OR COALESCE(amount_due, 0) <> $3
+         )
+       RETURNING invoice_number`,
+      [inv.paypal_invoice_id, inv.amount, inv.amount_due, inv.paid_date, inv.payment_method]
+    );
+    fixed += result.rowCount;
+  }
+  return fixed;
+}
+
 async function syncInvoicesToDb(paypalItems) {
   const db = getDb();
   const client = await db.connect();
   let synced = 0;
   let unmatched = 0;
+  let partial_reconciled = 0;
 
   try {
     const membersRes = await client.query(
@@ -426,8 +475,8 @@ async function syncInvoicesToDb(paypalItems) {
       seenPaypalIds.add(inv.paypal_invoice_id);
       const memberId = findMemberIdFromMaps(inv, byEmail, byPaypal);
       if (!memberId) unmatched += 1;
-      const paidDate = inv.status === 'Paid'
-        ? (inv.paid_date || new Date().toISOString().slice(0, 10))
+      const paidDate = inv.status === 'Paid' || inv.status === 'Partially Paid'
+        ? (inv.paid_date || (inv.status === 'Paid' ? new Date().toISOString().slice(0, 10) : null))
         : null;
       prepared.push({
         paypal_invoice_id: inv.paypal_invoice_id,
@@ -457,12 +506,13 @@ async function syncInvoicesToDb(paypalItems) {
         throw err;
       }
     }
+    partial_reconciled = await reconcilePartialPayments(client, paypalItems);
   } finally {
     client.release();
   }
 
   const paid = paypalItems.filter((item) => mapPaypalStatus(item.status) === 'Paid').length;
-  const withEvent = paypalItems.filter((item) => extractEventFromItems(item).event_number).length;
+  const partial = paypalItems.filter((item) => mapPaypalStatus(item.status) === 'Partially Paid').length;
 
   let membership_completed = [];
   try {
@@ -471,6 +521,8 @@ async function syncInvoicesToDb(paypalItems) {
   } catch (err) {
     console.error('Registration membership completion after sync failed:', err);
   }
+
+  const withEvent = paypalItems.filter((item) => extractEventFromItems(item).event_number).length;
 
   return {
     ok: true,
@@ -481,7 +533,9 @@ async function syncInvoicesToDb(paypalItems) {
     unmatched,
     with_event: withEvent,
     paid_on_paypal: paid,
-    unpaid_on_paypal: paypalItems.length - paid,
+    partial_on_paypal: partial,
+    unpaid_on_paypal: paypalItems.length - paid - partial,
+    partial_reconciled,
     membership_completed,
     synced_at: new Date().toISOString(),
   };
@@ -573,6 +627,9 @@ exports.handler = async (event) => {
     if (event.httpMethod === 'POST') {
       const admin = verifyAdminRequest(event);
       if (!admin) return json(401, { error: 'Admin authorization required.' });
+      const access = await loadBoardMemberAccess(getDb(), admin);
+      const denied = assertCanSyncPaypal(access);
+      if (denied) return json(403, { error: denied });
 
       const accessToken = await getAccessToken();
       const invoiceIds = Array.isArray(body.invoice_ids)

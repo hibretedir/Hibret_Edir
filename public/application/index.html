@@ -175,6 +175,29 @@
 
         <p class="form-fine en">It is the member's responsibility to keep beneficiary and contact information current.</p>
         <p class="form-fine am">ተጠቃሚ እና ተጠሪ መረጃ ሁልጊዜ ወቅታዊ መሆን የአባሉ ኃላፊነት ነው።</p>
+
+        <section class="app-form-section form-box app-signature-section">
+          <h3 class="en">Signature</h3>
+          <h3 class="am">ፊርማ</h3>
+          <p class="form-fine en">By signing below, you certify that all information on this application is true and complete.</p>
+          <p class="form-fine am">ከዚህ በታች በመፈረም፣ በዚህ ማመልከቻ ላይ ያለው መረጃ ሁሉ እውነት እና ሙሉ መሆኑን ያረጋግጣሉ።</p>
+          <label class="app-signature-check">
+            <input type="checkbox" name="signature_agreed" id="signatureAgreed" value="1">
+            <span class="en">I certify that the information above is accurate and complete.</span>
+            <span class="am">ከላይ ያለው መረጃ ትክክለኛ እና ሙሉ መሆኑን አረጋግጣለሁ።</span>
+          </label>
+          <div class="fg" style="margin-top:12px">
+            <label class="en">Type your full legal name *</label>
+            <label class="am">ሙሉ ሕጋዊ ስምዎን ይፃፉ *</label>
+            <input type="text" name="signature_name" id="signatureName" autocomplete="name" required>
+          </div>
+          <div class="fg" style="margin-top:8px">
+            <label class="en">Date</label>
+            <label class="am">ቀን</label>
+            <input type="text" id="signatureDate" class="app-signature-date" readonly>
+          </div>
+        </section>
+
         <div class="form-msg submit-feedback" id="submitFeedback" style="display:none" role="status" aria-live="polite"></div>
         <button type="submit" class="form-submit" id="submitBtn"><span class="en">Submit Membership Application →</span><span class="am">ማመልከቻ ያስገቡ →</span></button>
       </form>
@@ -313,6 +336,13 @@ buildRepeatRows('childrenRows', 3, [
 ]);
 buildEmergencyBlocks();
 updateFormPlaceholders(localStorage.getItem('hl') || 'en');
+
+function syncSignatureDate() {
+  const el = document.getElementById('signatureDate');
+  if (!el) return;
+  el.value = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+syncSignatureDate();
 
 function syncSpouseIdBlock() {
   const spouseName = document.getElementById('spouseFullName')?.value?.trim();
@@ -473,6 +503,9 @@ async function verifyApproval(e) {
     document.getElementById('memZip').value = data.zip || '';
     document.getElementById('memCell').value = data.phone || '';
     document.getElementById('memEmail').value = data.email || '';
+    const sigName = document.getElementById('signatureName');
+    if (sigName && !sigName.value) sigName.value = data.full_name || '';
+    syncSignatureDate();
     const banner = document.getElementById('wlLinkedBanner');
     if (banner) {
       banner.style.display = 'block';
@@ -537,6 +570,13 @@ function validateMembershipForm(fd) {
   if (spouseName && !idUploads.spouse) {
     return 'Please upload your spouse\'s California ID.';
   }
+  if (!document.getElementById('signatureAgreed')?.checked) {
+    return 'You must certify that the information is accurate before submitting.';
+  }
+  const sigName = String(fd.get('signature_name') || '').trim();
+  if (sigName.length < 2) {
+    return 'Please type your full legal name to sign the application.';
+  }
   return null;
 }
 
@@ -590,6 +630,10 @@ async function submitMembership(e) {
     id_documents: {
       ...(idUploads.member ? { member: idUploads.member } : {}),
       ...(spouseName && idUploads.spouse ? { spouse: idUploads.spouse } : {}),
+    },
+    applicant_signature: {
+      name: String(fd.get('signature_name') || '').trim(),
+      agreed: true,
     },
   };
   showMemberFeedback('Submitting…', true, { scroll: false });

@@ -18,6 +18,21 @@ function paymentMethodFromPaypalStatus(rawStatus) {
   return null;
 }
 
+/** Invoice still owes money (unpaid or partially paid). */
+const OUTSTANDING_INVOICE_SQL = `LOWER(TRIM(COALESCE(invoices.status, ''))) IN ('unpaid', 'partially paid')`;
+
+function outstandingInvoiceSql(column = 'invoices.status') {
+  return `LOWER(TRIM(COALESCE(${column}, ''))) IN ('unpaid', 'partially paid')`;
+}
+
+function unpaidOnlyInvoiceSql(column = 'invoices.status') {
+  return `LOWER(TRIM(COALESCE(${column}, ''))) = 'unpaid'`;
+}
+
+function partialOnlyInvoiceSql(column = 'invoices.status') {
+  return `LOWER(TRIM(COALESCE(${column}, ''))) = 'partially paid'`;
+}
+
 /** SQL fragment: invoices.payment_method is Zelle or BofA direct deposit. */
 const ZELLE_BOFA_SQL = `(
   LOWER(COALESCE(invoices.payment_method, '')) IN ('zelle', 'bofa', 'zelle & bofa', 'bank of america', 'direct deposit')
@@ -44,6 +59,10 @@ const SYNC_PROTECT_LOCAL_PAID_SQL = `(
 module.exports = {
   isZelleBofaPaymentMethod,
   paymentMethodFromPaypalStatus,
+  OUTSTANDING_INVOICE_SQL,
+  outstandingInvoiceSql,
+  unpaidOnlyInvoiceSql,
+  partialOnlyInvoiceSql,
   ZELLE_BOFA_SQL,
   SYNC_PROTECT_LOCAL_PAID_SQL,
 };

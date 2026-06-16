@@ -127,7 +127,7 @@ async function getMemberJourney(db, memberId) {
   const events = [];
 
   const memberRes = await db.query(
-    `SELECT id, member_number, full_name, first_name, last_name, email, mobile, status, joined_date, notes, created_at
+    `SELECT id, member_number, full_name, first_name, last_name, email, mobile, home_phone, status, joined_date, notes, created_at
      FROM members WHERE id = $1`,
     [memberId]
   );
@@ -146,9 +146,9 @@ async function getMemberJourney(db, memberId) {
     `SELECT ma.*, wl.full_name AS wl_name, wl.applied_at AS wl_applied_at
      FROM membership_applications ma
      JOIN waiting_list wl ON wl.id = ma.waiting_list_id
-     WHERE ma.member_id = $1 OR ma.email = LOWER($2)
+     WHERE ma.member_id = $1
      ORDER BY ma.submitted_at DESC LIMIT 1`,
-    [memberId, member.email || '']
+    [memberId]
   );
   if (appRes.rows[0]) {
     const app = appRes.rows[0];
@@ -175,11 +175,18 @@ async function getMemberJourney(db, memberId) {
       });
     }
   } else {
+    // Legacy imports: only link waiting-list rows already marked as this member — not
+    // other Pending applicants who share a household email or phone.
     const wlRes = await db.query(
       `SELECT applied_at, full_name, status FROM waiting_list
-       WHERE LOWER(email) = LOWER($1) OR RIGHT(REGEXP_REPLACE(phone, '[^0-9]', '', 'g'), 10) = RIGHT(REGEXP_REPLACE($2, '[^0-9]', '', 'g'), 10)
+       WHERE status = 'Added as Member'
+         AND (
+           LOWER(email) = LOWER($1)
+           OR RIGHT(REGEXP_REPLACE(phone, '[^0-9]', '', 'g'), 10)
+              = RIGHT(REGEXP_REPLACE($2, '[^0-9]', '', 'g'), 10)
+         )
        ORDER BY applied_at DESC LIMIT 1`,
-      [member.email || '', member.mobile || '']
+      [member.email || '', member.mobile || member.home_phone || '']
     );
     if (wlRes.rows[0]) {
       events.push({
@@ -197,12 +204,21 @@ async function getMemberJourney(db, memberId) {
     [memberId]
   );
   invRes.rows.forEach((inv) => {
+    const st = String(inv.status || '');
+    const action = st === 'Paid'
+      ? 'Invoice paid'
+      : st === 'Partially Paid'
+        ? 'Invoice partially paid'
+        : /cancel/i.test(st)
+          ? 'Invoice cancelled'
+          : 'Invoice sent';
     events.push({
       at: inv.paid_date || inv.sent_date,
       type: 'invoice',
-      action: inv.status === 'Paid' ? 'Invoice paid' : 'Invoice sent',
+      action,
       summary: `#${inv.invoice_number} — ${inv.status}${inv.amount_due ? ` ($${inv.amount_due})` : ''}`,
       record_id: inv.invoice_number,
+      status: inv.status,
     });
   });
 

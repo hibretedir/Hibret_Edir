@@ -94,8 +94,32 @@ CREATE TABLE IF NOT EXISTS board_members (
   email VARCHAR(200) UNIQUE,
   password_hash VARCHAR(200),  -- NULL until board member sets password on first sign-in
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  write_approved BOOLEAN NOT NULL DEFAULT FALSE,
+  is_super_admin BOOLEAN NOT NULL DEFAULT FALSE,
+  perm_full_access BOOLEAN NOT NULL DEFAULT FALSE,
+  perm_notes BOOLEAN NOT NULL DEFAULT TRUE,
+  perm_approve_payout BOOLEAN NOT NULL DEFAULT FALSE,
+  perm_approve_operations BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+ALTER TABLE board_members ADD COLUMN IF NOT EXISTS write_approved BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE board_members ADD COLUMN IF NOT EXISTS is_super_admin BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE board_members ADD COLUMN IF NOT EXISTS perm_full_access BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE board_members ADD COLUMN IF NOT EXISTS perm_notes BOOLEAN NOT NULL DEFAULT TRUE;
+ALTER TABLE board_members ADD COLUMN IF NOT EXISTS perm_approve_payout BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE board_members ADD COLUMN IF NOT EXISTS perm_approve_operations BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Migrate legacy write_approved → granular perms
+UPDATE board_members
+SET perm_full_access = TRUE,
+    perm_notes = TRUE,
+    perm_approve_payout = TRUE,
+    perm_approve_operations = TRUE
+WHERE write_approved = TRUE
+  AND is_active = TRUE;
+
+UPDATE board_members SET perm_notes = TRUE WHERE is_active = TRUE AND perm_notes = FALSE;
 
 CREATE TABLE IF NOT EXISTS audit_log (
   id SERIAL PRIMARY KEY,
@@ -204,6 +228,8 @@ ALTER TABLE invoices ADD COLUMN IF NOT EXISTS membership_application_id INTEGER 
 ALTER TABLE membership_applications ADD COLUMN IF NOT EXISTS registration_invoice_id INTEGER REFERENCES invoices(id);
 CREATE INDEX IF NOT EXISTS idx_invoices_membership_application ON invoices(membership_application_id);
 CREATE INDEX IF NOT EXISTS idx_membership_applications_reg_invoice ON membership_applications(registration_invoice_id);
+ALTER TABLE members ADD COLUMN IF NOT EXISTS application_drive_url TEXT;
+ALTER TABLE membership_applications ADD COLUMN IF NOT EXISTS applicant_signature JSONB;
 -- Audit log migration (existing databases):
 -- ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS member_id INTEGER REFERENCES members(id);
 -- ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS actor_type VARCHAR(20) NOT NULL DEFAULT 'system';

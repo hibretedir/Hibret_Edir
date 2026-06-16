@@ -413,6 +413,126 @@ body.app-admin.tracker {
 .tracker-stat-val.green { color: var(--tk-green); }
 .tracker-stat-val.red { color: var(--tk-red); }
 
+/* ── Member detail modal tabs ── */
+.member-detail-tabs {
+  margin: 0 0 16px;
+}
+
+.member-app-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--tk-muted);
+  margin-bottom: 14px;
+}
+
+.member-ec-block {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--tk-border);
+}
+
+.member-ec-block:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.member-activity-panel {
+  margin-top: 4px;
+}
+
+.member-activity-section + .member-activity-section {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--tk-border);
+}
+
+.member-activity-heading {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tk-text);
+}
+
+.member-activity-sub {
+  margin: 0 0 12px;
+  font-size: 11px;
+  color: var(--tk-muted);
+}
+
+.member-journey-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.member-journey-item {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--tk-border);
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.member-journey-item--invoice {
+  border-color: var(--tk-border2);
+}
+
+.member-journey-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.member-journey-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.member-journey-when {
+  font-size: 10px;
+  color: var(--tk-muted);
+}
+
+.member-journey-type {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--tk-muted);
+}
+
+.member-journey-action {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tk-text);
+}
+
+.member-journey-summary {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--tk-muted);
+  line-height: 1.4;
+}
+
+.member-messages-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.member-journey-list .tracker-status,
+.member-messages-list .tracker-status {
+  min-width: 64px;
+}
+
 /* ── Tabs ── */
 .tracker-tabs {
   display: flex;
@@ -443,6 +563,26 @@ body.app-admin.tracker {
   color: var(--tk-orange);
   border-bottom-color: var(--tk-orange);
   font-weight: 600;
+}
+
+.tracker-tab.active[data-inv-filter="unpaid"],
+.tracker-tab.active[data-inv-filter="late"] {
+  color: #f87171;
+  border-bottom-color: #ef4444;
+}
+
+.tracker-tab.active[data-inv-filter="paid"] {
+  color: #6ee7b7;
+  border-bottom-color: #22c55e;
+}
+
+.tracker-tab.active[data-inv-filter="partial"] {
+  color: #fbbf24;
+  border-bottom-color: #f59e0b;
+}
+
+.tracker-stat-val.orange {
+  color: var(--tk-orange);
 }
 
 .tracker-tab-count {
@@ -712,26 +852,55 @@ body.app-admin.tracker {
 .tracker-status {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 20px;
+  justify-content: center;
+  min-width: 68px;
+  padding: 5px 11px;
+  border-radius: 6px;
   font-size: 11px;
   font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+  border: 1px solid transparent;
+  white-space: nowrap;
 }
 
 .tracker-status.unpaid {
-  background: var(--tk-red-bg);
+  background: rgba(239, 68, 68, 0.14);
+  border-color: rgba(239, 68, 68, 0.38);
   color: #fca5a5;
 }
 
 .tracker-status.paid {
   background: rgba(34, 197, 94, 0.12);
-  color: #86efac;
+  border-color: rgba(34, 197, 94, 0.35);
+  color: #6ee7b7;
 }
 
 .tracker-status.cancelled {
-  background: rgba(148, 163, 184, 0.15);
+  background: rgba(148, 163, 184, 0.1);
+  border-color: rgba(148, 163, 184, 0.22);
   color: #94a3b8;
+  min-width: auto;
+}
+
+.tracker-status.inv-status-pending {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.32);
+  color: #fbbf24;
+  min-width: auto;
+}
+
+.tracker-status.inv-status-due {
+  background: rgba(239, 68, 68, 0.07);
+  border-color: rgba(239, 68, 68, 0.26);
+  color: #f87171;
+}
+
+.tracker-status.inv-status-partial {
+  background: rgba(245, 158, 11, 0.11);
+  border-color: rgba(245, 158, 11, 0.34);
+  color: #fbbf24;
+  min-width: auto;
 }
 
 .tracker-amount.cancelled {
@@ -746,10 +915,30 @@ body.app-admin.tracker {
 }
 
 .tracker-status-dot {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
   background: currentColor;
+  flex-shrink: 0;
+}
+
+/* Invoice list: status pills without dots — cleaner scan */
+.tracker-table .tracker-status-dot {
+  display: none;
+}
+
+.tracker-mark-done {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 68px;
+  padding: 5px 11px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.35);
+  color: #6ee7b7;
 }
 
 .tracker-mark-btn {
@@ -765,11 +954,6 @@ body.app-admin.tracker {
 
 .tracker-mark-btn:hover {
   color: var(--tk-text);
-}
-
-.tracker-mark-done {
-  font-size: 11px;
-  color: var(--tk-green);
 }
 
 .mark-paid-approval-hint {
@@ -877,7 +1061,9 @@ body.app-admin.tracker {
 }
 
 .tracker-late-link:hover .tracker-status {
-  text-decoration: underline;
+  text-decoration: none;
+  filter: brightness(1.1);
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.12);
 }
 
 .tracker-late-member-link {
@@ -1887,6 +2073,72 @@ body.tracker .btn.primary {
 
 .board-access-invite-msg.ok { color: #86efac; }
 .board-access-invite-msg.err { color: #fca5a5; }
+
+.board-perm-cell { min-width: 280px; }
+.board-perm-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.board-perm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.12);
+  color: var(--tk-muted);
+  cursor: pointer;
+}
+.board-perm-chip.on {
+  border-color: rgba(134, 239, 172, 0.45);
+  color: #bbf7d0;
+  background: rgba(34, 197, 94, 0.12);
+}
+.board-perm-chip input { margin: 0; }
+.board-perm-save { margin-top: 2px; }
+
+.board-perm-tip-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.board-perm-tip {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  z-index: 40;
+  min-width: 200px;
+  max-width: 260px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #1a1f2e;
+  border: 1px solid rgba(255,255,255,0.14);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  font-size: 11px;
+  line-height: 1.35;
+  color: #e2e8f0;
+  pointer-events: none;
+}
+.board-perm-tip strong {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--tk-muted);
+  margin-bottom: 4px;
+}
+.board-perm-tip ul {
+  margin: 0;
+  padding-left: 16px;
+}
+.board-perm-tip li { margin: 2px 0; }
+.board-perm-tip-wrap:hover .board-perm-tip,
+.board-perm-tip-wrap:focus-within .board-perm-tip {
+  display: block;
+}
 
 .tracker-actions {
   white-space: nowrap;

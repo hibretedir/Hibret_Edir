@@ -12,6 +12,16 @@ const { getDb } = require('./db');
 const { findSnapshotMember, saveSnapshotPin, clearSnapshotPin, loadSnapshotMembers } = require('./member-snapshot');
 const { logActivity } = require('./audit');
 const { adminAuthRequired, verifyAdminRequest } = require('./admin-auth');
+const {
+  loadBoardMemberAccess,
+  assertCanManageBoard,
+  assertCanWriteAll,
+  assertCanApproveOperations,
+  buildPermissionsPayload,
+  syncSuperAdminFlags,
+  normalizePermissionBody,
+  BOARD_MEMBER_PERM_COLUMNS,
+} = require('./board-permissions');
 const { notifyBoard } = require('./notify');
 
 const headers = {
@@ -327,15 +337,22 @@ function buildAdminPayload(admin) {
     id: admin.id,
     email: admin.email,
     role: admin.role,
-    is_active: admin.is_active
+    is_active: admin.is_active,
+    ...buildPermissionsPayload(admin),
   };
 }
+
+const BOARD_MEMBER_SELECT = `
+  id, email, password_hash, role, is_active, created_at, write_approved,
+  is_super_admin, perm_full_access, perm_notes, perm_approve_payout, perm_approve_operations
+`;
 
 async function findAdmin({ email }) {
   if (!email) return null;
   const db = getDb();
+  await syncSuperAdminFlags(db);
   const result = await db.query(
-    `SELECT id, email, password_hash, role, is_active, created_at
+    `SELECT ${BOARD_MEMBER_SELECT}
      FROM board_members
      WHERE LOWER(email) = LOWER($1)
      LIMIT 1`,
@@ -372,6 +389,7 @@ function buildBoardMemberRow(row) {
     is_active: row.is_active,
     created_at: row.created_at,
     has_password: !!row.password_hash || row.has_password === true,
+    ...buildPermissionsPayload(row),
   };
 }
 
@@ -379,7 +397,15 @@ async function issueAdminToken(admin) {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error('JWT_SECRET is not configured');
   const expiresIn = process.env.JWT_EXPIRES_IN || '1d';
-  return jwt.sign({ adminId: admin.id, role: 'admin' }, secret, { expiresIn });
+  return jwt.sign(
+    {
+      adminId: admin.id,
+      role: 'admin',
+      isSuperAdmin: !!admin.is_super_admin,
+    },
+    secret,
+    { expiresIn }
+  );
 }
 
 async function logAdminSignIn(admin, action = 'board.login', summary) {
@@ -451,8 +477,11 @@ async function setupAdminPassword(body) {
 
 async function listBoardMembers() {
   const db = getDb();
+  await syncSuperAdminFlags(db);
   const result = await db.query(
     `SELECT id, email, role, is_active, created_at,
+            is_super_admin, perm_full_access, perm_notes,
+            perm_approve_payout, perm_approve_operations,
             (password_hash IS NOT NULL) AS has_password
      FROM board_members
      ORDER BY created_at DESC NULLS LAST, id DESC`
@@ -477,17 +506,27 @@ async function inviteBoardMember(body, actor) {
     }
     const update = await db.query(
       `UPDATE board_members
-       SET is_active = true, password_hash = NULL, role = COALESCE($2, role)
+       SET is_active = true,
+           password_hash = NULL,
+           role = COALESCE($2, role),
+           perm_notes = COALESCE(perm_notes, TRUE)
        WHERE id = $1
-       RETURNING id, email, role, is_active, created_at`,
+       RETURNING id, email, role, is_active, created_at,
+                 is_super_admin, perm_full_access, perm_notes,
+                 perm_approve_payout, perm_approve_operations`,
       [existing.id, body.role || null]
     );
     boardMember = buildBoardMemberRow({ ...update.rows[0], has_password: false });
   } else {
     const insert = await db.query(
-      `INSERT INTO board_members (email, password_hash, role, is_active)
-       VALUES ($1, NULL, $2, true)
-       RETURNING id, email, role, is_active, created_at`,
+      `INSERT INTO board_members (
+         email, password_hash, role, is_active,
+         perm_notes, perm_full_access, perm_approve_payout, perm_approve_operations
+       )
+       VALUES ($1, NULL, $2, true, true, false, false, false)
+       RETURNING id, email, role, is_active, created_at,
+                 is_super_admin, perm_full_access, perm_notes,
+                 perm_approve_payout, perm_approve_operations`,
       [email, body.role || 'board']
     );
     boardMember = buildBoardMemberRow({ ...insert.rows[0], has_password: false });
@@ -510,18 +549,56 @@ async function inviteBoardMember(body, actor) {
   });
 }
 
-async function updateBoardMemberAccess(id, action, actor) {
+async function updateBoardMemberAccess(id, action, actor, access, body = {}) {
   if (!id || Number.isNaN(id)) {
     return jsonResponse(400, { error: 'Invalid board member id.' });
   }
   const db = getDb();
   const result = await db.query(
-    `SELECT id, email, role, is_active, created_at, password_hash
+    `SELECT id, email, role, is_active, created_at, password_hash,
+            is_super_admin, perm_full_access, perm_notes,
+            perm_approve_payout, perm_approve_operations
      FROM board_members WHERE id = $1 LIMIT 1`,
     [id]
   );
   const row = result.rows[0];
   if (!row) return jsonResponse(404, { error: 'Board member not found.' });
+
+  const needsManage = ['deactivate', 'reactivate', 'reset-password', 'permissions'];
+  if (needsManage.includes(action)) {
+    const denied = assertCanManageBoard(access);
+    if (denied) return jsonResponse(403, { error: denied });
+  }
+
+  if (action === 'permissions') {
+    if (!row.is_active) {
+      return jsonResponse(400, { error: 'Reactivate this board member before changing permissions.' });
+    }
+    if (row.is_super_admin) {
+      return jsonResponse(400, { error: 'Super admin permissions are managed via BOARD_SUPER_ADMIN_EMAILS.' });
+    }
+    const perms = normalizePermissionBody(body);
+    await db.query(
+      `UPDATE board_members
+       SET perm_full_access = $1,
+           perm_notes = $2,
+           perm_approve_payout = $3,
+           perm_approve_operations = $4
+       WHERE id = $5`,
+      [perms.perm_full_access, perms.perm_notes, perms.perm_approve_payout, perms.perm_approve_operations, id]
+    );
+    await logActivity(db, {
+      actor_type: 'board',
+      board_member_id: actor?.adminId || null,
+      actor_label: actor?.email || 'Board Admin',
+      action: 'board.permissions_updated',
+      entity_type: 'board_members',
+      record_id: id,
+      summary: `Board permissions updated for ${row.email}`,
+      new_value: perms,
+    });
+    return jsonResponse(200, { ok: true, message: 'Permissions saved.' });
+  }
 
   if (action === 'deactivate') {
     if (actor?.adminId && Number(actor.adminId) === id) {
@@ -708,6 +785,10 @@ exports.handler = async (event, context) => {
       const admin = verifyAdminRequest(event);
       if (!admin) return jsonResponse(401, { error: 'Admin authorization required.' });
       try {
+        const db = getDb();
+        const access = await loadBoardMemberAccess(db, admin);
+        const denied = assertCanApproveOperations(access);
+        if (denied) return jsonResponse(403, { error: denied });
         const status = pinResetPath.action === 'approve' ? 'Approved' : 'Rejected';
         return await resolvePinResetRequest(pinResetPath.id, status, admin);
       } catch (err) {
@@ -719,6 +800,10 @@ exports.handler = async (event, context) => {
     if (event.httpMethod === 'POST' && path === '/admin/reset-pin') {
       const admin = verifyAdminRequest(event);
       if (!admin) return jsonResponse(401, { error: 'Admin authorization required.' });
+      const db = getDb();
+      const access = await loadBoardMemberAccess(db, admin);
+      const denied = assertCanWriteAll(access);
+      if (denied) return jsonResponse(403, { error: denied });
       const memberId = body.memberId || body.member_id;
       if (!memberId) return jsonResponse(400, { error: 'memberId is required.' });
       try {
@@ -756,9 +841,12 @@ exports.handler = async (event, context) => {
       const admin = verifyAdminRequest(event);
       if (!admin) return jsonResponse(401, { error: 'Admin authorization required.' });
       try {
+        const db = getDb();
+        const access = await loadBoardMemberAccess(db, admin);
+        const denied = assertCanManageBoard(access);
+        if (denied) return jsonResponse(403, { error: denied });
         let actorEmail = admin.email;
         if (admin.adminId && process.env.DATABASE_URL) {
-          const db = getDb();
           const r = await db.query('SELECT email FROM board_members WHERE id = $1', [admin.adminId]);
           actorEmail = r.rows[0]?.email || actorEmail;
         }
@@ -773,16 +861,19 @@ exports.handler = async (event, context) => {
       const admin = verifyAdminRequest(event);
       if (!admin) return jsonResponse(401, { error: 'Admin authorization required.' });
       try {
+        const db = getDb();
+        const access = await loadBoardMemberAccess(db, admin);
         let actorEmail = admin.email;
         if (admin.adminId && process.env.DATABASE_URL) {
-          const db = getDb();
           const r = await db.query('SELECT email FROM board_members WHERE id = $1', [admin.adminId]);
           actorEmail = r.rows[0]?.email || actorEmail;
         }
         return await updateBoardMemberAccess(
           boardMembersPath.id,
           boardMembersPath.action,
-          { ...admin, email: actorEmail }
+          { ...admin, email: actorEmail },
+          access,
+          body
         );
       } catch (err) {
         console.error('board member update error:', err);
@@ -842,8 +933,11 @@ exports.handler = async (event, context) => {
       }
 
       const db = getDb();
+      await syncSuperAdminFlags(db);
       const result = await db.query(
-        `SELECT id, email, role, is_active
+        `SELECT id, email, role, is_active,
+                is_super_admin, perm_full_access, perm_notes,
+                perm_approve_payout, perm_approve_operations
          FROM board_members
          WHERE id = $1
          LIMIT 1`,

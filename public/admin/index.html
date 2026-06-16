@@ -459,6 +459,8 @@ let memberFilter = 'active';
 let memberSort = 'id_asc';
 let memberSearch = '';
 let editingMemberId = null;
+let memberDetailTab = 'profile';
+let memberDetailHighlightInvoice = null;
 let memberInvoicesMemberId = null;
 let reviewingApplicationId = null;
 let reviewingPayoutId = null;
@@ -473,7 +475,7 @@ let receiptFilter = 'pending';
 let messagesFilter = 'contact';
 let replyingMessageId = null;
 const PAYPAL_SYNC_KEY = 'hibret_paypal_last_sync';
-const ADMIN_CACHE_KEY = 'hibret_admin_boot_cache_v2';
+const ADMIN_CACHE_KEY = 'hibret_admin_boot_cache_v3';
 const ADMIN_CACHE_MS = 10 * 60 * 1000;
 const adminSectionsLoaded = { applications: false, receipts: false, inbox: false, activity: false, payouts: false, boardAccess: false };
 let adminLoginEmail = '';
@@ -490,6 +492,61 @@ const PAYPAL_BALANCE_TTL_MS = 5 * 60 * 1000;
 
 function getAdminToken() {
   return localStorage.getItem(ADMIN_TOKEN_KEY);
+}
+
+function adminIsSuperAdmin() {
+  if (!ADMIN_AUTH_ENABLED) return true;
+  return adminUser?.is_super_admin === true;
+}
+
+function adminCanManageBoard() {
+  return adminIsSuperAdmin();
+}
+
+function adminCanWriteAll() {
+  if (!ADMIN_AUTH_ENABLED) return true;
+  return !!(adminUser?.can_write_all || adminUser?.perm_full_access || adminUser?.is_super_admin);
+}
+
+function adminCanWriteNotes() {
+  if (!ADMIN_AUTH_ENABLED) return true;
+  return adminUser?.can_write_notes !== false;
+}
+
+function adminCanSyncPaypal() {
+  if (!ADMIN_AUTH_ENABLED) return true;
+  return !!(adminUser?.can_sync_paypal || adminCanWriteNotes());
+}
+
+function adminCanApproveOperations() {
+  if (!ADMIN_AUTH_ENABLED) return true;
+  return !!(adminUser?.can_approve_operations || adminCanWriteAll());
+}
+
+function adminCanApprovePayout() {
+  if (!ADMIN_AUTH_ENABLED) return true;
+  return !!(adminUser?.can_approve_payout || adminCanWriteAll());
+}
+
+function adminReadOnlyBannerHtml() {
+  if (adminCanWriteAll() && adminCanApproveOperations() && adminCanApprovePayout()) return '';
+  const parts = ['You can view all board data'];
+  if (adminCanWriteNotes()) parts.push('add <strong>board notes</strong>');
+  if (adminCanSyncPaypal()) parts.push('run <strong>PayPal sync</strong>');
+  if (adminCanApproveOperations()) parts.push('approve <strong>operations</strong> (invoices, applications, receipts)');
+  if (adminCanApprovePayout()) parts.push('approve <strong>payouts</strong>');
+  if (adminCanWriteAll()) parts.push('edit <strong>full records</strong>');
+  if (adminIsSuperAdmin()) parts.push('manage <strong>board access</strong>');
+  return `<div class="tracker-banner wl-slots-banner admin-readonly-banner" role="status">${parts.join(' · ')}.</div>`;
+}
+
+function fieldReadonlyAttr() {
+  return adminCanWriteAll() ? '' : ' readonly';
+}
+
+function writeActionBtn(attrs, label) {
+  if (!adminCanWriteAll()) return '';
+  return `<button type="button" ${attrs}>${label}</button>`;
 }
 
 const API_TIMEOUT_MS = 20000;
@@ -714,13 +771,28 @@ function invoiceDeceasedCellHtml(inv) {
   </div>`;
 }
 
-function isPaid(inv) {
-  if (isCancelled(inv)) return false;
-  const st = String(inv?.status || '').toLowerCase();
-  if (st === 'unpaid') return false;
-  if (st === 'paid') return true;
+function isCancelled(inv) {
+  return invoiceStatusKey(inv) === 'cancelled';
+}
+
+function isPartiallyPaid(inv) {
+  return invoiceStatusKey(inv) === 'partial';
+}
+
+function invoiceStatusKey(inv) {
+  if (!inv) return 'unpaid';
+  const s = String(inv?.status || '').toLowerCase().trim();
+  if (s.includes('cancel') || s === 'refunded' || s === 'refund') return 'cancelled';
+  if (s.includes('partial')) return 'partial';
+  if (s === 'paid' || s === 'marked as paid') return 'paid';
+  if (s === 'unpaid') return 'unpaid';
   const num = Number(inv?.invoice_num);
-  return paidInvoices.has(num);
+  if (paidInvoices.has(num)) return 'paid';
+  return 'unpaid';
+}
+
+function isPaid(inv) {
+  return invoiceStatusKey(inv) === 'paid';
 }
 
 function isZelleBofaPaymentMethod(method) {
@@ -771,16 +843,98 @@ function mergeInvoiceListUpdates(freshList) {
   resetMemberLateCache();
 }
 
-function isCancelled(inv) {
-  const s = String(inv?.status || '').toLowerCase().trim();
-  return s.includes('cancel') || s === 'refunded' || s === 'refund';
+function invoiceStatusLabel(inv) {
+  return getInvoiceDisplayStatus(inv).label;
 }
 
-function invoiceStatusLabel(inv) {
-  if (isCancelled(inv)) return 'Cancelled';
-  if (isPaid(inv)) return 'Paid';
-  const s = String(inv?.status || '').trim();
-  return s || 'Unpaid';
+function getInvoiceDisplayStatus(inv) {
+  const num = Number(inv?.invoice_num);
+  if (pendingMarkPaidByInvoice.has(num)) {
+    return { key: 'pending', cls: 'inv-status-pending', label: 'Pending' };
+  }
+  const key = invoiceStatusKey(inv);
+  if (key === 'cancelled') return { key, cls: 'cancelled', label: 'Cancelled' };
+  if (key === 'paid') return { key, cls: 'paid', label: 'Paid' };
+  if (key === 'partial') {
+    return { key: 'partial', cls: 'inv-status-partial', label: 'Partially Paid' };
+  }
+  const overdue = invoiceDaysOverdue(inv);
+  if (isInvoiceLate(inv)) return { key: 'late', cls: 'unpaid', label: `Late · ${overdue}d` };
+  return { key: 'unpaid', cls: 'inv-status-due', label: 'Unpaid' };
+}
+
+function invoiceStatusCellHtml(inv, { clickable = false, stopRowClick = true } = {}) {
+  const num = inv.invoice_num;
+  const { key, cls, label } = getInvoiceDisplayStatus(inv);
+  const clickAttr = stopRowClick
+    ? `onclick="event.stopPropagation();openMemberUnpaidFromInvoice(${num})"`
+    : `onclick="openMemberUnpaidFromInvoice(${num})"`;
+  const pill = `<span class="tracker-status ${cls}">${esc(label)}</span>`;
+  if (key === 'cancelled') {
+    return `<span class="tracker-status cancelled" title="Invoice cancelled">${esc(label)}</span>`;
+  }
+  if (key === 'pending') {
+    return `<span class="tracker-status inv-status-pending" title="Waiting for board approval">${esc(label)}</span>`;
+  }
+  if (clickable && countsAsOutstanding(inv)) {
+    return `<button type="button" class="tracker-late-link" ${clickAttr} title="View member invoices">${pill}</button>`;
+  }
+  return pill;
+}
+
+function journeyInvoiceStatusFromEvent(ev) {
+  const summary = String(ev.summary || '');
+  const statusPart = String(
+    ev.status || summary.split(' — ')[1]?.replace(/\s*\([^)]*\)\s*$/, '').trim() || ''
+  );
+  const action = String(ev.action || '').toLowerCase();
+  if (/cancel/i.test(statusPart) || /cancel/i.test(summary)) return { cls: 'cancelled', label: 'Cancelled' };
+  if (/partial/i.test(statusPart) || action.includes('partially')) return { cls: 'inv-status-partial', label: 'Partially Paid' };
+  if (statusPart === 'Paid' || (/\bPaid\b/.test(summary) && !/partial/i.test(summary))) return { cls: 'paid', label: 'Paid' };
+  if (/\bLate\b/i.test(summary) || /\blate\b/i.test(action)) return { cls: 'unpaid', label: 'Late' };
+  return { cls: 'inv-status-due', label: 'Unpaid' };
+}
+
+function parseJourneyInvoiceSummary(ev) {
+  const summary = String(ev.summary || '');
+  const num = ev.record_id != null ? ev.record_id : (summary.match(/#(\d+)/)?.[1] || '');
+  const amountMatch = summary.match(/\((\$[^)]+)\)/);
+  return {
+    num,
+    amount: amountMatch ? amountMatch[1] : '',
+  };
+}
+
+function renderMemberJourneyItemHtml(ev) {
+  const when = ev.at ? String(ev.at).replace('T', ' ').slice(0, 16) : '—';
+  const typeSlug = String(ev.type || 'event').replace(/[^a-z0-9_-]/gi, '');
+  const typeLabel = String(ev.type || 'event').replace(/_/g, ' ');
+
+  if (ev.type === 'invoice') {
+    const { cls, label } = journeyInvoiceStatusFromEvent(ev);
+    const { num, amount } = parseJourneyInvoiceSummary(ev);
+    const actionLabel = ev.action || 'Invoice';
+    return `<article class="member-journey-item member-journey-item--invoice">
+      <div class="member-journey-top">
+        <div class="member-journey-meta">
+          <time class="member-journey-when">${esc(when)}</time>
+          <span class="member-journey-type">invoice</span>
+        </div>
+        <span class="tracker-status ${cls}">${esc(label)}</span>
+      </div>
+      <div class="member-journey-action">${num ? `<span class="tracker-inv-num">#${esc(num)}</span>` : esc(actionLabel)}</div>
+      <div class="member-journey-summary">${amount ? `${esc(amount)} · ${esc(actionLabel)}` : esc(ev.summary || actionLabel)}</div>
+    </article>`;
+  }
+
+  return `<article class="member-journey-item member-journey-item--${esc(typeSlug)}">
+    <div class="member-journey-meta">
+      <time class="member-journey-when">${esc(when)}</time>
+      <span class="member-journey-type">${esc(typeLabel)}</span>
+    </div>
+    <div class="member-journey-action">${esc(ev.action || '')}</div>
+    ${ev.summary ? `<div class="member-journey-summary">${esc(ev.summary)}</div>` : ''}
+  </article>`;
 }
 
 let adminToastTimer = null;
@@ -914,8 +1068,16 @@ function countsAsUnpaid(inv) {
   return !isPaid(inv) && !isCancelled(inv) && isActiveMemberInvoice(inv);
 }
 
+function countsAsUnpaidOnly(inv) {
+  return invoiceStatusKey(inv) === 'unpaid' && isActiveMemberInvoice(inv);
+}
+
+function countsAsOutstanding(inv) {
+  return countsAsUnpaidOnly(inv) || (isPartiallyPaid(inv) && isActiveMemberInvoice(inv));
+}
+
 function countsAsLate(inv) {
-  return countsAsUnpaid(inv) && isInvoiceLate(inv);
+  return countsAsUnpaidOnly(inv) && isInvoiceLate(inv);
 }
 
 const INVOICE_DUE_DAYS = 3;
@@ -933,7 +1095,7 @@ function invoiceDaysOverdue(inv) {
 }
 
 function isInvoiceLate(inv) {
-  if (isPaid(inv) || isCancelled(inv)) return false;
+  if (isPaid(inv) || isCancelled(inv) || isPartiallyPaid(inv)) return false;
   return invoiceDaysSinceSent(inv) > INVOICE_LATE_DAYS;
 }
 
@@ -1060,18 +1222,18 @@ function renderMemberUnpaidInvoicesHtml(unpaid, highlightInvoiceNum) {
     return '<div class="tracker-empty">No unpaid invoices for this active member.</div>';
   }
   const rows = unpaid.map(inv => {
-    const late = countsAsLate(inv);
-    const overdue = invoiceDaysOverdue(inv);
     const highlight = highlightInvoiceNum != null && inv.invoice_num === highlightInvoiceNum;
     return `<tr class="data-row${highlight ? ' member-inv-highlight' : ''}">
       <td><span class="tracker-inv-num">#${esc(inv.invoice_num)}</span></td>
       <td>${invoiceDeceasedCellHtml(inv)}</td>
       <td><span class="tracker-date">${esc(fmtDate(inv.date))}</span></td>
       <td><span class="tracker-amount">${fmtMoney(inv.amount_due)}</span></td>
-      <td><span class="tracker-status ${pendingMarkPaidByInvoice.has(Number(inv.invoice_num)) ? 'warn' : late ? 'unpaid' : 'warn'}"><span class="tracker-status-dot"></span>${pendingMarkPaidByInvoice.has(Number(inv.invoice_num)) ? 'Pending approval' : late ? `Late (${overdue}d)` : 'Unpaid'}</span></td>
+      <td>${invoiceStatusCellHtml(inv)}</td>
       <td>${pendingMarkPaidByInvoice.has(Number(inv.invoice_num))
         ? '<span class="tracker-pending-approval">Awaiting approval</span>'
-        : `<button type="button" class="tracker-mark-btn" onclick="openMarkPaidModal(${inv.invoice_num}, this)">Mark Paid</button>`}</td>
+        : adminCanApproveOperations()
+          ? `<button type="button" class="tracker-mark-btn" onclick="openMarkPaidModal(${inv.invoice_num}, this)">Mark Paid</button>`
+          : '—'}</td>
     </tr>`;
   }).join('');
   const total = unpaid.reduce((s, inv) => s + Number(inv.amount_due || 0), 0);
@@ -1085,16 +1247,238 @@ function renderMemberUnpaidInvoicesHtml(unpaid, highlightInvoiceNum) {
     </div>`;
 }
 
-function openMemberUnpaidInvoices(memberId, highlightInvoiceNum) {
-  const m = MEMBERS.find(x => x.id === memberId);
-  if (!m) return;
-  memberInvoicesMemberId = memberId;
+function getAllInvoicesForMember(member) {
+  if (!member) return [];
+  if (!invoicesByMemberId) rebuildInvoiceMemberMap();
+  return (invoicesByMemberId.get(member.id) || [])
+    .slice()
+    .sort((a, b) => (b.invoice_num || 0) - (a.invoice_num || 0));
+}
+
+function renderIdDocPreview(doc) {
+  if (!doc) return '<span class="review-auto">—</span>';
+  if (doc.preview) return `<img src="${doc.preview}" alt="ID" class="review-id-thumb">`;
+  if (doc.filename) return `<span class="review-id-file">📄 ${esc(doc.filename)}</span>`;
+  return '<span class="review-auto">On file</span>';
+}
+
+function renderBeneficiaryPanel(ben, title) {
+  if (!ben?.name) return '';
+  return `<div class="review-panel">
+    <h4>${title}</h4>
+    <div class="review-field"><span>Name</span><strong>${esc(ben.name)}</strong></div>
+    <div class="review-field"><span>Relationship</span><strong>${esc(ben.relationship || '—')}</strong></div>
+    <div class="review-field"><span>Phone</span><strong>${esc(ben.phone || '—')}</strong></div>
+    ${ben.email ? `<div class="review-field"><span>Email</span><strong>${esc(ben.email)}</strong></div>` : ''}
+    ${ben.address ? `<div class="review-field"><span>Address</span><strong>${esc(ben.address)}</strong></div>` : ''}
+  </div>`;
+}
+
+function renderMemberApplicationReadOnlyHtml(app, member) {
+  if (!app) {
+    const drive = member?.application_drive_url;
+    return `<div class="tracker-empty">
+      ${drive
+        ? `<p>No digital application on file for this member.</p>
+           <a class="btn secondary" href="${esc(drive)}" target="_blank" rel="noopener">Open legacy application (Google Drive) ↗</a>
+           <p class="review-auto" style="margin-top:12px">Imported members may only have a paper or Drive application — you can also edit the link on the Profile tab.</p>`
+        : '<p>No digital application linked to this member. If they joined before online applications, add a Google Drive link on the Profile tab.</p>'}
+    </div>`;
+  }
+
+  const idDocs = app.id_documents || {};
+  const benMember = app.beneficiary_member || {};
+  const benSpouse = app.beneficiary_spouse || {};
+  const children = (app.children || []).filter(c => c?.name || c?.dob);
+  const emergency = (app.emergency_contacts || []).filter(c => c?.name || c?.phone);
+  const sig = app.applicant_signature;
+  const childrenHtml = children.length
+    ? children.map(c => `<div class="review-field"><span>${esc(c.name || 'Child')}</span><strong>${esc(c.dob || '—')}</strong></div>`).join('')
+    : '<p class="review-auto">No children listed.</p>';
+  const emergencyHtml = emergency.length
+    ? emergency.map(c => `
+      <div class="member-ec-block">
+        <div class="review-field"><span>Name</span><strong>${esc(c.name || '—')}</strong></div>
+        <div class="review-field"><span>Relationship</span><strong>${esc(c.relationship || '—')}</strong></div>
+        <div class="review-field"><span>Phone</span><strong>${esc(c.phone || '—')}</strong></div>
+        ${c.email ? `<div class="review-field"><span>Email</span><strong>${esc(c.email)}</strong></div>` : ''}
+        ${c.address ? `<div class="review-field"><span>Address</span><strong>${esc(c.address)}</strong></div>` : ''}
+      </div>`).join('')
+    : '<p class="review-auto">None listed.</p>';
+
+  return `
+    <div class="member-app-meta">
+      <span>Submitted ${esc(fmtDate(app.submitted_at))}</span>
+      <span>Status: ${esc(app.status || '—')}</span>
+      ${app.id ? `<button type="button" class="tracker-mark-btn" onclick="closeModal('memberModal');openApplicationReview(${app.id})">Open in Applications</button>` : ''}
+    </div>
+    <div class="review-grid">
+      <div class="review-panel">
+        <h4>Member</h4>
+        <div class="review-field"><span>Full name</span><strong>${esc(app.member_full_name || '—')}</strong></div>
+        <div class="review-field"><span>Spouse</span><strong>${esc(app.spouse_full_name || '—')}</strong></div>
+        <div class="review-field"><span>Email</span><strong>${esc(app.email || '—')}</strong></div>
+        <div class="review-field"><span>Cell</span><strong>${esc(app.cell_phone || '—')}</strong></div>
+        <div class="review-field"><span>Home</span><strong>${esc(app.home_phone || '—')}</strong></div>
+        ${app.office_phone ? `<div class="review-field"><span>Office</span><strong>${esc(app.office_phone)}</strong></div>` : ''}
+        <div class="review-field"><span>Address</span><strong>${esc([app.address, app.city, app.state, app.zip].filter(Boolean).join(', ') || '—')}</strong></div>
+      </div>
+      <div class="review-panel">
+        <h4>Identification</h4>
+        <div class="review-field"><span>Member CA ID</span>${renderIdDocPreview(idDocs.member)}</div>
+        ${app.spouse_full_name ? `<div class="review-field"><span>Spouse CA ID</span>${renderIdDocPreview(idDocs.spouse)}</div>` : ''}
+        ${sig?.name ? `<div class="review-field"><span>Signature</span><strong>${esc(sig.name)}</strong> <span class="review-auto">· ${esc(sig.signed_at ? fmtDate(sig.signed_at) : '—')}</span></div>` : ''}
+      </div>
+    </div>
+    <div class="review-grid" style="margin-top:12px">
+      ${renderBeneficiaryPanel(benMember, 'Beneficiary (member)')}
+      ${renderBeneficiaryPanel(benSpouse, 'Beneficiary (spouse)')}
+    </div>
+    <div class="review-panel" style="margin-top:12px">
+      <h4>Children</h4>
+      ${childrenHtml}
+    </div>
+    <div class="review-panel" style="margin-top:12px">
+      <h4>Emergency contacts</h4>
+      ${emergencyHtml}
+    </div>`;
+}
+
+function renderMemberProfileFormHtml(m) {
   const names = memberDisplayNames(m);
-  const unpaid = getUnpaidInvoicesForMember(m);
-  document.getElementById('memberInvoicesTitle').textContent = names.paypal || 'Member';
-  document.getElementById('memberInvoicesSub').textContent = `Member #${m.member_number || m.id}${names.household ? ' · ' + names.household : ''} · ${esc(m.status || '—')}`;
-  document.getElementById('memberInvoicesBody').innerHTML = renderMemberUnpaidInvoicesHtml(unpaid, highlightInvoiceNum);
-  openModal('memberInvoicesModal');
+  const ro = fieldReadonlyAttr();
+  return `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tk-muted)">PayPal name (primary — matches invoices)</label><input class="field-input" id="ef_paypal_name" value="${esc(m.paypal_name || names.paypal)}"${ro}></div>
+      <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tk-muted)">Household / full name (both spouses if applicable)</label><input class="field-input" id="ef_full_name" value="${esc(m.full_name || names.household || names.paypal)}"${ro}></div>
+      <div><label style="font-size:11px;color:var(--tk-muted)">First</label><input class="field-input" id="ef_first" value="${esc(m.first)}"${ro}></div>
+      <div><label style="font-size:11px;color:var(--tk-muted)">Last</label><input class="field-input" id="ef_last" value="${esc(m.last)}"${ro}></div>
+      <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tk-muted)">Email</label><input class="field-input" id="ef_email" value="${esc(m.email)}"${ro}></div>
+      <div><label style="font-size:11px;color:var(--tk-muted)">Mobile</label><input class="field-input" id="ef_mobile" value="${esc(m.mobile)}"${ro}></div>
+      <div><label style="font-size:11px;color:var(--tk-muted)">Home</label><input class="field-input" id="ef_home" value="${esc(m.home)}"${ro}></div>
+      <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tk-muted)">Address</label><input class="field-input" id="ef_address" value="${esc(m.address)}"${ro}></div>
+      <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tk-muted)">Board notes (conversations, reminders)</label><textarea class="field-input" id="ef_notes" rows="4" placeholder="Call log, payment reminders, follow-ups…">${esc(m.notes || '')}</textarea>${boardNotesFieldHint()}</div>
+      <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tk-muted)">Legacy application (Google Drive)</label><input class="field-input" id="ef_application_drive_url" type="url" placeholder="https://drive.google.com/..." value="${esc(m.application_drive_url || '')}"${ro}>
+      <p style="font-size:10px;color:var(--tk-muted);margin:6px 0 0">Link to signed application folder or PDF for imported members. Digital applications appear on the Application tab.</p>
+      ${m.application_drive_url ? `<a class="btn secondary" style="margin-top:8px;display:inline-block" href="${esc(m.application_drive_url)}" target="_blank" rel="noopener">Open application folder ↗</a>` : ''}</div>
+    </div>`;
+}
+
+function renderMemberAllInvoicesHtml(member, highlightInvoiceNum) {
+  const all = getAllInvoicesForMember(member);
+  if (!all.length) {
+    return '<div class="tracker-empty">No invoices linked to this member yet.</div>';
+  }
+  const unpaid = all.filter(countsAsUnpaid);
+  const late = unpaid.filter(countsAsLate);
+  const totalDue = unpaid.reduce((s, inv) => s + Number(inv.amount_due || 0), 0);
+  const summaryParts = [`${all.length} total`];
+  if (unpaid.length) summaryParts.push(`${unpaid.length} unpaid · ${fmtMoney(totalDue)} due`);
+  if (late.length) summaryParts.push(`${late.length} late`);
+
+  const rows = all.map(inv => {
+    const paid = isPaid(inv);
+    const cancelled = isCancelled(inv);
+    const highlight = highlightInvoiceNum != null && inv.invoice_num === highlightInvoiceNum;
+    const action = paid || cancelled
+      ? '—'
+      : pendingMarkPaidByInvoice.has(Number(inv.invoice_num))
+        ? '<span class="tracker-pending-approval">Awaiting approval</span>'
+        : adminCanApproveOperations()
+          ? `<button type="button" class="tracker-mark-btn" onclick="openMarkPaidModal(${inv.invoice_num}, this)">Mark Paid</button>`
+          : '—';
+    return `<tr class="data-row${highlight ? ' member-inv-highlight' : ''}">
+      <td><span class="tracker-inv-num">#${esc(inv.invoice_num)}</span></td>
+      <td>${invoiceDeceasedCellHtml(inv)}</td>
+      <td><span class="tracker-date">${esc(fmtDate(inv.date))}</span></td>
+      <td><span class="tracker-amount${paid ? ' paid' : ''}${cancelled ? ' cancelled' : ''}">${fmtMoney(inv.amount_due)}</span></td>
+      <td>${invoiceStatusCellHtml(inv)}</td>
+      <td>${action}</td>
+    </tr>`;
+  }).join('');
+
+  return `
+    <div class="member-inv-summary">${summaryParts.join(' · ')}</div>
+    <div class="tracker-table-wrap member-inv-table-wrap">
+      <table class="tracker-table">
+        <thead><tr><th>Invoice #</th><th>Paying for (Deceased)</th><th>Date</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+function updateMemberDetailInvoiceTabCount(member) {
+  const btn = document.querySelector('.member-detail-tab[data-tab="invoices"]');
+  if (!btn || !member) return;
+  const unpaidCount = getUnpaidInvoicesForMember(member).length;
+  btn.innerHTML = unpaidCount
+    ? `Invoices <span class="tracker-tab-count">(${unpaidCount})</span>`
+    : 'Invoices';
+}
+
+async function syncMemberInvoicesFromApi(memberId) {
+  if (!memberId) return;
+  try {
+    const res = await apiGet('portal/invoices?memberId=' + memberId + '&limit=200&activeOnly=1');
+    const fresh = dedupeInvoicesByNumber(res?.invoices || []);
+    if (!fresh.length) return;
+    mergeInvoiceListUpdates(fresh);
+    rebuildInvoiceMemberMap();
+    trackerInvoicesCache = null;
+    statsCache = null;
+    resetMemberLateCache();
+  } catch (e) {
+    console.warn('Member invoices refresh:', e.message || e);
+  }
+}
+
+function refreshMemberInvoicesTab(memberId, highlightInvoiceNum) {
+  const el = document.getElementById('memberTabInvoices');
+  const raw = MEMBERS.find(x => x.id === memberId);
+  if (!el || !raw) return;
+  const m = getMemberData(raw);
+  el.innerHTML = renderMemberAllInvoicesHtml(m, highlightInvoiceNum);
+  updateMemberDetailInvoiceTabCount(m);
+}
+
+async function loadMemberApplicationTab(memberId) {
+  const el = document.getElementById('memberTabApplication');
+  if (!el) return;
+  const raw = MEMBERS.find(x => x.id === memberId) || {};
+  const m = getMemberData(raw);
+  el.innerHTML = '<div class="tracker-empty" style="padding:12px">Loading application…</div>';
+  try {
+    const res = await apiGet('portal/member/application?memberId=' + memberId);
+    el.innerHTML = renderMemberApplicationReadOnlyHtml(res.application, m);
+  } catch {
+    el.innerHTML = '<div class="tracker-empty">Could not load application.</div>';
+  }
+}
+
+function switchMemberDetailTab(tab) {
+  memberDetailTab = tab;
+  document.querySelectorAll('.member-detail-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.tab === tab);
+  });
+  ['profile', 'application', 'invoices', 'activity'].forEach(t => {
+    const el = document.getElementById('memberTab' + t.charAt(0).toUpperCase() + t.slice(1));
+    if (el) el.hidden = t !== tab;
+  });
+  if (!editingMemberId) return;
+  if (tab === 'application') loadMemberApplicationTab(editingMemberId);
+  if (tab === 'invoices') {
+    syncMemberInvoicesFromApi(editingMemberId).then(() => {
+      refreshMemberInvoicesTab(editingMemberId, memberDetailHighlightInvoice);
+    });
+  }
+  if (tab === 'activity') {
+    loadMemberJourney(editingMemberId);
+    loadMemberMessages(editingMemberId);
+  }
+}
+
+function openMemberUnpaidInvoices(memberId, highlightInvoiceNum) {
+  openMemberDetail(memberId, { tab: 'invoices', highlightInvoiceNum });
 }
 
 function openMemberUnpaidFromInvoice(invoiceNum) {
@@ -1208,6 +1592,8 @@ async function syncPayPalInvoices(options = {}) {
     const syncedAt = lastRes?.synced_at || new Date().toISOString();
     localStorage.setItem(PAYPAL_SYNC_KEY, syncedAt);
     reportLabel = paypalReportLabel(syncedAt);
+    sessionStorage.removeItem(ADMIN_CACHE_KEY);
+    invoicesFullyLoaded = false;
     if (!silent) {
       alert(
         `PayPal sync complete.\n\n${ids.length} invoices processed\n` +
@@ -1216,7 +1602,7 @@ async function syncPayPalInvoices(options = {}) {
         (lastRes?.unmatched ? `\n${lastRes.unmatched} could not match to a member (last batch)` : '')
       );
     }
-    await fetchAdminCore();
+    await fetchAdminCore({ forceInvoices: true });
     await fetchAllInvoices();
     await fetchPayPalBalance(true);
     invalidateAdminCaches();
@@ -1312,7 +1698,7 @@ async function fetchAdminCore(options = {}) {
   const [membersResult, statsResult, invoicesResult, eventsResult] = await Promise.allSettled([
     apiGet('portal/members?limit=2500'),
     apiGet('portal/invoice-stats'),
-    apiGet('portal/invoices?status=Unpaid&limit=500&activeOnly=1'),
+    apiGet('portal/invoices?outstanding=1&limit=500&activeOnly=1'),
     fetchDeceasedCatalog(),
   ]);
 
@@ -1624,6 +2010,8 @@ function getStats() {
     statsCache = {
       total: INVOICE_STATS.total,
       unpaid: INVOICE_STATS.unpaid_active,
+      partial: INVOICE_STATS.partial_active || 0,
+      partialOwed: INVOICE_STATS.partial_owed || 0,
       paidTotal: INVOICE_STATS.paid,
       paidPayPal: INVOICE_STATS.paid_paypal ?? Math.max(0, (INVOICE_STATS.paid || 0) - (INVOICE_STATS.paid_zelle_bofa || 0)),
       paidZelleBofa: INVOICE_STATS.paid_zelle_bofa || 0,
@@ -1636,7 +2024,9 @@ function getStats() {
     return statsCache;
   }
   const trackerInvoices = getTrackerInvoices();
-  const unpaidList = trackerInvoices.filter(i => countsAsUnpaid(i));
+  const partialList = trackerInvoices.filter(i => isPartiallyPaid(i) && isActiveMemberInvoice(i));
+  const unpaidList = trackerInvoices.filter(i => countsAsUnpaidOnly(i));
+  const outstandingList = trackerInvoices.filter(i => countsAsOutstanding(i));
   const { paidPayPal, paidZelleBofa } = countPaidByMethod(trackerInvoices);
   const paidTotal = paidPayPal + paidZelleBofa;
   const paidSession = trackerInvoices.filter(i => paidInvoices.has(Number(i.invoice_num))).length;
@@ -1645,10 +2035,13 @@ function getStats() {
   if (!memberLateCountCache) buildMemberLateCache();
   memberLateCountCache.forEach((count) => { if (count > 0) lateMembers += 1; });
   const events = getDeceasedEventsCount();
-  const totalOwed = unpaidList.reduce((s, i) => s + Number(i.amount_due || 0), 0);
+  const totalOwed = outstandingList.reduce((s, i) => s + Number(i.amount_due || 0), 0);
+  const partialOwed = partialList.reduce((s, i) => s + Number(i.amount_due || 0), 0);
   statsCache = {
     total: trackerInvoices.length,
     unpaid: unpaidList.length,
+    partial: partialList.length,
+    partialOwed,
     paidTotal,
     paidPayPal,
     paidZelleBofa,
@@ -1677,7 +2070,8 @@ function getInvoiceEvents() {
 function getInvFiltered() {
   let list = getTrackerInvoices().filter(inv => {
     const paid = isPaid(inv);
-    if (invFilter === 'unpaid' && !countsAsUnpaid(inv)) return false;
+    if (invFilter === 'unpaid' && !countsAsUnpaidOnly(inv)) return false;
+    if (invFilter === 'partial' && !isPartiallyPaid(inv)) return false;
     if (invFilter === 'paid' && !paid) return false;
     if (invFilter === 'late' && !countsAsLate(inv)) return false;
     if (invEventFilter && invoiceEventDisplayLabel(inv) !== invEventFilter) return false;
@@ -1744,7 +2138,7 @@ function trackerHeaderHtml(stats) {
       </div>
       ${showOutstanding ? `
       <div class="tracker-header-right">
-        ${currentView === 'invoices' ? `<button type="button" class="tracker-sync-btn" id="paypalSyncBtn" onclick="syncPayPalInvoices()">Sync PayPal</button>` : ''}
+        ${currentView === 'invoices' && adminCanSyncPaypal() ? `<button type="button" class="tracker-sync-btn" id="paypalSyncBtn" onclick="syncPayPalInvoices()">Sync PayPal</button>` : ''}
         <div class="tracker-report-meta">${esc(reportLabel)}${dataSource === 'snapshot' ? ' · offline snapshot' : ''}</div>
         <div class="tracker-header-balances">
           <div class="tracker-balance-block">
@@ -1757,7 +2151,8 @@ function trackerHeaderHtml(stats) {
           </div>
         </div>
       </div>` : ''}
-    </header>`;
+    </header>
+    ${adminReadOnlyBannerHtml()}`;
 }
 
 function trackerStatsHtml(stats) {
@@ -1765,6 +2160,7 @@ function trackerStatsHtml(stats) {
     <div class="tracker-stats">
       <div class="tracker-stat"><div class="tracker-stat-lbl">Active Member Invoices</div><div class="tracker-stat-val">${stats.total}</div></div>
       <div class="tracker-stat"><div class="tracker-stat-lbl">Unpaid (Active)</div><div class="tracker-stat-val">${stats.unpaid}</div></div>
+      <div class="tracker-stat"><div class="tracker-stat-lbl">Partially Paid</div><div class="tracker-stat-val orange">${stats.partial ?? 0}</div></div>
       <div class="tracker-stat"><div class="tracker-stat-lbl">Late (45+ days)</div><div class="tracker-stat-val red">${stats.lateInvoices}</div></div>
       <div class="tracker-stat"><div class="tracker-stat-lbl">Paid (PayPal)</div><div class="tracker-stat-val green">${stats.paidPayPal ?? stats.paidTotal}</div></div>
       <div class="tracker-stat"><div class="tracker-stat-lbl">Zelle &amp; BofA</div><div class="tracker-stat-val green">${stats.paidZelleBofa ?? 0}</div></div>
@@ -1778,6 +2174,7 @@ function trackerTabsHtml(stats) {
   if (currentView !== 'invoices') return '';
   const tabs = [
     { label: 'Unpaid (Active)', count: stats.unpaid, filter: 'unpaid' },
+    { label: 'Partially Paid', count: stats.partial ?? 0, filter: 'partial' },
     { label: 'Late (45d+)', count: stats.lateInvoices, filter: 'late' },
     { label: 'All (Active)', count: stats.total, filter: 'all' },
     { label: 'Paid', count: stats.paidTotal, filter: 'paid' },
@@ -1794,7 +2191,7 @@ function updateSidebar() {
   const unpaidEl = document.getElementById('sb-unpaid');
   const membersEl = document.getElementById('sb-members');
   const footerEl = document.getElementById('sidebarFooter');
-  const unpaidCount = stats.unpaid;
+  const unpaidCount = (stats.unpaid || 0) + (stats.partial || 0);
   const membersCount = MEMBERS.length ? activeMembers : '—';
   if (unpaidEl) unpaidEl.textContent = unpaidCount;
   if (membersEl) membersEl.textContent = membersCount;
@@ -2116,7 +2513,7 @@ function renderReadyToInviteCardsHtml(entries) {
           <div class="wl-ready-card-date">Applied ${esc(fmtDate(w.applied_at))}</div>
         </div>
       </div>
-      <button type="button" class="wl-invite-btn" onclick="inviteWaitingListEntry(${w.id})">Send Invitation →</button>
+      ${adminCanApproveOperations() ? `<button type="button" class="wl-invite-btn" onclick="inviteWaitingListEntry(${w.id})">Send Invitation →</button>` : ''}
     </div>
   `).join('')}</div>`;
 }
@@ -2127,8 +2524,8 @@ function renderWaitingListRow(w, muted) {
     : w.status === 'Pending' ? 'warn'
     : w.status === 'Added as Member' ? 'paid'
     : w.status === 'Rejected' ? 'unpaid' : '';
-  const canInvite = isWlQueueAwaiting(w.status) && w.eligible_for_invite;
-  const canReject = !['Added as Member', 'Rejected'].includes(w.status);
+  const canInvite = adminCanApproveOperations() && isWlQueueAwaiting(w.status) && w.eligible_for_invite;
+  const canReject = adminCanApproveOperations() && !['Added as Member', 'Rejected'].includes(w.status);
   const statusLabel = w.eligible_for_invite ? 'Ready to Invite' : w.status;
   return `<tr class="data-row${w.eligible_for_invite ? ' wl-eligible-row' : ''}${muted ? ' wl-added-row' : ''}">
     <td><span class="tracker-inv-num">#${w.display_rank ?? w.pending_rank ?? w.queue_position ?? w.id}</span></td>
@@ -2256,9 +2653,7 @@ function renderInvTableRows(filtered, limit) {
     const paid = isPaid(inv);
     const cancelled = isCancelled(inv);
     const noEmail = !inv.email || inv.email === 'NoEmailInFile@gmail.com';
-    const late = countsAsLate(inv);
-    const overdue = invoiceDaysOverdue(inv);
-    const clickable = countsAsUnpaid(inv);
+    const clickable = countsAsOutstanding(inv);
     const pendingMp = pendingMarkPaidByInvoice.get(Number(inv.invoice_num));
     const eventKey = invoiceEventGroupKey(inv);
     if (eventKey !== lastEventKey) {
@@ -2287,22 +2682,18 @@ function renderInvTableRows(filtered, limit) {
       <td>${invoiceDeceasedCellHtml(inv)}</td>
       <td><span class="tracker-date">${esc(fmtDate(inv.date))}</span></td>
       <td><span class="tracker-amount${paid ? ' paid' : ''}${cancelled ? ' cancelled' : ''}">${fmtMoney(inv.amount_due)}</span></td>
-      <td>${cancelled
-        ? `<span class="tracker-status cancelled" title="Invoice cancelled — member declined or voided"><span class="tracker-status-dot"></span>${esc(invoiceStatusLabel(inv))}</span>`
-        : pendingMp
-          ? `<span class="tracker-status warn" title="Waiting for another board member to approve"><span class="tracker-status-dot"></span>Pending approval</span>`
-          : clickable
-            ? `<button type="button" class="tracker-late-link" onclick="event.stopPropagation();openMemberUnpaidFromInvoice(${inv.invoice_num})" title="View all unpaid for this member"><span class="tracker-status ${late ? 'unpaid' : 'warn'}"><span class="tracker-status-dot"></span>${late ? `Late (${overdue}d)` : 'Unpaid'}</span></button>`
-            : `<span class="tracker-status ${paid ? 'paid' : late ? 'unpaid' : 'warn'}"><span class="tracker-status-dot"></span>${paid ? 'Paid' : late ? `Late (${overdue}d)` : 'Unpaid'}</span>`}</td>
+      <td>${invoiceStatusCellHtml(inv, { clickable })}</td>
       <td>${cancelled
         ? '<span class="tracker-cancelled-label">Member cancelled</span>'
         : paid
           ? `${inv.paid_note
-              ? `<span class="tracker-mark-done">✓ Paid</span><div class="tracker-paid-note" title="${esc(inv.paid_note)}">${esc(inv.paid_note)}</div>`
-              : '<span class="tracker-mark-done">✓ Marked Paid</span>'}`
+              ? `<span class="tracker-mark-done">Paid</span><div class="tracker-paid-note" title="${esc(inv.paid_note)}">${esc(inv.paid_note)}</div>`
+              : '<span class="tracker-mark-done">Paid</span>'}`
           : pendingMp
             ? `<button type="button" class="tracker-mark-btn tracker-mark-btn-muted" onclick="event.stopPropagation();goToBoardOpsPending()">View in Approval</button>`
-            : `<button type="button" class="tracker-mark-btn" onclick="event.stopPropagation();openMarkPaidModal(${inv.invoice_num}, this)">Mark Paid</button>`}</td>
+            : adminCanApproveOperations()
+              ? `<button type="button" class="tracker-mark-btn" onclick="event.stopPropagation();openMarkPaidModal(${inv.invoice_num}, this)">Mark Paid</button>`
+              : '—'}</td>
     </tr>`;
   });
   return html;
@@ -2490,8 +2881,6 @@ function renderMembersView() {
 
   document.getElementById('mainArea').innerHTML = `
     ${trackerHeaderHtml(stats)}
-    ${trackerStatsHtml(stats)}
-    ${trackerTabsHtml(stats)}
     ${!MEMBERS.length ? '<div class="tracker-banner">Member list loads from the database. Run npm run seed with DATABASE_URL to import members.</div>' : ''}
     <div class="tracker-toolbar">
       <div class="tracker-search tracker-search-prominent">
@@ -2828,6 +3217,7 @@ async function openApplicationReview(id) {
     approveBtn.disabled = app.status !== 'Pending' || selfRequested;
     approveBtn.style.display = app.status === 'Approved' || app.status === 'Rejected' ? 'none' : '';
     openModal('applicationModal');
+    syncApplicationModalWriteAccess();
     return;
   }
 
@@ -2860,6 +3250,7 @@ async function openApplicationReview(id) {
       </div>`;
     updateApproveButtonState();
     openModal('applicationModal');
+    syncApplicationModalWriteAccess();
     return;
   }
 
@@ -2902,6 +3293,12 @@ async function openApplicationReview(id) {
         <div class="review-field"><span>Address</span><strong>${esc([app.address, app.city, app.state, app.zip].filter(Boolean).join(', ') || '—')}</strong></div>
         <div class="review-field"><span>Beneficiary</span><strong>${esc(ben.name || '—')}${ben.relationship ? ' (' + esc(ben.relationship) + ')' : ''}</strong></div>
         <div class="review-field"><span>California ID</span>${idPreview}</div>
+        ${(() => {
+          const sig = app.applicant_signature;
+          if (!sig?.name) return '';
+          const when = sig.signed_at ? fmtDate(sig.signed_at) : '—';
+          return `<div class="review-field"><span>Signature</span><strong>${esc(sig.name)}</strong> <span class="review-auto">· ${esc(when)}</span></div>`;
+        })()}
       </div>
     </div>
     <div class="review-checklist">
@@ -2939,6 +3336,7 @@ async function openApplicationReview(id) {
 
   appReviewNotesBaseline = String(app.notes || '');
   openModal('applicationModal');
+  syncApplicationModalWriteAccess();
 }
 
 function getReviewChecklistFromModal() {
@@ -2958,11 +3356,14 @@ async function saveApplicationReview() {
     return;
   }
   try {
-    const res = await apiPatch('apply/applications/' + reviewingApplicationId, {
-      review_checklist: getReviewChecklistFromModal(),
-      notes: readBoardNotesField('appReviewNotes', appReviewNotesBaseline),
-      status: 'Under Review',
-    });
+    const notes = readBoardNotesField('appReviewNotes', appReviewNotesBaseline);
+    const res = adminCanWriteAll()
+      ? await apiPatch('apply/applications/' + reviewingApplicationId, {
+        review_checklist: getReviewChecklistFromModal(),
+        notes,
+        status: 'Under Review',
+      })
+      : await apiPatch('apply/applications/' + reviewingApplicationId, { notes });
     if (res.application) {
       const idx = APPLICATIONS.findIndex(a => a.id === reviewingApplicationId);
       if (idx !== -1) APPLICATIONS[idx] = res.application;
@@ -3190,7 +3591,7 @@ function renderPayoutsView() {
       SSN copies are optional per board policy — confirm legal requirements before collecting.
     </div>
     <div style="margin-bottom:12px">
-      <button type="button" class="tracker-mark-btn" onclick="openNewPayoutModal()">+ Open Payout Case</button>
+      ${adminCanWriteAll() ? '<button type="button" class="tracker-mark-btn" onclick="openNewPayoutModal()">+ Open Payout Case</button>' : ''}
     </div>
     <div class="tracker-table-wrap">
       ${renderPayoutsTableHtml(filtered)}
@@ -3402,10 +3803,26 @@ async function openPayoutReview(id) {
   updatePayoutApproveState();
   payoutNotesBaseline = String(p.notes || '');
   openModal('payoutModal');
+  syncPayoutModalWriteAccess();
 }
 
 async function savePayoutReview() {
   if (!reviewingPayoutId) return;
+  const notes = readBoardNotesField('payoutNotes', payoutNotesBaseline);
+  if (!adminCanWriteAll()) {
+    try {
+      const res = await apiPatch('payouts/' + reviewingPayoutId, { notes });
+      if (res.payout) {
+        const idx = PAYOUTS.findIndex(p => p.id === reviewingPayoutId);
+        if (idx !== -1) PAYOUTS[idx] = res.payout;
+        payoutNotesBaseline = String(res.payout.notes || '');
+        openPayoutReview(reviewingPayoutId);
+      }
+    } catch (e) {
+      alert(e.message || 'Could not save notes.');
+    }
+    return;
+  }
   const documents = {};
   Object.entries(payoutDocStaging).forEach(([k, v]) => { documents[k] = v; });
   try {
@@ -3414,7 +3831,7 @@ async function savePayoutReview() {
       beneficiary_phone: document.getElementById('payoutBenPhone')?.value || '',
       beneficiary_relationship: document.getElementById('payoutBenRel')?.value || '',
       review_checklist: getPayoutChecklistFromModal(),
-      notes: readBoardNotesField('payoutNotes', payoutNotesBaseline),
+      notes,
       documents: Object.keys(documents).length ? documents : undefined,
       payout_method: document.getElementById('payoutMethod')?.value,
       payout_reference: document.getElementById('payoutReference')?.value,
@@ -3522,10 +3939,10 @@ function openReceiptReview(id) {
   const rejectBtn = document.getElementById('receiptRejectBtn');
   const done = r.status === 'Approved' || r.status === 'Rejected';
   if (approveBtn) {
-    approveBtn.style.display = done ? 'none' : '';
+    approveBtn.style.display = done || !adminCanApproveOperations() ? 'none' : '';
     approveBtn.disabled = false;
   }
-  if (rejectBtn) rejectBtn.style.display = done ? 'none' : '';
+  if (rejectBtn) rejectBtn.style.display = done || !adminCanApproveOperations() ? 'none' : '';
   openModal('receiptModal');
   loadReceiptReviewDetail(id, r);
 }
@@ -3648,7 +4065,7 @@ function renderMessagesBodyHtml() {
   if (messagesFilter === 'pin-reset') {
     const pinRows = PIN_RESET_REQUESTS.length ? PIN_RESET_REQUESTS.map(r => {
       const statusClass = r.status === 'Approved' ? 'paid' : r.status === 'Rejected' ? 'unpaid' : 'warn';
-      const canReview = r.status === 'Pending';
+      const canReview = adminCanApproveOperations() && r.status === 'Pending';
       return `<tr class="data-row">
         <td><div class="tracker-member-name">${esc(r.member_name || '—')}</div><div class="tracker-member-email">${r.member_number ? '#' + esc(r.member_number) : esc(r.phone || '—')}</div></td>
         <td>${esc(r.phone || '—')}</td>
@@ -3688,7 +4105,7 @@ function renderMessagesBodyHtml() {
         <td><span class="tracker-status ${statusClass}"><span class="tracker-status-dot"></span>${statusLabel}</span></td>
         <td><div class="msg-preview">${esc(m.message || '').slice(0, 120)}${(m.message || '').length > 120 ? '…' : ''}</div></td>
         <td><span class="tracker-date">${esc(fmtDate(m.created_at))}</span></td>
-        <td><button type="button" class="tracker-mark-btn" onclick="openMessageReply(${m.id})">${m.board_reply ? 'Edit reply' : 'Reply'}</button></td>
+        <td>${adminCanApproveOperations() ? `<button type="button" class="tracker-mark-btn" onclick="openMessageReply(${m.id})">${m.board_reply ? 'Edit reply' : 'Reply'}</button>` : (m.board_reply ? 'Replied' : '—')}</td>
       </tr>
       <tr class="data-row msg-detail-row">
         <td colspan="7"><div class="msg-detail-body">${esc(m.message || '')}${m.board_reply ? `<div class="msg-reply-block"><div class="msg-reply-head"><strong>Board reply</strong><span class="msg-reply-date">(${esc(fmtDate(m.replied_at))})</span></div><div class="msg-reply-text">${esc(m.board_reply)}</div></div>` : ''}</div></td>
@@ -3880,7 +4297,72 @@ function renderActivityView() {
 function boardAccessStatusLabel(b) {
   if (!b.is_active) return { text: 'Deactivated', cls: 'cancelled' };
   if (!b.has_password) return { text: 'Pending setup', cls: 'warn' };
+  if (b.is_super_admin) return { text: 'Super Admin', cls: 'paid' };
   return { text: 'Active', cls: 'paid' };
+}
+
+const BOARD_PERM_WRITE_HINTS = {
+  perm_notes: [
+    'Board notes (members, applications, payouts)',
+    'PayPal sync',
+  ],
+  perm_full_access: [
+    'Edit member contact & profile fields',
+    'Create & manage payout cases (docs, checklist)',
+    'Full application review saves',
+    'Reset member PIN',
+  ],
+  perm_approve_operations: [
+    'Mark invoices paid (submit & approve)',
+    'Approve/reject applications',
+    'Waiting list invite & remove',
+    'Receipt & PIN reset approval',
+    'Reply to member messages',
+  ],
+  perm_approve_payout: [
+    'Board-approve payout cases',
+    'Mark $15,000 paid out',
+  ],
+};
+
+function boardPermHintHtml(key) {
+  const items = BOARD_PERM_WRITE_HINTS[key] || [];
+  if (!items.length) return '';
+  return `<span class="board-perm-tip" role="tooltip"><strong>Grants write:</strong><ul>${items.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></span>`;
+}
+
+function boardPermCheckbox(id, key, label, b, canEdit) {
+  const checked = b.is_super_admin ? true : !!b[key];
+  const disabled = !canEdit || b.is_super_admin || key === 'perm_notes';
+  return `<span class="board-perm-tip-wrap">
+    <label class="board-perm-chip${checked ? ' on' : ''}">
+      <input type="checkbox" id="perm_${id}_${key}" data-member="${id}" data-perm="${key}"
+        ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}
+        onchange="this.closest('.board-perm-chip').classList.toggle('on', this.checked)">
+      <span>${label}</span>
+    </label>
+    ${boardPermHintHtml(key)}
+  </span>`;
+}
+
+function boardPermissionsRowHtml(b, canManage) {
+  if (!b.is_active || !b.has_password) return '<span class="tracker-member-email">—</span>';
+  if (b.is_super_admin) {
+    return `<span class="board-perm-tip-wrap">
+      <span class="tracker-status paid"><span class="tracker-status-dot"></span>All permissions</span>
+      <span class="board-perm-tip" role="tooltip"><strong>Grants write:</strong><ul>
+        <li>Everything below + invite/manage board members</li>
+      </ul></span>
+    </span>`;
+  }
+  const isSelf = adminUser && Number(adminUser.id) === Number(b.id);
+  const canEdit = canManage && !isSelf;
+  return `<div class="board-perm-grid">
+    ${boardPermCheckbox(b.id, 'perm_notes', 'Notes + sync', b, false)}
+    ${boardPermCheckbox(b.id, 'perm_full_access', 'Full access', b, canEdit)}
+    ${boardPermCheckbox(b.id, 'perm_approve_operations', 'Ops approval', b, canEdit)}
+    ${boardPermCheckbox(b.id, 'perm_approve_payout', 'Payout approval', b, canEdit)}
+  </div>${canEdit ? `<button type="button" class="btn sm primary board-perm-save" onclick="saveBoardPermissions(${b.id})">Save</button>` : ''}`;
 }
 
 async function fetchMonitorHealth() {
@@ -4106,26 +4588,28 @@ function applyAdminRouteFromUrl() {
 
 function renderBoardAccessView() {
   const stats = getStats();
+  const canManage = adminCanManageBoard();
   const rows = BOARD_MEMBERS.length ? BOARD_MEMBERS.map(b => {
     const st = boardAccessStatusLabel(b);
     const when = b.created_at ? String(b.created_at).replace('T', ' ').slice(0, 10) : '—';
     const isSelf = adminUser && Number(adminUser.id) === Number(b.id);
     let actions = '';
     if (b.is_active) {
-      if (b.has_password && !isSelf) {
+      if (canManage && b.has_password && !isSelf) {
         actions += `<button type="button" class="btn sm" onclick="resetBoardPassword(${b.id})">Reset password</button> `;
       }
-      if (!isSelf) {
+      if (canManage && !isSelf) {
         actions += `<button type="button" class="btn sm danger" onclick="deactivateBoardMember(${b.id})">Deactivate</button>`;
-      } else {
+      } else if (isSelf) {
         actions += '<span class="tracker-member-email">You</span>';
       }
-    } else {
+    } else if (canManage) {
       actions = `<button type="button" class="btn sm primary" onclick="reactivateBoardMember(${b.id})">Re-invite</button>`;
     }
     return `<tr class="data-row">
-      <td><div class="tracker-member-name">${esc(b.email)}</div></td>
+      <td><div class="tracker-member-name">${esc(b.email)}</div>${b.is_super_admin ? '<div class="tracker-member-email">Super Admin</div>' : ''}</td>
       <td><span class="tracker-status ${st.cls}"><span class="tracker-status-dot"></span>${st.text}</span></td>
+      <td class="board-perm-cell">${boardPermissionsRowHtml(b, canManage)}</td>
       <td><span class="tracker-date">${when}</span></td>
       <td class="tracker-actions">${actions}</td>
     </tr>`;
@@ -4133,8 +4617,8 @@ function renderBoardAccessView() {
 
   document.getElementById('mainArea').innerHTML = `
     ${trackerHeaderHtml(stats)}
-    <div class="tracker-banner tracker-intro-banner">Add a board member's email here. They sign in at this admin page and create their own password on first visit.</div>
-    <div class="board-access-invite">
+    <div class="tracker-banner tracker-intro-banner">Everyone can <strong>read</strong> the admin. Super admins grant: <strong>Notes + PayPal sync</strong> (default), <strong>Full access</strong> (edit records), <strong>Ops approval</strong> (invoices, applications, receipts), and <strong>Payout approval</strong>. Super admins are set via <code>BOARD_SUPER_ADMIN_EMAILS</code> in environment config.</div>
+    ${canManage ? `<div class="board-access-invite">
       <label class="admin-login-label" for="boardInviteEmail">Invite board member</label>
       <div class="board-access-invite-row">
         <input type="email" class="field-input" id="boardInviteEmail" placeholder="name@example.com"
@@ -4142,13 +4626,30 @@ function renderBoardAccessView() {
         <button type="button" class="btn primary" onclick="inviteBoardMember()">Add Email</button>
       </div>
       <div class="board-access-invite-msg" id="boardInviteMsg"></div>
-    </div>
+    </div>` : '<div class="tracker-banner" role="status">Only super admins can invite board members or change permissions.</div>'}
     <div class="tracker-table-wrap">
-      ${BOARD_MEMBERS.length ? `<table class="tracker-table">
-        <thead><tr><th>Email</th><th>Status</th><th>Added</th><th></th></tr></thead>
+      ${BOARD_MEMBERS.length ? `<table class="tracker-table board-access-table">
+        <thead><tr><th>Email</th><th>Status</th><th>Permissions</th><th>Added</th><th></th></tr></thead>
         <tbody>${rows}</tbody>
       </table>` : '<div class="tracker-empty">No board logins yet. Add an email above — they will set their password when they first sign in.</div>'}
     </div>`;
+}
+
+async function saveBoardPermissions(id) {
+  const keys = ['perm_full_access', 'perm_approve_operations', 'perm_approve_payout'];
+  const body = { perm_notes: true };
+  keys.forEach((key) => {
+    const el = document.getElementById(`perm_${id}_${key}`);
+    body[key] = el ? el.checked === true : false;
+  });
+  try {
+    await apiPost('auth/admin/board-members/' + id + '/permissions', body);
+    showAdminToast('Permissions saved.', 'ok');
+    await fetchBoardMembers();
+    renderBoardAccessView();
+  } catch (e) {
+    showAdminToast(e.message || 'Could not save permissions.', 'error');
+  }
 }
 
 async function inviteBoardMember() {
@@ -4214,6 +4715,51 @@ async function resetBoardPassword(id) {
   }
 }
 
+function syncMemberModalWriteAccess() {
+  const full = adminCanWriteAll();
+  const pinBtn = document.querySelector('#memberModal .modal-footer .btn.danger');
+  const saveBtn = document.querySelector('#memberModal .modal-footer .btn.primary');
+  if (pinBtn) pinBtn.style.display = full ? '' : 'none';
+  if (saveBtn) saveBtn.textContent = full ? 'Save Changes' : 'Save Notes';
+}
+
+function syncApplicationModalWriteAccess() {
+  const full = adminCanWriteAll();
+  const ops = adminCanApproveOperations();
+  const rejectBtn = document.querySelector('#applicationModal .modal-footer .btn.danger');
+  const approveBtn = document.getElementById('appApproveBtn');
+  const markPaidBtn = document.getElementById('appMarkPaidBtn');
+  const saveBtn = document.querySelector('#applicationModal .modal-footer .btn:not(.danger):not(.primary)');
+  if (rejectBtn) rejectBtn.style.display = ops ? '' : 'none';
+  if (approveBtn && !ops) approveBtn.style.display = 'none';
+  if (markPaidBtn && !ops) markPaidBtn.style.display = 'none';
+  if (saveBtn) saveBtn.textContent = full ? 'Save Review' : 'Save Notes';
+  ['chk_name_match', 'chk_fields_complete', 'chk_id_uploaded'].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = !full;
+  });
+}
+
+function syncPayoutModalWriteAccess() {
+  const full = adminCanWriteAll();
+  const payout = adminCanApprovePayout();
+  const holdBtn = document.querySelector('#payoutModal .modal-footer .btn.danger');
+  const saveBtn = document.querySelector('#payoutModal .modal-footer .btn:not(.danger):not(.primary)');
+  const approveBtn = document.getElementById('payoutApproveBtn');
+  const paidBtn = document.getElementById('payoutPaidBtn');
+  if (holdBtn) holdBtn.style.display = full ? '' : 'none';
+  if (approveBtn) approveBtn.style.display = payout ? approveBtn.style.display : 'none';
+  if (paidBtn) paidBtn.style.display = payout ? paidBtn.style.display : 'none';
+  if (saveBtn) saveBtn.textContent = full ? 'Save' : 'Save Notes';
+  document.querySelectorAll('#payoutModalBody input:not(#payoutNotes), #payoutModalBody select, #payoutModalBody textarea:not(#payoutNotes)').forEach((el) => {
+    if (el.id === 'payoutNotes') return;
+    el.readOnly = !full;
+    el.disabled = !full && el.tagName === 'SELECT';
+  });
+  const notesEl = document.getElementById('payoutNotes');
+  if (notesEl) notesEl.readOnly = false;
+}
+
 function render() {
   updateSidebar();
   if (currentView === 'events') renderEventsView();
@@ -4230,6 +4776,10 @@ function render() {
 }
 
 function openMarkPaidModal(invNum, btnEl) {
+  if (!adminCanApproveOperations()) {
+    showAdminToast('You do not have operations approval permission.', 'warn');
+    return;
+  }
   invNum = Number(invNum);
   const inv = INVOICES.find(i => Number(i.invoice_num) === invNum);
   if (inv && isCancelled(inv)) {
@@ -4313,60 +4863,61 @@ async function markPaid(invNum, btnEl, paidNote) {
     return;
   }
 
-  if (document.getElementById('memberInvoicesModal')?.classList.contains('open') && memberInvoicesMemberId) {
-    openMemberUnpaidInvoices(memberInvoicesMemberId);
+  if (document.getElementById('memberModal')?.classList.contains('open') && editingMemberId) {
+    refreshMemberInvoicesTab(editingMemberId, memberDetailHighlightInvoice);
   }
 }
 
-async function openMemberDetail(id) {
+async function openMemberDetail(id, options = {}) {
   editingMemberId = id;
+  memberDetailTab = options.tab || 'profile';
+  memberDetailHighlightInvoice = options.highlightInvoiceNum ?? null;
   let m = getMemberData(MEMBERS.find(x => x.id === id) || {});
   try {
     const res = await apiGet('portal/member?id=' + id);
     if (res?.member) {
       m = getMemberData(res.member);
       const idx = MEMBERS.findIndex(x => x.id === id);
-      if (idx !== -1) MEMBERS[idx] = { ...MEMBERS[idx], notes: res.member.notes || '' };
+      if (idx !== -1) MEMBERS[idx] = { ...MEMBERS[idx], ...res.member };
     }
   } catch (e) {
     console.warn('Member detail load:', e.message || e);
   }
   const names = memberDisplayNames(m);
+  const unpaidCount = getUnpaidInvoicesForMember(m).length;
+  const tab = memberDetailTab;
   document.getElementById('modalMemberName').textContent = names.paypal || 'Member';
   document.getElementById('modalMemberSub').textContent = `Member #${m.member_number || m.id}${names.household ? ' · ' + names.household : ''}`;
   document.getElementById('modalMemberBody').innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tk-muted)">PayPal name (primary — matches invoices)</label><input class="field-input" id="ef_paypal_name" value="${esc(m.paypal_name || names.paypal)}"></div>
-      <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tk-muted)">Household / full name (both spouses if applicable)</label><input class="field-input" id="ef_full_name" value="${esc(m.full_name || names.household || names.paypal)}"></div>
-      <div><label style="font-size:11px;color:var(--tk-muted)">First</label><input class="field-input" id="ef_first" value="${esc(m.first)}"></div>
-      <div><label style="font-size:11px;color:var(--tk-muted)">Last</label><input class="field-input" id="ef_last" value="${esc(m.last)}"></div>
-      <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tk-muted)">Email</label><input class="field-input" id="ef_email" value="${esc(m.email)}"></div>
-      <div><label style="font-size:11px;color:var(--tk-muted)">Mobile</label><input class="field-input" id="ef_mobile" value="${esc(m.mobile)}"></div>
-      <div><label style="font-size:11px;color:var(--tk-muted)">Home</label><input class="field-input" id="ef_home" value="${esc(m.home)}"></div>
-      <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tk-muted)">Address</label><input class="field-input" id="ef_address" value="${esc(m.address)}"></div>
-      <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tk-muted)">Board notes (conversations, reminders)</label><textarea class="field-input" id="ef_notes" rows="4" placeholder="Call log, payment reminders, follow-ups…">${esc(m.notes || '')}</textarea>${boardNotesFieldHint()}</div>
-    </div>
-    ${(() => {
-      const lateCount = countLateInvoicesForMember(m);
-      const unpaidCount = getUnpaidInvoicesForMember(m).length;
-      if (!unpaidCount) return '';
-      const label = lateCount
-        ? `${lateCount} late invoice${lateCount !== 1 ? 's' : ''} on file${lateCount >= 2 ? ' — consistently late payer' : ''}`
-        : `${unpaidCount} unpaid invoice${unpaidCount !== 1 ? 's' : ''} on file`;
-      return `<button type="button" class="tracker-banner tracker-banner-btn" style="margin-top:12px;background:var(--tk-red-bg);border-color:rgba(239,68,68,.35);width:100%;text-align:left" onclick="openMemberUnpaidInvoices(${m.id})">${esc(label)} — view all unpaid</button>`;
-    })()}
-    <div id="memberJourney" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--tk-border)">
-      <div style="font-size:11px;color:var(--tk-muted);margin-bottom:8px">Member journey (waiting list → application → CRM → invoices)</div>
-      <div class="tracker-empty" style="padding:12px">Loading timeline…</div>
-    </div>
-    <div id="memberMessagesWrap" style="margin-top:20px;padding-top:16px;border-top:1px solid var(--tk-border)">
-      <div style="font-size:11px;color:var(--tk-muted);margin-bottom:8px">Contact messages &amp; board replies</div>
-      <div id="memberMessages"><div class="tracker-empty" style="padding:12px">Loading…</div></div>
+    <nav class="tracker-tabs member-detail-tabs">
+      <button type="button" class="tracker-tab member-detail-tab${tab === 'profile' ? ' active' : ''}" data-tab="profile" onclick="switchMemberDetailTab('profile')">Profile</button>
+      <button type="button" class="tracker-tab member-detail-tab${tab === 'application' ? ' active' : ''}" data-tab="application" onclick="switchMemberDetailTab('application')">Application</button>
+      <button type="button" class="tracker-tab member-detail-tab${tab === 'invoices' ? ' active' : ''}" data-tab="invoices" onclick="switchMemberDetailTab('invoices')">Invoices${unpaidCount ? ` <span class="tracker-tab-count">(${unpaidCount})</span>` : ''}</button>
+      <button type="button" class="tracker-tab member-detail-tab${tab === 'activity' ? ' active' : ''}" data-tab="activity" onclick="switchMemberDetailTab('activity')">Activity</button>
+    </nav>
+    <div id="memberTabProfile"${tab !== 'profile' ? ' hidden' : ''}>${renderMemberProfileFormHtml(m)}</div>
+    <div id="memberTabApplication"${tab !== 'application' ? ' hidden' : ''}><div class="tracker-empty" style="padding:12px">Loading application…</div></div>
+    <div id="memberTabInvoices"${tab !== 'invoices' ? ' hidden' : ''}>${renderMemberAllInvoicesHtml(m, memberDetailHighlightInvoice)}</div>
+    <div id="memberTabActivity"${tab !== 'activity' ? ' hidden' : ''} class="member-activity-panel">
+      <section class="member-activity-section">
+        <h4 class="member-activity-heading">Member journey</h4>
+        <p class="member-activity-sub">Waiting list → application → CRM → invoices</p>
+        <div id="memberJourney" class="member-journey-list"><div class="tracker-empty" style="padding:12px">Loading timeline…</div></div>
+      </section>
+      <section class="member-activity-section">
+        <h4 class="member-activity-heading">Contact messages &amp; board replies</h4>
+        <div id="memberMessages" class="member-messages-list"><div class="tracker-empty" style="padding:12px">Loading…</div></div>
+      </section>
     </div>`;
   memberNotesBaseline = String(m.notes || '');
   openModal('memberModal');
-  loadMemberJourney(id);
-  loadMemberMessages(id);
+  syncMemberModalWriteAccess();
+  syncMemberInvoicesFromApi(id);
+  if (tab === 'application') loadMemberApplicationTab(id);
+  else if (tab === 'activity') {
+    loadMemberJourney(id);
+    loadMemberMessages(id);
+  }
 }
 
 async function loadMemberJourney(memberId) {
@@ -4376,37 +4927,40 @@ async function loadMemberJourney(memberId) {
     const data = await apiGet('portal/member/journey?memberId=' + memberId);
     const items = data.timeline || [];
     if (!items.length) {
-      el.innerHTML = '<div style="font-size:11px;color:var(--tk-muted)">No journey data yet.</div>';
+      el.innerHTML = '<div class="tracker-empty">No journey data yet.</div>';
       return;
     }
-    el.innerHTML = `<div style="font-size:11px;color:var(--tk-muted);margin-bottom:8px">Member journey</div>` +
-      items.slice(0, 12).map(ev => {
-        const when = ev.at ? String(ev.at).replace('T', ' ').slice(0, 16) : '—';
-        return `<div style="padding:8px 0;border-bottom:1px solid var(--tk-border);font-size:12px">
-          <div style="color:var(--tk-muted);font-size:10px">${esc(when)} · ${esc(ev.type || '')}</div>
-          <div style="font-weight:600;margin-top:2px">${esc(ev.action || '')}</div>
-          <div style="color:var(--tk-muted);margin-top:2px">${esc(ev.summary || '')}</div>
-        </div>`;
-      }).join('');
+    el.innerHTML = items.slice(0, 12).map(renderMemberJourneyItemHtml).join('');
   } catch {
-    el.querySelector('.tracker-empty')?.replaceWith?.(Object.assign(document.createElement('div'), { textContent: 'Timeline unavailable (database required).' }));
+    el.innerHTML = '<div class="tracker-empty">Timeline unavailable (database required).</div>';
   }
 }
 
 async function saveMemberEdit() {
   if (!editingMemberId) return;
-  const updated = {
-    id: editingMemberId,
-    first: document.getElementById('ef_first').value,
-    last: document.getElementById('ef_last').value,
-    full_name: document.getElementById('ef_full_name').value,
-    paypal_name: document.getElementById('ef_paypal_name').value,
-    email: document.getElementById('ef_email').value,
-    mobile: document.getElementById('ef_mobile').value,
-    home: document.getElementById('ef_home').value,
-    address: document.getElementById('ef_address').value,
-    notes: readBoardNotesField('ef_notes', memberNotesBaseline),
-  };
+  const updated = adminCanWriteAll()
+    ? {
+      id: editingMemberId,
+      first: document.getElementById('ef_first').value,
+      last: document.getElementById('ef_last').value,
+      full_name: document.getElementById('ef_full_name').value,
+      paypal_name: document.getElementById('ef_paypal_name').value,
+      email: document.getElementById('ef_email').value,
+      mobile: document.getElementById('ef_mobile').value,
+      home: document.getElementById('ef_home').value,
+      address: document.getElementById('ef_address').value,
+      notes: readBoardNotesField('ef_notes', memberNotesBaseline),
+      application_drive_url: document.getElementById('ef_application_drive_url')?.value?.trim() || '',
+    }
+    : {
+      id: editingMemberId,
+      notes: readBoardNotesField('ef_notes', memberNotesBaseline),
+    };
+  const driveUrl = updated.application_drive_url;
+  if (driveUrl && !/^https?:\/\//i.test(driveUrl)) {
+    alert('Application link must start with http:// or https://');
+    return;
+  }
   try {
     const result = await apiPost('portal/member', updated);
     if (result.member) {
@@ -4658,7 +5212,17 @@ async function init() {
   if (mobSignOut) mobSignOut.style.display = ADMIN_AUTH_ENABLED ? '' : 'none';
 
   if (!ADMIN_AUTH_ENABLED) {
-    adminUser = { email: 'dev', role: 'admin' };
+    adminUser = {
+      email: 'dev',
+      role: 'admin',
+      is_super_admin: true,
+      can_write_all: true,
+      can_write_notes: true,
+      can_sync_paypal: true,
+      can_approve_payout: true,
+      can_approve_operations: true,
+      can_manage_board: true,
+    };
     await bootAdmin();
     return;
   }

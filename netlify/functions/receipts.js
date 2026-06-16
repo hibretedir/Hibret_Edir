@@ -1,5 +1,6 @@
 const { getDb } = require('./db');
 const { verifyAdminRequest, verifyMemberRequest, buildActorFromAdmin } = require('./admin-auth');
+const { loadBoardMemberAccess, assertCanApproveOperations } = require('./board-permissions');
 const { logActivity } = require('./audit');
 const { invalidateInvoiceStatsCache } = require('./invoice-stats-cache');
 
@@ -291,6 +292,10 @@ exports.handler = async (event) => {
     if (event.httpMethod === 'POST' && receiptId && (action === 'approve' || action === 'reject')) {
       const admin = verifyAdminRequest(event);
       if (!admin) return json(401, { error: 'Admin authorization required.' });
+      const db = getDb();
+      const access = await loadBoardMemberAccess(db, admin);
+      const denied = assertCanApproveOperations(access);
+      if (denied) return json(403, { error: denied });
       const status = action === 'approve' ? 'Approved' : 'Rejected';
       return await updateReceiptStatus(receiptId, status, admin);
     }

@@ -25,6 +25,13 @@ const {
   buildActorFromAdmin,
   buildSystemActor,
 } = require('./admin-auth');
+const {
+  loadBoardMemberAccess,
+  assertCanWriteAll,
+  assertCanApproveOperations,
+  assertNotesOnlyUpdate,
+  WRITE_DENIED_MSG,
+} = require('./board-permissions');
 const { stampBoardNote, mergeBoardNotes } = require('./board-notes');
 const { invalidateInvoiceStatsCache } = require('./invoice-stats-cache');
 const { logActivity } = require('./audit');
@@ -714,6 +721,7 @@ function buildApplicationSummary(row, includeIdData = false) {
         }
       : null,
     id_documents: idSummary,
+    applicant_signature: parseJsonField(row.applicant_signature, null),
   };
 }
 
@@ -788,7 +796,32 @@ async function getApplication(id) {
   return json(200, { application: buildApplicationSummary(result.rows[0], true) });
 }
 
-async function updateApplicationReview(id, body, actor) {
+async function getApplicationForMember(db, memberId, includeIdData = true) {
+  const result = await db.query(
+    `SELECT ma.*,
+      wl.full_name AS wl_full_name,
+      wl.email AS wl_email,
+      wl.phone AS wl_phone,
+      wl.address AS wl_address,
+      wl.status AS wl_status,
+      ri.id AS reg_invoice_id,
+      ri.status AS reg_invoice_status,
+      ri.paypal_link AS reg_paypal_link,
+      ri.invoice_number AS reg_invoice_number,
+      ri.amount AS reg_invoice_amount
+     FROM membership_applications ma
+     JOIN waiting_list wl ON wl.id = ma.waiting_list_id
+     LEFT JOIN invoices ri ON ri.id = ma.registration_invoice_id
+     WHERE ma.member_id = $1
+     ORDER BY ma.submitted_at DESC NULLS LAST, ma.id DESC
+     LIMIT 1`,
+    [memberId]
+  );
+  if (!result.rows.length) return null;
+  return buildApplicationSummary(result.rows[0], includeIdData);
+}
+
+async function updateApplicationReview(id, body, actor, access) {
   const db = getDb();
   const existing = await db.query(
     `SELECT id, status, member_id FROM membership_applications WHERE id = $1 LIMIT 1`,
@@ -802,6 +835,23 @@ async function updateApplicationReview(id, body, actor) {
   }
   if (existing.rows[0].status === 'Awaiting Payment') {
     return json(409, { error: 'Application is awaiting payment — use Mark Registration Paid after fee is received.' });
+  }
+
+  if (!access?.canWriteAll) {
+    const notesErr = assertNotesOnlyUpdate(body, ['notes']);
+    if (notesErr && notesErr !== WRITE_DENIED_MSG) {
+      return json(400, { error: notesErr });
+    }
+    if (notesErr === WRITE_DENIED_MSG) {
+      return json(403, { error: notesErr });
+    }
+    const prevNotes = await db.query(`SELECT notes FROM membership_applications WHERE id = $1 LIMIT 1`, [id]);
+    const notes = mergeBoardNotes(prevNotes.rows[0]?.notes, body.notes, actor?.actor_label || 'Board');
+    await db.query(
+      `UPDATE membership_applications SET notes = $1, reviewed_at = NOW() WHERE id = $2`,
+      [notes, id]
+    );
+    return getApplication(id);
   }
 
   const checklist = body.review_checklist || {};
@@ -1113,7 +1163,23 @@ function validateMembershipFields(app) {
   if (!emergency.length) {
     return 'At least one emergency contact must include full name and phone.';
   }
+  const sigName = String(app.applicant_signature?.name || '').trim();
+  if (sigName.length < 2) {
+    return 'Please type your full name to sign the application.';
+  }
+  if (app.applicant_signature?.agreed !== true) {
+    return 'You must certify that the information is accurate before submitting.';
+  }
   return null;
+}
+
+function buildApplicantSignature(app) {
+  const name = String(app.applicant_signature?.name || '').trim();
+  return {
+    name,
+    agreed: true,
+    signed_at: new Date().toISOString(),
+  };
 }
 
 async function submitMembership(body) {
@@ -1163,14 +1229,15 @@ async function submitMembership(body) {
   if (fieldError) {
     return json(400, { error: fieldError });
   }
+  const applicantSignature = buildApplicantSignature(app);
 
   const insertResult = await db.query(
     `INSERT INTO membership_applications (
       waiting_list_id, member_full_name, spouse_full_name, address, city, state, zip,
       home_phone, office_phone, cell_phone, email, children,
       beneficiary_member, beneficiary_spouse, emergency_contacts, additional_family,
-      id_documents, applicant_role, status
-    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'Submitted')
+      id_documents, applicant_signature, applicant_role, status
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,'Submitted')
     RETURNING id, member_full_name, email, cell_phone, home_phone`,
     [
       waiting_list_id,
@@ -1190,6 +1257,7 @@ async function submitMembership(body) {
       JSON.stringify(app.emergency_contacts || []),
       JSON.stringify(app.additional_family || []),
       JSON.stringify(idCheck),
+      JSON.stringify(applicantSignature),
       applicant_role,
     ]
   );
@@ -1956,6 +2024,10 @@ exports.handler = async (event) => {
       return json(401, { error: 'Admin authorization required. Please sign in.' });
     }
     try {
+      const db = getDb();
+      const access = await loadBoardMemberAccess(db, admin);
+      const denied = assertCanApproveOperations(access);
+      if (denied) return json(403, { error: denied });
       const actor = await resolveAdminActor(admin);
       const body = parseBody(event);
       return await replyContactMessage(contactMsgPath.id, body, actor);
@@ -1974,14 +2046,18 @@ exports.handler = async (event) => {
       return json(401, { error: 'Admin authorization required. Please sign in.' });
     }
     const actor = await resolveAdminActor(admin);
+    const db = getDb();
+    const access = await loadBoardMemberAccess(db, admin);
     try {
       if (event.httpMethod === 'GET' && !changePath.id) {
-        const rows = await listChangeRequests(getDb());
+        const rows = await listChangeRequests(db);
         return json(200, { change_requests: rows.map(buildChangeRequestSummary) });
       }
       if (event.httpMethod === 'GET' && changePath.id) {
         return await getChangeRequest(changePath.id);
       }
+      const denied = assertCanApproveOperations(access);
+      if (denied) return json(403, { error: denied });
       const body = parseBody(event);
       if (event.httpMethod === 'POST' && changePath.id && changePath.action === 'approve') {
         return await approveChangeRequest(changePath.id, body, actor);
@@ -2023,6 +2099,10 @@ exports.handler = async (event) => {
       return json(401, { error: 'Admin authorization required. Please sign in.' });
     }
     try {
+      const db = getDb();
+      const access = await loadBoardMemberAccess(db, admin);
+      const denied = assertCanWriteAll(access);
+      if (denied) return json(403, { error: denied });
       const actor = await resolveAdminActor(admin);
       return await handleDemoQaReset(actor);
     } catch (err) {
@@ -2045,10 +2125,14 @@ exports.handler = async (event) => {
       return json(401, { error: 'Admin authorization required. Please sign in.' });
     }
     const actor = await resolveAdminActor(admin);
+    const db = getDb();
+    const access = await loadBoardMemberAccess(db, admin);
     try {
       if (event.httpMethod === 'GET' && !wlPath.id) {
         return await listWaitingListAdmin();
       }
+      const denied = assertCanApproveOperations(access);
+      if (denied) return json(403, { error: denied });
       const body = parseBody(event);
       if (event.httpMethod === 'POST' && wlPath.id && wlPath.action === 'invite') {
         return await inviteWaitingListEntry(wlPath.id, body, actor);
@@ -2072,20 +2156,23 @@ exports.handler = async (event) => {
       return json(401, { error: 'Admin authorization required. Please sign in.' });
     }
     const actor = await resolveAdminActor(admin);
+    const db = getDb();
+    const access = await loadBoardMemberAccess(db, admin);
     try {
       if (event.httpMethod === 'GET' && !appPath.id) {
         return await listApplications(event.queryStringParameters || {});
       }
       if (event.httpMethod === 'GET' && appPath.id && !appPath.action) {
-        const db = getDb();
         const crCheck = await db.query(`SELECT id FROM member_change_requests WHERE id = $1 LIMIT 1`, [appPath.id]);
         if (crCheck.rows.length) return await getChangeRequest(appPath.id);
         return await getApplication(appPath.id);
       }
       const body = parseBody(event);
       if (event.httpMethod === 'PATCH' && appPath.id && !appPath.action) {
-        return await updateApplicationReview(appPath.id, body, actor);
+        return await updateApplicationReview(appPath.id, body, actor, access);
       }
+      const denied = assertCanApproveOperations(access);
+      if (denied) return json(403, { error: denied });
       if (event.httpMethod === 'POST' && appPath.id && appPath.action === 'approve-for-payment') {
         return await approveForPayment(appPath.id, body, actor);
       }
@@ -2224,3 +2311,6 @@ exports.handler = async (event) => {
     return json(500, { error: 'Something went wrong. Please try again or call (424) 547-5594.' });
   }
 };
+
+exports.getApplicationForMember = getApplicationForMember;
+exports.buildApplicationSummary = buildApplicationSummary;
