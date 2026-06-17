@@ -19,7 +19,10 @@ const {
   assertCanWriteAll,
   assertCanApproveOperations,
   assertCanManageBoard,
+  assertPerm,
   filterMemberUpdateForAccess,
+  isRestrictedMembersOnly,
+  isPortalMembersCrmReadRoute,
   WRITE_DENIED_MSG,
 } = require('./board-permissions');
 const { stampBoardNote, mergeBoardNotes } = require('./board-notes');
@@ -89,6 +92,7 @@ function buildMemberPayload(member) {
     first: member.first_name,
     last: member.last_name,
     full_name: member.full_name || `${member.first_name || ''} ${member.last_name || ''}`.trim(),
+    spouse_name: member.spouse_name || '',
     paypal_name: member.paypal_name,
     email: member.email,
     mobile: member.mobile,
@@ -136,7 +140,7 @@ async function findMember({ phone, email, id }) {
     return null;
   }
 
-  const sql = `SELECT id, member_number, first_name, last_name, full_name, paypal_name, email, mobile, home_phone, address, status, joined_date, created_at, updated_at, notes, application_drive_url
+  const sql = `SELECT id, member_number, first_name, last_name, full_name, spouse_name, paypal_name, email, mobile, home_phone, address, status, joined_date, created_at, updated_at, notes, application_drive_url
                FROM members
                WHERE ${conditions.join(' OR ')}
                LIMIT 1`;
@@ -154,6 +158,7 @@ function collectMemberInvoiceNames(member) {
   };
   if (!member) return [];
   add(member.paypal_name);
+  add(member.spouse_name);
   add(member.full_name);
   if (member.full_name && String(member.full_name).includes('/')) {
     for (const part of String(member.full_name).split('/')) add(part);
@@ -442,7 +447,7 @@ async function updateMember(data, actor) {
   if (!data?.id) return null;
 
   const oldRes = await db.query(
-    `SELECT id, member_number, first_name, last_name, full_name, paypal_name, email, mobile, home_phone, address, status, joined_date, created_at, updated_at, notes, application_drive_url
+    `SELECT id, member_number, first_name, last_name, full_name, spouse_name, paypal_name, email, mobile, home_phone, address, status, joined_date, created_at, updated_at, notes, application_drive_url
      FROM members WHERE id = $1`,
     [data.id]
   );
@@ -453,6 +458,7 @@ async function updateMember(data, actor) {
     first: 'first_name',
     last: 'last_name',
     full_name: 'full_name',
+    spouse_name: 'spouse_name',
     home: 'home_phone',
     mobile: 'mobile',
     email: 'email',
@@ -473,6 +479,9 @@ async function updateMember(data, actor) {
       if (key === 'application_drive_url') {
         value = String(value || '').trim() || null;
       }
+      if (key === 'spouse_name') {
+        value = String(value || '').trim() || null;
+      }
       if (key === 'notes' && actor) {
         value = mergeBoardNotes(oldRow.notes, value, actor.actor_label);
       }
@@ -486,7 +495,7 @@ async function updateMember(data, actor) {
   values.push(data.id);
 
   const result = await db.query(
-    `UPDATE members SET ${fields.join(', ')} WHERE id = $${idx} RETURNING id, member_number, first_name, last_name, full_name, paypal_name, email, mobile, home_phone, address, status, joined_date, created_at, updated_at, notes, application_drive_url`,
+    `UPDATE members SET ${fields.join(', ')} WHERE id = $${idx} RETURNING id, member_number, first_name, last_name, full_name, spouse_name, paypal_name, email, mobile, home_phone, address, status, joined_date, created_at, updated_at, notes, application_drive_url`,
     values
   );
   const newRow = result.rows[0];
@@ -606,7 +615,7 @@ async function updateInvoice(data, actor) {
 async function getMembers({ search, limit = 500 }) {
   const db = getDb();
   const values = [];
-  let sql = `SELECT id, member_number, first_name, last_name, full_name, paypal_name, email, mobile, home_phone AS home, address, status, joined_date, created_at, updated_at FROM members`;
+  let sql = `SELECT id, member_number, first_name, last_name, full_name, spouse_name, paypal_name, email, mobile, home_phone AS home, address, status, joined_date, created_at, updated_at FROM members`;
 
   if (search) {
     const normalizedSearch = search.replace(/\D/g, '');
@@ -614,6 +623,7 @@ async function getMembers({ search, limit = 500 }) {
     const likeSearch = `%${search.toLowerCase()}%`;
     const clauses = [
       `LOWER(full_name) LIKE $1`,
+      `LOWER(spouse_name) LIKE $1`,
       `LOWER(first_name) LIKE $1`,
       `LOWER(last_name) LIKE $1`,
       `LOWER(email) LIKE $1`,
@@ -1315,6 +1325,12 @@ exports.handler = async (event) => {
       return jsonResponse(401, { error: 'Authorization token required' });
     }
 
+    const db = getDb();
+    const adminAccess = await loadBoardMemberAccess(db, adminPayload);
+    if (isRestrictedMembersOnly(adminAccess) && !isPortalMembersCrmReadRoute(event.httpMethod, path)) {
+      return jsonResponse(403, { error: 'Your access is limited to Members CRM only.' });
+    }
+
     if (event.httpMethod === 'GET' && path === '/member') {
       const member = await findMember({ phone: query.phone, email: query.email, id: query.id });
       return jsonResponse(200, { member });
@@ -1408,7 +1424,7 @@ exports.handler = async (event) => {
     if (event.httpMethod === 'POST' && path === '/mark-paid-request') {
       const db = getDb();
       const access = await loadBoardMemberAccess(db, adminPayload);
-      const denied = assertCanApproveOperations(access);
+      const denied = assertPerm(access, 'mark_paid', 'You do not have permission to mark invoices paid.');
       if (denied) return jsonResponse(403, { error: denied });
       const actor = await resolveAdminActor(adminPayload);
       const request = await createMarkPaidRequest(body, actor, adminPayload);
@@ -1419,7 +1435,7 @@ exports.handler = async (event) => {
     if (event.httpMethod === 'POST' && markPaidActionMatch) {
       const db = getDb();
       const access = await loadBoardMemberAccess(db, adminPayload);
-      const denied = assertCanApproveOperations(access);
+      const denied = assertPerm(access, 'mark_paid', 'You do not have permission to mark invoices paid.');
       if (denied) return jsonResponse(403, { error: denied });
       const actor = await resolveAdminActor(adminPayload);
       const reqId = Number(markPaidActionMatch[1]);
@@ -1434,7 +1450,7 @@ exports.handler = async (event) => {
     if (event.httpMethod === 'POST' && path === '/invoice') {
       const db = getDb();
       const access = await loadBoardMemberAccess(db, adminPayload);
-      const denied = assertCanApproveOperations(access);
+      const denied = assertPerm(access, 'mark_paid', 'You do not have permission to mark invoices paid.');
       if (denied) return jsonResponse(403, { error: denied });
       const actor = await resolveAdminActor(adminPayload);
       if (body.status === 'Paid' && !body.approved_mark_paid_request_id) {

@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS members (
   first_name VARCHAR(100),
   last_name VARCHAR(100),
   full_name VARCHAR(220),
+  spouse_name VARCHAR(200),
   paypal_name VARCHAR(220),
   email VARCHAR(200),
   mobile VARCHAR(32),
@@ -91,6 +92,7 @@ CREATE TABLE IF NOT EXISTS board_members (
   id SERIAL PRIMARY KEY,
   member_id INTEGER REFERENCES members(id),
   role VARCHAR(50),
+  display_name VARCHAR(120),
   email VARCHAR(200) UNIQUE,
   password_hash VARCHAR(200),  -- NULL until board member sets password on first sign-in
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -103,23 +105,68 @@ CREATE TABLE IF NOT EXISTS board_members (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+ALTER TABLE board_members ADD COLUMN IF NOT EXISTS display_name VARCHAR(120);
+
+ALTER TABLE members ADD COLUMN IF NOT EXISTS spouse_name VARCHAR(200);
+
+UPDATE members
+SET spouse_name = TRIM(SPLIT_PART(full_name, '/', 2))
+WHERE (spouse_name IS NULL OR TRIM(spouse_name) = '')
+  AND full_name LIKE '%/%'
+  AND TRIM(SPLIT_PART(full_name, '/', 2)) <> '';
+
 ALTER TABLE board_members ADD COLUMN IF NOT EXISTS write_approved BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE board_members ADD COLUMN IF NOT EXISTS is_super_admin BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE board_members ADD COLUMN IF NOT EXISTS perm_full_access BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE board_members ADD COLUMN IF NOT EXISTS perm_notes BOOLEAN NOT NULL DEFAULT TRUE;
 ALTER TABLE board_members ADD COLUMN IF NOT EXISTS perm_approve_payout BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE board_members ADD COLUMN IF NOT EXISTS perm_approve_operations BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE board_members ADD COLUMN IF NOT EXISTS board_perms JSONB NOT NULL DEFAULT '{}'::jsonb;
 
--- Migrate legacy write_approved → granular perms
+CREATE TABLE IF NOT EXISTS board_member_emails (
+  id SERIAL PRIMARY KEY,
+  board_member_id INTEGER NOT NULL REFERENCES board_members(id) ON DELETE CASCADE,
+  email VARCHAR(200) NOT NULL,
+  is_primary BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE (email)
+);
+
+CREATE INDEX IF NOT EXISTS idx_board_member_emails_member ON board_member_emails(board_member_id);
+
+INSERT INTO board_member_emails (board_member_id, email, is_primary)
+SELECT id, LOWER(TRIM(email)), TRUE
+FROM board_members
+WHERE email IS NOT NULL AND TRIM(email) <> ''
+ON CONFLICT (email) DO NOTHING;
+
+-- One-time: map legacy grouped flags → individual board_perms (June 2026).
 UPDATE board_members
-SET perm_full_access = TRUE,
-    perm_notes = TRUE,
-    perm_approve_payout = TRUE,
-    perm_approve_operations = TRUE
-WHERE write_approved = TRUE
-  AND is_active = TRUE;
+SET board_perms = jsonb_build_object(
+  'board_notes', COALESCE(perm_notes, FALSE) OR COALESCE(perm_full_access, FALSE),
+  'sync_paypal', COALESCE(perm_notes, FALSE) OR COALESCE(perm_full_access, FALSE),
+  'edit_members', COALESCE(perm_full_access, FALSE),
+  'reset_pin', COALESCE(perm_full_access, FALSE),
+  'announce', COALESCE(perm_full_access, FALSE),
+  'waiting_list_invite', COALESCE(perm_approve_operations, FALSE) OR COALESCE(perm_full_access, FALSE),
+  'waiting_list_remove', COALESCE(perm_approve_operations, FALSE) OR COALESCE(perm_full_access, FALSE),
+  'applications_review', COALESCE(perm_full_access, FALSE),
+  'applications_approve', COALESCE(perm_approve_operations, FALSE) OR COALESCE(perm_full_access, FALSE),
+  'mark_paid', COALESCE(perm_approve_operations, FALSE) OR COALESCE(perm_full_access, FALSE),
+  'receipts', COALESCE(perm_approve_operations, FALSE) OR COALESCE(perm_full_access, FALSE),
+  'pin_reset_approve', COALESCE(perm_approve_operations, FALSE) OR COALESCE(perm_full_access, FALSE),
+  'beneficiary', COALESCE(perm_approve_operations, FALSE) OR COALESCE(perm_full_access, FALSE),
+  'messages', COALESCE(perm_approve_operations, FALSE) OR COALESCE(perm_full_access, FALSE),
+  'payout_manage', COALESCE(perm_full_access, FALSE),
+  'payout_approve', COALESCE(perm_approve_payout, FALSE) OR COALESCE(perm_full_access, FALSE),
+  'payout_mark_paid', COALESCE(perm_approve_payout, FALSE) OR COALESCE(perm_full_access, FALSE)
+)
+WHERE (board_perms IS NULL OR board_perms = '{}'::jsonb)
+  AND (perm_notes OR perm_full_access OR perm_approve_operations OR perm_approve_payout);
 
-UPDATE board_members SET perm_notes = TRUE WHERE is_active = TRUE AND perm_notes = FALSE;
+-- Legacy write_approved → granular perms was a one-time migration (June 2026).
+-- Do NOT re-run UPDATEs here — npm run db:migrate applies this file every time and would
+-- reset permissions for anyone who still has write_approved = TRUE.
 
 CREATE TABLE IF NOT EXISTS audit_log (
   id SERIAL PRIMARY KEY,

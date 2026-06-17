@@ -29,6 +29,9 @@ const {
   loadBoardMemberAccess,
   assertCanWriteAll,
   assertCanApproveOperations,
+  assertCanManageBoard,
+  assertPerm,
+  hasPerm,
   assertNotesOnlyUpdate,
   WRITE_DENIED_MSG,
 } = require('./board-permissions');
@@ -797,7 +800,10 @@ async function updateApplicationReview(id, body, actor, access) {
     return json(409, { error: 'Application is awaiting payment — use Mark Registration Paid after fee is received.' });
   }
 
-  if (!access?.canWriteAll) {
+  if (!hasPerm(access, 'applications_review')) {
+    if (!hasPerm(access, 'board_notes')) {
+      return json(403, { error: WRITE_DENIED_MSG });
+    }
     const notesErr = assertNotesOnlyUpdate(body, ['notes']);
     if (notesErr && notesErr !== WRITE_DENIED_MSG) {
       return json(400, { error: notesErr });
@@ -2037,7 +2043,7 @@ exports.handler = async (event) => {
     try {
       const db = getDb();
       const access = await loadBoardMemberAccess(db, admin);
-      const denied = assertCanApproveOperations(access);
+      const denied = assertPerm(access, 'messages', 'You do not have permission to reply to contact messages.');
       if (denied) return json(403, { error: denied });
       const actor = await resolveAdminActor(admin);
       const body = parseBody(event);
@@ -2067,7 +2073,7 @@ exports.handler = async (event) => {
       if (event.httpMethod === 'GET' && changePath.id) {
         return await getChangeRequest(changePath.id);
       }
-      const denied = assertCanApproveOperations(access);
+      const denied = assertPerm(access, 'beneficiary', 'You do not have permission to approve beneficiary changes.');
       if (denied) return json(403, { error: denied });
       const body = parseBody(event);
       if (event.httpMethod === 'POST' && changePath.id && changePath.action === 'approve') {
@@ -2112,7 +2118,7 @@ exports.handler = async (event) => {
     try {
       const db = getDb();
       const access = await loadBoardMemberAccess(db, admin);
-      const denied = assertCanWriteAll(access);
+      const denied = assertCanManageBoard(access);
       if (denied) return json(403, { error: denied });
       const actor = await resolveAdminActor(admin);
       return await handleDemoQaReset(actor);
@@ -2133,7 +2139,7 @@ exports.handler = async (event) => {
     try {
       const db = getDb();
       const access = await loadBoardMemberAccess(db, admin);
-      const denied = assertCanWriteAll(access);
+      const denied = assertCanManageBoard(access);
       if (denied) return json(403, { error: denied });
       const actor = await resolveAdminActor(admin);
       return await handleDemoQaTestNotify(actor);
@@ -2160,13 +2166,15 @@ exports.handler = async (event) => {
       if (event.httpMethod === 'GET' && !wlPath.id) {
         return await listWaitingListAdmin();
       }
-      const denied = assertCanApproveOperations(access);
-      if (denied) return json(403, { error: denied });
       const body = parseBody(event);
       if (event.httpMethod === 'POST' && wlPath.id && wlPath.action === 'invite') {
+        const denied = assertPerm(access, 'waiting_list_invite', 'You do not have permission to invite waiting list members.');
+        if (denied) return json(403, { error: denied });
         return await inviteWaitingListEntry(wlPath.id, body, actor);
       }
       if (event.httpMethod === 'POST' && wlPath.id && wlPath.action === 'reject') {
+        const denied = assertPerm(access, 'waiting_list_remove', 'You do not have permission to remove waiting list members.');
+        if (denied) return json(403, { error: denied });
         return await rejectWaitingListEntry(wlPath.id, body, actor);
       }
       return json(404, { error: 'Not found' });
@@ -2210,7 +2218,7 @@ exports.handler = async (event) => {
         return json(200, payload);
       }
       if (annPath.action === 'memorial' && event.httpMethod === 'PUT') {
-        const denied = assertCanWriteAll(access);
+        const denied = assertPerm(access, 'announce', 'You do not have permission to save funeral announcements.');
         if (denied) return json(403, { error: denied });
         const actor = await resolveAdminActor(admin);
         const body = parseBody(event);
@@ -2237,7 +2245,7 @@ exports.handler = async (event) => {
         return json(200, payload);
       }
       if (annPath.action === 'event' && event.httpMethod === 'PUT') {
-        const denied = assertCanWriteAll(access);
+        const denied = assertPerm(access, 'announce', 'You do not have permission to save funeral announcements.');
         if (denied) return json(403, { error: denied });
         const actor = await resolveAdminActor(admin);
         const body = parseBody(event);
@@ -2291,7 +2299,7 @@ exports.handler = async (event) => {
       if (event.httpMethod === 'PATCH' && appPath.id && !appPath.action) {
         return await updateApplicationReview(appPath.id, body, actor, access);
       }
-      const denied = assertCanApproveOperations(access);
+      const denied = assertPerm(access, 'applications_approve', 'You do not have permission to approve or reject applications.');
       if (denied) return json(403, { error: denied });
       if (event.httpMethod === 'POST' && appPath.id && appPath.action === 'approve-for-payment') {
         return await approveForPayment(appPath.id, body, actor);

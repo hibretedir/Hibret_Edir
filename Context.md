@@ -1,9 +1,9 @@
 # Hibret Edir — Agent Context & Handoff
 
-**Last updated:** June 16, 2026 (granular board permissions; waiting list same-day order; CRM ops)  
+**Last updated:** June 17, 2026 (Access Management, board permissions, CRM spouse field)  
 **Purpose:** Onboard a new Cursor agent quickly. Read this file first, then `HIBRET_EDIR_PROJECT_HANDOFF (1).md` for deeper business rules and by-laws.
 
-**Current focus (next agent):** **Twilio SMS** — buy number, set `TWILIO_*` on Netlify, `npm run test:notify -- --send`. Then **production smoke-test** (invite email + SMS). **Netlify deploy** is current on `main` (`5368d35`); run **`npm run db:migrate`** on prod DB after schema pulls (user ran locally June 16). Set **`BOARD_SUPER_ADMIN_EMAILS`** on Netlify. SendGrid is **done** — see **`docs/notifications-setup.md`**. QA playbook: **`docs/system-validation-playbook.md`**.
+**Current focus (next agent):** **Twilio SMS** — buy number, set `TWILIO_*` on Netlify, `npm run test:notify -- --send`. Then **production smoke-test** (invite email + SMS). **Netlify deploy** — push after Access Management + permissions work (June 17). **Database:** local `.env` `DATABASE_URL` points at **Render Postgres** — `npm run db:migrate` from your laptop **is** production DB ops. Set **`BOARD_SUPER_ADMIN_EMAILS`** on Netlify. SendGrid is **done** — see **`docs/notifications-setup.md`**. QA playbook: **`docs/system-validation-playbook.md`**.
 
 ---
 
@@ -57,8 +57,9 @@ hibretedir/
 │   ├── auth.js                    # PIN, board login, PIN reset requests
 │   ├── admin-auth.js              # Shared JWT verify helpers
 │   ├── portal.js                  # Members, invoices, profile, stats, activity
-│   ├── apply.js                   # Waiting list, applications, site-stats, announcement, QA dashboard
-│   ├── demo-qa-dashboard.js       # System Health API + ONB validation steps
+│   ├── apply.js                   # Waiting list, applications, site-stats, announcement routes
+│   ├── event-announcement.js      # Memorial intake API, current-announcement, venues, PayPal balance hint
+│   ├── demo-qa-dashboard.js       # System Health API + ONB validation steps (+ NTF-01 test email)
 │   ├── demo-qa-reset.js           # QA demo cycle reset (DEMO_QA_EMAIL only)
 │   ├── membership-completion.js   # Create active member after registration payment
 │   ├── paypal-registration-invoice.js  # Registration PayPal invoice on board approve
@@ -76,7 +77,7 @@ hibretedir/
 │   ├── payment-methods.js         # PayPal vs Zelle & BofA classification for stats
 │   ├── invoice-stats-cache.js     # 60s TTL cache for admin invoice stats
 │   ├── board-notes.js             # Board note merge helpers
-│   ├── board-permissions.js       # Granular board write perms + super admin helpers
+│   ├── board-permissions.js       # Granular board perms (17 keys), tiers, restricted CRM scope
 │   └── member-snapshot.js         # Static member export + dev PIN file
 ├── db/schema.sql                  # PostgreSQL schema + idempotent migrations
 ├── docs/
@@ -93,7 +94,9 @@ hibretedir/
 │   ├── demo_cycle_reset.js        # npm run demo:reset / demo:reset:apply
 │   ├── test_qa_invite_local.js    # npm run test:qa-invite
 │   ├── sync_paypal.js             # Full PayPal sync from terminal (no 60s limit)
-│   ├── run_schema.js              # npm run db:migrate
+│   ├── run_schema.js              # npm run db:migrate (connects to Render via .env — same DB as production)
+│   ├── seed_announcement_venues.js  # npm run db:seed-ann-venues — LA church/cemetery presets for Admin dropdowns
+│   ├── check_current_announcement.js  # Debug which event/memorial is live on public site
 │   ├── seed_from_exports.py
 │   ├── import_waiting_list.py     # Excel import + public JSON export
 │   ├── fix_waiting_list_order.py  # Same-day queue tie-break from Order of Registration.xlsx
@@ -102,7 +105,9 @@ hibretedir/
 │   ├── mark_added_waiting_list_members.py
 │   ├── mark_invitations_sent.py
 │   ├── seed_waiting_list_public.py
-│   ├── set_event_announcement.js  # Prayer/burial/payment details on events.notes (public announcement)
+│   ├── set_event_announcement.js  # CLI backfill prayer/burial/payment on events.notes (legacy; prefer Admin → Announce)
+│   ├── fix_board_permissions_regression.js  # One-off repair if board_perms regressed
+│   ├── sync_board_member_names.js # Link board logins → CRM member_number; email aliases (never writes CRM)
 │   ├── build_invoice_snapshot.py
 │   ├── build_members_snapshot.py
 │   └── test_notifications.js      # npm run test:notify — verify SendGrid/Twilio config
@@ -128,7 +133,7 @@ hibretedir/
 |------------|----------------------------------|
 | All coding via `npm run dev` | Pushing half-finished work to trigger deploys |
 | Test functions at `http://localhost:8888/.netlify/functions/...` | Multiple push/redeploy cycles to “try something” |
-| Use Render Postgres from local `.env` | Preview deploys for every small change |
+| Use Render Postgres from local `.env` | **There is no separate “prod migrate” step** — `npm run db:migrate` from your machine updates Render |
 | `npm run db:migrate` after schema changes | Committing unless user explicitly asks |
 
 **Deploy rule:** Only push when the user says work is **complete and tested locally**.
@@ -136,7 +141,8 @@ hibretedir/
 ```bash
 npm install          # May fail on Google Drive — dev-local.js works around this
 cp .env.example .env # Fill DATABASE_URL, JWT_SECRET, PAYPAL_*, CRON_SECRET, etc.
-npm run db:migrate   # Apply schema.sql (safe to re-run)
+npm run db:migrate   # Apply schema.sql to Render (safe to re-run)
+npm run db:seed-ann-venues  # Optional — 6 LA church/cemetery presets for Admin announce dropdowns
 npm run dev          # → http://localhost:8888
 npm run sync:paypal  # Full PayPal → DB sync from terminal
 ```
@@ -170,6 +176,7 @@ See `.env.example`. Critical ones:
 | `DEMO_QA_ENABLED` | `true` to enable System Health QA + **Reset demo cycle** |
 | `DEMO_QA_EMAIL` / `DEMO_QA_PHONE` / `DEMO_QA_NAME` | Dedicated test identity (never a real member) |
 | `REGISTRATION_FEE` | `200` production; `1` for live PayPal QA smoke test |
+| `ANNOUNCEMENT_FUND_THRESHOLD` | Optional — auto-suggest no collection when PayPal balance ≥ this (default 50000) |
 
 **SendGrid production values (June 2026):**
 
@@ -188,15 +195,17 @@ Notifications **skip gracefully** when Twilio is unset; email sends when SendGri
 
 ## 5. Database
 
-**Schema file:** `db/schema.sql` — run `npm run db:migrate` after pulling schema changes (idempotent).
+**Schema file:** `db/schema.sql` — run `npm run db:migrate` after pulling schema changes (idempotent). **Your local `.env` `DATABASE_URL` is Render** — migrations run from the command line update the live database Netlify uses.
 
 **Tables in use:**
 
 | Table | Purpose |
 |-------|---------|
-| `members` | CRM — includes `pin_hash` for portal |
+| `members` | CRM — includes `pin_hash`, `spouse_name`, `application_drive_url` |
 | `beneficiaries` | Death beneficiary per member (primary) |
-| `events` | Funeral events (deceased name, event #, amount); `notes` = JSON for public announcement (prayer/burial venues, `collect_dues`, optional `announcement_text`) |
+| `events` | Funeral events (deceased name, event #, amount); `notes` = JSON for public announcement (venues, `collect_dues`, spouse status, optional `announcement_text`) |
+| `memorial_announcements` | No-collection memorials (no PayPal funeral event); `notes` = same JSON shape as events |
+| `announcement_service_venues` | Saved church/funeral venues for Admin announce dropdowns (auto-grows on save) |
 | `invoices` | PayPal-linked invoices; `recipient_name`, `paid_note` |
 | `receipts` | Zelle/BofA receipt uploads (base64; approve → mark invoice Paid) |
 | `waiting_list` | Public waiting list queue (`invited_at`, statuses below) |
@@ -208,10 +217,11 @@ Notifications **skip gracefully** when Twilio is unset; email sends when SendGri
 | `pin_reset_requests` | Member forgot-PIN requests |
 | `event_payouts` | $15K payout document + approval workflow |
 | `audit_log` | Activity log |
-| `board_members` | Board login accounts; granular perms: `is_super_admin`, `perm_full_access`, `perm_notes`, `perm_approve_payout`, `perm_approve_operations` |
+| `board_members` | Board login accounts; `display_name` (Access Management label only — **not** CRM); `member_id` link to CRM; `board_perms` JSONB (17 granular keys); legacy boolean columns kept for compat |
+| `board_member_emails` | Multiple login emails per board account (aliases → one `board_members` row) |
 | `notifications` | Email/SMS send log |
 
-**Recent schema additions:** performance indexes; `invoices.paid_note`, `invoice_mark_paid_requests`; `waiting_list.invited_at`; `invoices.membership_application_id`; `membership_applications.registration_invoice_id`; `board_members` granular permission columns; `members.application_drive_url`; `membership_applications.applicant_signature`.
+**Recent schema additions:** performance indexes; `invoices.paid_note`, `invoice_mark_paid_requests`; `waiting_list.invited_at`; `invoices.membership_application_id`; `membership_applications.registration_invoice_id`; `board_members.board_perms` JSONB + `display_name`; `board_member_emails`; `members.spouse_name`; `members.application_drive_url`; `membership_applications.applicant_signature`; **`memorial_announcements`**; **`announcement_service_venues`** (June 16–17).
 
 **Waiting list statuses (admin + DB):**
 
@@ -229,6 +239,7 @@ Notifications **skip gracefully** when Twilio is unset; email sends when SendGri
 
 ```bash
 npm run db:migrate
+npm run db:seed-ann-venues   # 6 presets (3 churches, 3 cemeteries) — also auto-seeded when Admin loads venues
 npm run import:waiting-list:seed          # if DB empty
 python scripts/import_waiting_list.py --file "data/waiting list with phone and email.xlsx" --seed
 python scripts/mark_added_waiting_list_members.py   # marks known members + refreshes public JSON
@@ -237,16 +248,20 @@ python scripts/fix_waiting_list_order.py --apply    # Fix same-day queue order (
 node scripts/set_event_announcement.js 30           # Backfill public announcement for event #30 (or any event #)
 ```
 
-**Event announcement JSON** (`events.notes` — set via `scripts/set_event_announcement.js` or `--file`):
+**Event announcement JSON** (`events.notes` or `memorial_announcements.notes` — Admin → **Announce** or `scripts/set_event_announcement.js`):
 
 | Field | Purpose |
 |-------|---------|
 | `prayer_venue`, `prayer_address`, `prayer_datetime` | Prayer service block on public site |
-| `burial_venue`, `burial_address` | Burial service block |
-| `collect_dues` | `false` or `waive_dues: true` → no dues paragraph |
-| `announcement_text` | Free-text fallback if structured fields absent |
+| `church_service`, `funeral_service`, `guest_reception` | Structured service blocks (enabled + venue/address/datetime) |
+| `burial_venue`, `burial_address` | Burial service block (legacy aliases) |
+| `collect_dues` | `false` → no dues paragraph; memorial-only row when no PayPal event |
+| `spouse_continue_status` | `yes` / `no` / `no_spouse` on deceased member intake |
+| `announcement_text` | Free-text/HTML fallback if structured fields absent |
 
-PayPal sync creates events with name only — **run `set_event_announcement.js` after each new funeral** so the public memorial letter shows full service details.
+**Current announcement selection:** `getCurrentAnnouncementFromDb()` picks **highest `event_number`** among Active events (not `updated_at` — test saves were bumping wrong event). Active memorial with `collect_dues: false` can override. Debug: `node scripts/check_current_announcement.js`.
+
+PayPal sync creates events with name only — **use Admin → Announce** (or `set_event_announcement.js`) so the public memorial letter shows full service details.
 
 ---
 
@@ -267,6 +282,10 @@ Base URL: `/.netlify/functions/<name>`
 | POST | `/admin/reset-pin` | Admin | Clear PIN from member modal |
 | GET | `/me` | Member JWT | Current member |
 | POST | `/admin/login` | — | Board JWT |
+| GET | `/admin/me` | Board JWT | Profile + `perms` |
+| GET/POST | `/admin/board-members` | Super admin | List / invite board logins |
+| POST | `/admin/board-members/:id/permissions` | Super admin | Save `board_perms` + `display_name` (board only — never CRM) |
+| POST | `/admin/board-members/:id/deactivate` | Super admin | Deactivate login |
 
 ### `portal.js`
 
@@ -290,7 +309,7 @@ Base URL: `/.netlify/functions/<name>`
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/site-stats` | — | `active_count`, `amount_per_member`, `payout_amount` |
-| GET | `/current-announcement` | — | Latest **Active** event; venues from `events.notes` JSON |
+| GET | `/current-announcement` | — | Latest Active event (by **`event_number` DESC**) or no-collection memorial; venues from `notes` JSON |
 | GET | `/waiting-list/status` | — | Live queue; `added` only if `Added as Member` |
 | POST | `/waiting-list`, `/contact` | — | Public forms |
 | POST | `/verify`, `/membership` | — | Application gate (must be `Invited to Apply`) |
@@ -302,6 +321,7 @@ Base URL: `/.netlify/functions/<name>`
 | POST | `/applications/:id/complete` | Admin | Mark registration paid (Zelle) → create member |
 | POST | `/applications/:id/reject` | Admin | Reject application |
 | GET | `/qa/dashboard` | Admin | System Health + ONB step status |
+| POST | `/demo-qa/test-notify` | Admin | Send test email to `DEMO_QA_EMAIL` (NTF-01) |
 | POST | `/demo-qa/reset` | Admin | Reset QA demo cycle (DEMO_QA_EMAIL only) |
 
 **Membership onboarding (live):** invite → apply → board review (3 checks) → **Approve & Send Invoice** → PayPal registration fee → **member created automatically on PayPal paid** (sync or completion job). **Mark Registration Paid** / **Approve & Add to CRM** = fallback for Zelle/BofA. See **`docs/membership-onboarding-workflow.md`** and **`docs/system-validation-playbook.md`**.
@@ -343,9 +363,11 @@ Hash routing (`#announcement`, `#apply`, etc.). English + Amharic.
 **Live from API:**
 
 - Hero **active member count**, per-death amount, payout amount → `apply/site-stats`
-- **Current announcement** → `apply/current-announcement` — full **memorial letter** (prayer/burial/payment) + summary box; data from `events.notes` JSON on latest Active event
+- **Current announcement** → `apply/current-announcement` — full **memorial letter** (prayer/burial/payment) + summary box; **Pay Now** and PayPal line → **`/portal/`** (not legacy `hibretedir.com/invoice`)
 - **Waiting list status** → `apply/waiting-list/status` (same PostgreSQL queue as Admin; hides Added/Rejected/Canceled; renumbers place in line)
 - Public labels: **Added** only for members; **Invitation Sent** for invited / in-progress applicants
+- **Desktop hamburger menu** — dropdown below nav bar (`#mmenu` outside `.nav` to avoid `backdrop-filter` positioning bug; JS `positionMmenu()`)
+- **Make a Payment** section — PayPal card links to member portal; Bank of America account #002174902906 under Upload Receipt
 
 Placeholders show `—` until API loads. Regenerate static JSON: `python scripts/mark_added_waiting_list_members.py` (runs export at end) or import script.
 
@@ -369,12 +391,17 @@ Placeholders show `—` until API loads. Regenerate static JSON: `python scripts
 |---------|-------|
 | Main | Members CRM, Invoices, Approval, Receipts, Messages |
 | Reports | Event Summary, Payout Fund |
-| System Health | **Dashboard** (integrations, test member, health checks) · **QA Testing** (ONB step playbook) |
-| Security | Activity Log |
+| **Announce** | Memorial intake — collection-first flow, spouse question, venue dropdowns, live preview, PayPal event auto-link when collecting |
+| System Health | **Dashboard** (integrations, **Send test email**, health checks) · **QA Testing** (ONB step playbook incl. NTF-01) |
+| Security | **Access Management** (super admin only), Activity Log |
 
 **Live stats bar:** Unpaid, Paid (PayPal), Zelle & BofA, Late — colors: green / green / red. **Partial** invoices are not counted as late.
 
-**Board permissions (June 16):** Super Admin (`BOARD_SUPER_ADMIN_EMAILS`) + scoped grants on invite: **Notes + sync** (default), **Full access**, **Ops approval**, **Payout approval**. Admin UI is read-only or gated per permission; permission chips show hover tooltips. Enforced in `board-permissions.js` across `auth.js`, `apply.js`, `portal.js`, `payouts.js`, `receipts.js`, `paypal-sync.js`.
+**Board permissions (June 17):** Super Admin (`BOARD_SUPER_ADMIN_EMAILS`) manages **Access Management** (master-detail: pick member → grant tier or individual perms). **17 granular keys** in `board_perms` JSONB (`board-permissions.js`). **Access tiers:** **Restricted** (read-only Members CRM only — hides other nav), **Read-only** (view all except Security), **Basic** (notes + PayPal sync + messages), **Operation** (+ edit members, reset/approve PIN), **Approver** (broad ops without full CRM write). **Security** (Access Management + Activity Log) is **super-admin only**. Read-only board members cannot see Security. Enforced in `board-permissions.js` across `auth.js`, `apply.js`, `portal.js`, `payouts.js`, `receipts.js`, `paypal-sync.js`.
+
+**Board vs CRM names:** `board_members.display_name` is the label in Access Management only. **CRM member names** (`members.paypal_name`, `full_name`, `spouse_name`) are edited only in **Members CRM**. `node scripts/sync_board_member_names.js --apply` links board logins to CRM `member_number` and sets `display_name` only when empty (use `--force-names` to reset from roster). **Multi-email login:** `board_member_emails` — one account, multiple emails (e.g. `babimuli@gmail.com` + `lily_mulugeta@yahoo.com`).
+
+**Members CRM (June 17):** List shows **Member** + **Spouse** columns; profile form has separate spouse field; `members.spouse_name` backfilled from `full_name` where `Primary/Spouse` format exists.
 
 **Refresh behavior:** Members and Invoices tabs refetch on switch; Event Summary loads full invoices + stats.
 
@@ -483,6 +510,30 @@ Auth, portal, admin CRM, applications, waiting list, notifications, audit, payou
 - [x] **CRM board import** — Yonas Tesema & Misrak B. Demessie added as member **#232** (`misrak1940@gmail.com`); waiting list #12 → Added as Member
 - [x] **Schema migrate** — user ran `npm run db:migrate` locally June 16 after push
 
+### June 2026 — Access Management & board permissions (June 17)
+
+- [x] **Access Management UI** — Master-detail layout; board names by CRM `#` + `display_name` (not email); access tier presets
+- [x] **17 granular permissions** — `board_perms` JSONB; default invite = Basic rights
+- [x] **Restricted tier** — `view_members_crm` only; Members CRM read-only; API + nav gated
+- [x] **Security super-admin only** — Access Management + Activity Log hidden from non–super-admins
+- [x] **Board display names** — Separate from CRM; edits in Access Management do not update `members` table
+- [x] **Multi-email board login** — `board_member_emails`; merged duplicate accounts (Betelhem, Genene)
+- [x] **`sync_board_member_names.js`** — Roster links board emails → CRM `member_number`; advisor role (Tsehaye Mogus = Restricted)
+- [x] **CRM spouse column** — `members.spouse_name`; list + profile; migrate backfill from `full_name`
+- [x] **Schema migrate** — `board_member_emails`, `display_name`, `spouse_name`; run `npm run db:migrate` June 17
+
+### June 2026 — Announcement intake & public site (`1684565`)
+
+- [x] **`event-announcement.js`** — memorial intake API, `current-announcement`, venue list/upsert, PayPal balance hint for collection suggestion
+- [x] **Admin → Announce** — collection-first (Yes/No gates form); spouse continue (`yes`/`no`/`no_spouse`); auto next event # + create `events` row on save when collecting; venue dropdowns with presets
+- [x] **Schema** — `memorial_announcements`, `announcement_service_venues`; migrated + `npm run db:seed-ann-venues` (6 LA presets) June 16
+- [x] **Public announcement fix** — select by **`event_number` DESC** (not `updated_at`); Brook #30 not Almaw #18
+- [x] **Public payments** — announcement + payment section route PayPal to **`/portal/`**; BofA direct deposit on payment page
+- [x] **Hamburger menu (desktop)** — dropdown below nav (menu moved outside `.nav`; `positionMmenu()`)
+- [x] **QA email test** — `POST /demo-qa/test-notify`, System Health **Send test email**, NTF-01 in playbook; fixed `demo-qa-dashboard.js` integrations destructuring bug
+- [x] **Deploy** — pushed `1684565` to `main`
+- [ ] **EVT-06** — bulk PayPal invoices to all members on new event (noted in Admin UI)
+
 ### Still partial / ops
 
 - [ ] **Twilio SMS** — **NEXT** — SendGrid done; follow `docs/notifications-setup.md` § Twilio
@@ -500,8 +551,8 @@ Auth, portal, admin CRM, applications, waiting list, notifications, audit, payou
 
 | Item | Notes |
 |------|-------|
-| Admin UI for event announcement | Use `set_event_announcement.js` until form exists |
-| `events.js` | No admin “create event → auto ~197 invoices” via PayPal API |
+| ~~Admin UI for event announcement~~ | **Done** — Admin → **Announce** (`1684565`); CLI `set_event_announcement.js` still available |
+| `events.js` | No admin “create event → auto ~197 invoices” via PayPal API (EVT-06) |
 | Automated payment reminders | Not started |
 | Twilio SMS bot | Not started |
 | Welcome email + digital membership card | Not started (approve notify exists; no card asset) |
@@ -544,6 +595,26 @@ From by-laws / handoff:
 ---
 
 ## 12. Recent session changelog
+
+### June 17, 2026 — Access Management, permissions, CRM spouse
+
+- **Access Management** — Replaced 17-checkbox-per-row with master-detail; tier buttons (Restricted, Read-only, Basic, Operation, Approver); names show as `#N Name` without emails in list
+- **Permissions model** — `board_perms` JSONB with 17 keys; `isRestrictedMembersOnly()` gates portal API + admin nav to Members CRM only
+- **Board vs CRM** — `display_name` on `board_members` only; sync script never writes `members`; UI hint “edit names in Members CRM”
+- **Email aliases** — `board_member_emails` table; `findAdmin()` matches any alias; duplicate board rows merged
+- **Roster** — 7 board logins + super admin (#52 Behailu); Tsehaye Mogus (#11) = **advisor** + **Restricted**
+- **CRM** — `spouse_name` column; Members list Spouse column; profile side-by-side name/spouse
+- **Scripts** — `sync_board_member_names.js`, `fix_board_permissions_regression.js`
+- **Deploy** — User requested push June 17; run `npm run db:migrate` before/on deploy
+
+### June 16, 2026 — Announcement intake, public site, DB (deploy `1684565`)
+
+- **Admin → Announce** — collection-first UI; spouse question; PayPal event linking; venue memory; memorial-only path (`memorial_announcements`)
+- **`event-announcement.js`** — extracted from `apply.js`; current-announcement logic; `DEFAULT_SERVICE_VENUES` (3 churches, 3 cemeteries)
+- **Public site** — PayPal links → `/portal/`; hamburger dropdown positioning; footer/back-button polish
+- **DB** — `memorial_announcements`, `announcement_service_venues`; user ran `db:migrate` + `db:seed-ann-venues` from laptop (= Render)
+- **Clarified ops** — no separate Render migrate step; local `.env` is production DB
+- **Next:** Twilio SMS + production invite smoke-test
 
 ### June 16, 2026 — Board permissions, queue order, CRM import
 
@@ -653,10 +724,15 @@ From by-laws / handoff:
 | PayPal registration invoice fails | Check `PAYPAL_CLIENT_ID`/`SECRET`; reuse `REG-{id}`; **Mark Registration Paid** fallback |
 | PayPal sync timeout on Netlify | Use Admin batched sync or `npm run sync:paypal`; background function for cron |
 | Public announcement shows only summary, no service details | `events.notes` empty — run `node scripts/set_event_announcement.js <event#>` |
+| Public announcement shows wrong deceased | Was `updated_at` ordering — fixed to `event_number DESC`; run `node scripts/check_current_announcement.js` |
+| Hamburger menu opens at top of nav | `#mmenu` must be **outside** `.nav` (backdrop-filter trap); see `positionMmenu()` in `public/index.html` |
 | `npm run db:migrate` timeout to Render | Retry; `run_schema.js` has 60s connect / 120s query / 3 retries |
 | Showcase changes not visible on localhost | Netlify serves `public/` — copy `docs/automation-showcase.html` → `public/docs/` |
 | Meridian voice sounds robotic on deploy | Normal — TTS runs in visitor's browser, not on Netlify; Edge + UK Natural voices sound best |
 | Board admin read-only / 403 on save | Run `npm run db:migrate`; set `BOARD_SUPER_ADMIN_EMAILS` on Netlify; re-login after permission change |
+| Restricted user sees all admin tabs | Re-login; confirm `view_members_crm` only in `board_perms`; hard-refresh admin |
+| Access Management name changed CRM | Should not happen — `display_name` is board-only; CRM names in Members CRM tab |
+| Board login with alternate email fails | Run `sync_board_member_names.js --apply`; check `board_member_emails` |
 | Same-day waiting list order wrong | Run `python scripts/fix_waiting_list_order.py --apply` with registration order file in `data/` |
 
 ---
@@ -680,17 +756,14 @@ From by-laws / handoff:
 
 ---
 
-## 15. Next agent priorities (June 16, 2026)
+## 15. Next agent priorities (June 17, 2026)
 
-1. **Twilio SMS** — Buy US SMS number; add `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` to Netlify; redeploy. `npm run test:notify -- --send`.
-2. **Production smoke-test** — Waiting list invite → email (+ SMS when Twilio live); confirm board permissions for non-super-admin accounts.
-3. **Prod DB migrate** — If not done on Render yet: `npm run db:migrate` with production `DATABASE_URL`; set `BOARD_SUPER_ADMIN_EMAILS` on Netlify.
-4. **Event announcement UI** — `scripts/set_event_announcement.js` exists; optional admin UI.
-5. **EVT-06** — Admin create event + bulk PayPal invoices.
-6. **EVT-08** — Payment reminders.
+1. **Netlify deploy** — Push June 17 Access Management + permissions; confirm `BOARD_SUPER_ADMIN_EMAILS` and `ADMIN_AUTH_ENABLED=true` on Netlify; board members re-login after deploy.
+2. **Twilio SMS** — Buy US SMS number; add `TWILIO_*` to Netlify; `npm run test:notify -- --send`.
+3. **Production smoke-test** — Board login with alias email; Restricted advisor (Tsehaye); super-admin Access Management.
+4. **EVT-06** — Admin create event + bulk PayPal invoices to all active members.
+5. **EVT-08** — Payment reminders.
 
-**Done this cycle:** `main` at `5368d35` (board permissions, partial/late fix, queue order script). Local migrate run June 16.
+**Done this cycle:** Access Management UI, 17 granular perms, Restricted tier, board/CRM name separation, spouse column, `board_member_emails`. `db:migrate` run June 17.
 
-**SendGrid (done):** `notifications@hibretedir.com` / Reply `hibretedirtext@gmail.com` / DNS on Wix.
-
-**Do not regress:** Meridian showcase (speech-gated advance, phase-2 scroll); waiting list same-day order uses full `applied_at` not just date; board permission gates on all write endpoints.
+**Do not regress:** Board `display_name` must never UPDATE `members`; sync script must not overwrite non-empty `display_name` without `--force-names`; Security views super-admin only; Restricted scope limits to Members CRM; Meridian showcase; waiting list order; current announcement uses `event_number`.

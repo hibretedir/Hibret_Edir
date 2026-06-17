@@ -17,10 +17,13 @@ const {
   assertCanManageBoard,
   assertCanWriteAll,
   assertCanApproveOperations,
+  assertPerm,
   buildPermissionsPayload,
   syncSuperAdminFlags,
   normalizePermissionBody,
   BOARD_MEMBER_PERM_COLUMNS,
+  BOARD_PERMISSION_DEFS,
+  defaultInvitePerms,
 } = require('./board-permissions');
 const { notifyBoard } = require('./notify');
 
@@ -344,7 +347,7 @@ function buildAdminPayload(admin) {
 
 const BOARD_MEMBER_SELECT = `
   id, email, password_hash, role, is_active, created_at, write_approved,
-  is_super_admin, perm_full_access, perm_notes, perm_approve_payout, perm_approve_operations
+  is_super_admin, board_perms, perm_full_access, perm_notes, perm_approve_payout, perm_approve_operations
 `;
 
 async function findAdmin({ email }) {
@@ -353,12 +356,46 @@ async function findAdmin({ email }) {
   await syncSuperAdminFlags(db);
   const result = await db.query(
     `SELECT ${BOARD_MEMBER_SELECT}
-     FROM board_members
-     WHERE LOWER(email) = LOWER($1)
+     FROM board_members bm
+     WHERE LOWER(bm.email) = LOWER($1)
+        OR EXISTS (
+          SELECT 1 FROM board_member_emails bme
+          WHERE bme.board_member_id = bm.id AND LOWER(bme.email) = LOWER($1)
+        )
      LIMIT 1`,
     [email]
   );
   return result.rows[0] || null;
+}
+
+async function ensureBoardMemberEmail(db, boardMemberId, email, { isPrimary = false } = {}) {
+  const norm = normalizeAdminEmail(email);
+  if (!norm || !boardMemberId) return;
+  await db.query(
+    `INSERT INTO board_member_emails (board_member_id, email, is_primary)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (email) DO UPDATE
+     SET board_member_id = EXCLUDED.board_member_id,
+         is_primary = EXCLUDED.is_primary`,
+    [boardMemberId, norm, isPrimary]
+  );
+}
+
+async function loadBoardMemberLoginEmails(db, boardIds) {
+  if (!boardIds.length) return new Map();
+  const result = await db.query(
+    `SELECT board_member_id, email, is_primary
+     FROM board_member_emails
+     WHERE board_member_id = ANY($1::int[])
+     ORDER BY is_primary DESC, email`,
+    [boardIds]
+  );
+  const byId = new Map();
+  for (const row of result.rows) {
+    if (!byId.has(row.board_member_id)) byId.set(row.board_member_id, []);
+    byId.get(row.board_member_id).push(row.email);
+  }
+  return byId;
 }
 
 function normalizeAdminEmail(email) {
@@ -382,9 +419,18 @@ function parseBoardMembersPath(path) {
 }
 
 function buildBoardMemberRow(row) {
+  const memberNumber = row.member_number != null ? Number(row.member_number) : null;
+  const displayName = String(row.display_name || '').trim() || null;
+  const loginEmails = Array.isArray(row.login_emails) && row.login_emails.length
+    ? row.login_emails
+    : (row.email ? [row.email] : []);
   return {
     id: row.id,
-    email: row.email,
+    member_id: row.member_id != null ? Number(row.member_id) : null,
+    member_number: memberNumber,
+    display_name: displayName,
+    email: row.email || loginEmails[0] || null,
+    login_emails: loginEmails,
     role: row.role,
     is_active: row.is_active,
     created_at: row.created_at,
@@ -479,16 +525,41 @@ async function listBoardMembers() {
   const db = getDb();
   await syncSuperAdminFlags(db);
   const result = await db.query(
-    `SELECT id, email, role, is_active, created_at,
-            is_super_admin, perm_full_access, perm_notes,
-            perm_approve_payout, perm_approve_operations,
-            (password_hash IS NOT NULL) AS has_password
-     FROM board_members
-     ORDER BY created_at DESC NULLS LAST, id DESC`
+    `SELECT bm.id, bm.member_id, bm.display_name, bm.email, bm.role, bm.is_active, bm.created_at,
+            bm.is_super_admin, bm.board_perms,
+            bm.perm_full_access, bm.perm_notes,
+            bm.perm_approve_payout, bm.perm_approve_operations,
+            (bm.password_hash IS NOT NULL) AS has_password,
+            m.member_number,
+            m.full_name AS member_full_name
+     FROM board_members bm
+     LEFT JOIN members m ON m.id = bm.member_id
+     ORDER BY m.member_number NULLS LAST, bm.created_at DESC NULLS LAST, bm.id DESC`
   );
+  const loginEmailsById = await loadBoardMemberLoginEmails(db, result.rows.map((row) => row.id));
   return jsonResponse(200, {
-    boardMembers: result.rows.map((row) => buildBoardMemberRow(row)),
+    boardMembers: result.rows.map((row) => buildBoardMemberRow({
+      ...row,
+      login_emails: loginEmailsById.get(row.id) || (row.email ? [row.email] : []),
+    })),
+    permissionDefs: BOARD_PERMISSION_DEFS,
   });
+}
+
+async function resolveCrmMemberForEmail(db, email) {
+  if (!email) return null;
+  const result = await db.query(
+    `SELECT id, member_number, full_name FROM members WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+    [email]
+  );
+  return result.rows[0] || null;
+}
+
+async function linkBoardMemberToCrm(db, boardId, email) {
+  const member = await resolveCrmMemberForEmail(db, email);
+  if (!member) return null;
+  await db.query(`UPDATE board_members SET member_id = $1 WHERE id = $2`, [member.id, boardId]);
+  return member;
 }
 
 async function inviteBoardMember(body, actor) {
@@ -499,6 +570,7 @@ async function inviteBoardMember(body, actor) {
   const db = getDb();
   const existing = await findAdmin({ email });
   let boardMember;
+  const invitePerms = JSON.stringify(defaultInvitePerms());
 
   if (existing) {
     if (existing.is_active && existing.password_hash) {
@@ -509,27 +581,57 @@ async function inviteBoardMember(body, actor) {
        SET is_active = true,
            password_hash = NULL,
            role = COALESCE($2, role),
-           perm_notes = COALESCE(perm_notes, TRUE)
+           board_perms = CASE
+             WHEN board_perms IS NULL OR board_perms = '{}'::jsonb THEN $3::jsonb
+             ELSE board_perms
+           END,
+           perm_notes = FALSE,
+           perm_full_access = FALSE,
+           perm_approve_payout = FALSE,
+           perm_approve_operations = FALSE
        WHERE id = $1
-       RETURNING id, email, role, is_active, created_at,
+       RETURNING id, display_name, email, role, is_active, created_at, board_perms,
                  is_super_admin, perm_full_access, perm_notes,
                  perm_approve_payout, perm_approve_operations`,
-      [existing.id, body.role || null]
+      [existing.id, body.role || null, invitePerms]
     );
     boardMember = buildBoardMemberRow({ ...update.rows[0], has_password: false });
   } else {
     const insert = await db.query(
       `INSERT INTO board_members (
-         email, password_hash, role, is_active,
+         email, password_hash, role, is_active, board_perms,
          perm_notes, perm_full_access, perm_approve_payout, perm_approve_operations
        )
-       VALUES ($1, NULL, $2, true, true, false, false, false)
-       RETURNING id, email, role, is_active, created_at,
+       VALUES ($1, NULL, $2, true, $3::jsonb, false, false, false, false)
+       RETURNING id, display_name, email, role, is_active, created_at, board_perms,
                  is_super_admin, perm_full_access, perm_notes,
                  perm_approve_payout, perm_approve_operations`,
-      [email, body.role || 'board']
+      [email, body.role || 'board', invitePerms]
     );
     boardMember = buildBoardMemberRow({ ...insert.rows[0], has_password: false });
+  }
+
+  await linkBoardMemberToCrm(db, boardMember.id, email);
+  await ensureBoardMemberEmail(db, boardMember.id, email, { isPrimary: true });
+  const linked = await db.query(
+    `SELECT bm.id, bm.member_id, bm.display_name, bm.email, bm.role, bm.is_active, bm.created_at,
+            bm.is_super_admin, bm.board_perms,
+            bm.perm_full_access, bm.perm_notes,
+            bm.perm_approve_payout, bm.perm_approve_operations,
+            (bm.password_hash IS NOT NULL) AS has_password,
+            m.member_number,
+            m.full_name AS member_full_name
+     FROM board_members bm
+     LEFT JOIN members m ON m.id = bm.member_id
+     WHERE bm.id = $1`,
+    [boardMember.id]
+  );
+  if (linked.rows[0]) {
+    boardMember = buildBoardMemberRow({
+      ...linked.rows[0],
+      login_emails: (await loadBoardMemberLoginEmails(db, [boardMember.id])).get(boardMember.id)
+        || (linked.rows[0].email ? [linked.rows[0].email] : []),
+    });
   }
 
   await logActivity(db, {
@@ -555,7 +657,7 @@ async function updateBoardMemberAccess(id, action, actor, access, body = {}) {
   }
   const db = getDb();
   const result = await db.query(
-    `SELECT id, email, role, is_active, created_at, password_hash,
+    `SELECT id, display_name, email, role, is_active, created_at, password_hash,
             is_super_admin, perm_full_access, perm_notes,
             perm_approve_payout, perm_approve_operations
      FROM board_members WHERE id = $1 LIMIT 1`,
@@ -578,14 +680,21 @@ async function updateBoardMemberAccess(id, action, actor, access, body = {}) {
       return jsonResponse(400, { error: 'Super admin permissions are managed via BOARD_SUPER_ADMIN_EMAILS.' });
     }
     const perms = normalizePermissionBody(body);
+    const displayNameRaw = body.display_name ?? body.displayName ?? body.name ?? null;
+    const displayName = displayNameRaw == null ? null : String(displayNameRaw).trim();
+    const safeDisplayName = displayName && displayName.length <= 120 ? displayName : null;
+    // board_members.display_name only — never updates CRM (members table).
     await db.query(
       `UPDATE board_members
-       SET perm_full_access = $1,
-           perm_notes = $2,
-           perm_approve_payout = $3,
-           perm_approve_operations = $4
-       WHERE id = $5`,
-      [perms.perm_full_access, perms.perm_notes, perms.perm_approve_payout, perms.perm_approve_operations, id]
+       SET board_perms = $1::jsonb,
+           perm_full_access = FALSE,
+           perm_notes = FALSE,
+           perm_approve_payout = FALSE,
+           perm_approve_operations = FALSE,
+           write_approved = FALSE,
+           display_name = COALESCE($3, display_name)
+       WHERE id = $2`,
+      [JSON.stringify(perms), id, safeDisplayName]
     );
     await logActivity(db, {
       actor_type: 'board',
@@ -595,7 +704,7 @@ async function updateBoardMemberAccess(id, action, actor, access, body = {}) {
       entity_type: 'board_members',
       record_id: id,
       summary: `Board permissions updated for ${row.email}`,
-      new_value: perms,
+      new_value: Object.assign({}, perms, safeDisplayName ? { display_name: safeDisplayName } : {}),
     });
     return jsonResponse(200, { ok: true, message: 'Permissions saved.' });
   }
@@ -787,7 +896,7 @@ exports.handler = async (event, context) => {
       try {
         const db = getDb();
         const access = await loadBoardMemberAccess(db, admin);
-        const denied = assertCanApproveOperations(access);
+        const denied = assertPerm(access, 'pin_reset_approve', 'You do not have permission to approve PIN reset requests.');
         if (denied) return jsonResponse(403, { error: denied });
         const status = pinResetPath.action === 'approve' ? 'Approved' : 'Rejected';
         return await resolvePinResetRequest(pinResetPath.id, status, admin);
@@ -802,7 +911,7 @@ exports.handler = async (event, context) => {
       if (!admin) return jsonResponse(401, { error: 'Admin authorization required.' });
       const db = getDb();
       const access = await loadBoardMemberAccess(db, admin);
-      const denied = assertCanWriteAll(access);
+      const denied = assertPerm(access, 'reset_pin', 'You do not have permission to reset member PINs.');
       if (denied) return jsonResponse(403, { error: denied });
       const memberId = body.memberId || body.member_id;
       if (!memberId) return jsonResponse(400, { error: 'memberId is required.' });

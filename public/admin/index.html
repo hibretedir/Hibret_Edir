@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/css/admin-tracker.css?v=admin30">
+<link rel="stylesheet" href="/css/admin-tracker.css?v=admin37">
 <link rel="stylesheet" href="/css/admin-tracker-mh.css?v=1">
 </head>
 <body class="app-admin tracker">
@@ -118,11 +118,11 @@
         <span class="sidebar-badge" id="sb-qa-testing">—</span>
       </button>
     </div>
-    <div class="sidebar-section" id="adminSecurityNavSection" hidden>
+    <div class="sidebar-section" id="adminSecurityNavSection" data-super-admin-only hidden>
       <div class="sidebar-label">Security</div>
       <button type="button" class="sidebar-nav accent-gold" id="nav-board-access" onclick="switchView('board-access')">
         <span class="sidebar-nav-icon">🔐</span>
-        <span>Board Access</span>
+        <span>Access Management</span>
       </button>
       <button type="button" class="sidebar-nav accent-gold" id="nav-activity" onclick="switchView('activity')">
         <span class="sidebar-nav-icon">◷</span>
@@ -224,7 +224,7 @@
   <div class="sidebar-section" data-super-admin-only hidden>
     <div class="sidebar-label">Security</div>
     <button type="button" class="sidebar-nav accent-gold" data-view="board-access" onclick="switchView('board-access')">
-      <span class="sidebar-nav-icon">🔐</span><span>Board Access</span>
+      <span class="sidebar-nav-icon">🔐</span><span>Access Management</span>
     </button>
     <button type="button" class="sidebar-nav accent-gold" data-view="activity" onclick="switchView('activity')">
       <span class="sidebar-nav-icon">◷</span><span>Activity Log</span>
@@ -430,6 +430,9 @@ const PIN_RESET_REQUESTS = [];
 const RECEIPTS = [];
 const ACTIVITY = [];
 const BOARD_MEMBERS = [];
+const BOARD_PERMISSION_DEFS = [];
+let boardAccessSelectedId = null;
+let boardAccessFilter = '';
 const PAYOUTS = [];
 let EVENTS_BY_NUMBER = new Map();
 let EVENTS_BY_ID = new Map();
@@ -523,21 +526,73 @@ function adminIsSuperAdmin() {
   return adminUser?.is_super_admin === true;
 }
 
+const SECURITY_ADMIN_VIEWS = ['board-access', 'activity'];
+
+function isSecurityAdminView(v) {
+  return SECURITY_ADMIN_VIEWS.includes(v);
+}
+
 function updateSuperAdminNavVisibility() {
-  const show = adminIsSuperAdmin();
+  const showSecurity = adminIsSuperAdmin();
+  const restricted = adminIsRestrictedMembersOnly();
   const section = document.getElementById('adminSecurityNavSection');
-  if (section) section.hidden = !show;
+  if (section) section.hidden = !showSecurity;
   document.querySelectorAll('[data-super-admin-only]').forEach((el) => {
-    el.hidden = !show;
+    el.hidden = !showSecurity;
+  });
+  const boardViews = ['members', 'invoices', 'applications', 'receipts', 'messages', 'events', 'announcement', 'payouts', 'health-dashboard', 'qa-testing'];
+  boardViews.forEach((v) => {
+    const hide = restricted && v !== 'members';
+    const nav = document.getElementById('nav-' + v);
+    if (nav) nav.hidden = hide;
+    document.querySelectorAll(`[data-view="${v}"]`).forEach((el) => {
+      el.hidden = hide;
+    });
   });
 }
 
-function guardSuperAdminView(v) {
-  if ((v === 'board-access' || v === 'activity') && !adminIsSuperAdmin()) {
-    showAdminToast('Only super admins can access this section.', 'warn');
+function adminIsRestrictedMembersOnly() {
+  if (!ADMIN_AUTH_ENABLED || adminIsSuperAdmin()) return false;
+  const keys = boardPermissionDefs().filter((d) => adminHasPerm(d.key)).map((d) => d.key);
+  return boardAccessMatchesTier(keys, BOARD_ACCESS_TIER_RESTRICTED);
+}
+
+function guardRestrictedView(v) {
+  if (adminIsRestrictedMembersOnly() && v !== 'members') {
+    showAdminToast('Your access is limited to Members CRM.', 'warn');
     return 'members';
   }
   return v;
+}
+
+function guardSuperAdminView(v) {
+  if (isSecurityAdminView(v) && !adminIsSuperAdmin()) {
+    showAdminToast('Security is limited to super admins.', 'warn');
+    return 'members';
+  }
+  return v;
+}
+
+function redirectSecurityViewIfNeeded() {
+  if (isSecurityAdminView(currentView) && !adminIsSuperAdmin()) {
+    currentView = 'members';
+    if (location.hash && isSecurityAdminView(location.hash.replace(/^#/, '').trim())) {
+      history.replaceState(null, '', location.pathname + location.search);
+    }
+  }
+  if (adminIsRestrictedMembersOnly() && currentView !== 'members') {
+    currentView = 'members';
+    const hash = (location.hash || '').replace(/^#/, '').trim();
+    if (hash && hash !== 'members') {
+      history.replaceState(null, '', location.pathname + location.search);
+    }
+  }
+}
+
+function adminHasPerm(key) {
+  if (!ADMIN_AUTH_ENABLED) return true;
+  if (adminUser?.is_super_admin) return true;
+  return adminUser?.perms?.[key] === true;
 }
 
 function adminCanManageBoard() {
@@ -545,40 +600,77 @@ function adminCanManageBoard() {
 }
 
 function adminCanWriteAll() {
-  if (!ADMIN_AUTH_ENABLED) return true;
-  return !!(adminUser?.can_write_all || adminUser?.perm_full_access || adminUser?.is_super_admin);
+  return adminHasPerm('edit_members');
 }
 
 function adminCanWriteNotes() {
-  if (!ADMIN_AUTH_ENABLED) return true;
-  return adminUser?.can_write_notes !== false;
+  return adminHasPerm('board_notes');
 }
 
 function adminCanSyncPaypal() {
-  if (!ADMIN_AUTH_ENABLED) return true;
-  return !!(adminUser?.can_sync_paypal || adminCanWriteNotes());
+  return adminHasPerm('sync_paypal');
 }
 
 function adminCanApproveOperations() {
-  if (!ADMIN_AUTH_ENABLED) return true;
-  return !!(adminUser?.can_approve_operations || adminCanWriteAll());
+  return [
+    'waiting_list_invite', 'waiting_list_remove', 'applications_approve',
+    'mark_paid', 'receipts', 'pin_reset_approve', 'beneficiary', 'messages',
+  ].some(adminHasPerm);
 }
 
 function adminCanApprovePayout() {
-  if (!ADMIN_AUTH_ENABLED) return true;
-  return !!(adminUser?.can_approve_payout || adminCanWriteAll());
+  return adminHasPerm('payout_approve') || adminHasPerm('payout_mark_paid');
+}
+
+function adminCanManagePayouts() {
+  return adminHasPerm('payout_manage');
+}
+
+function adminCanAnnounce() {
+  return adminHasPerm('announce');
+}
+
+function adminCanReviewApplications() {
+  return adminHasPerm('applications_review') || adminHasPerm('applications_approve');
+}
+
+function adminCanDecideApplications() {
+  return adminHasPerm('applications_approve');
+}
+
+function adminCanInviteWaitingList() {
+  return adminHasPerm('waiting_list_invite');
+}
+
+function adminCanRemoveWaitingList() {
+  return adminHasPerm('waiting_list_remove');
+}
+
+function adminCanApproveReceipts() {
+  return adminHasPerm('receipts');
+}
+
+function adminCanReplyMessages() {
+  return adminHasPerm('messages');
 }
 
 function adminReadOnlyBannerHtml() {
-  if (adminCanWriteAll() && adminCanApproveOperations() && adminCanApprovePayout()) return '';
-  const parts = ['You can view all board data'];
-  if (adminCanWriteNotes()) parts.push('add <strong>board notes</strong>');
-  if (adminCanSyncPaypal()) parts.push('run <strong>PayPal sync</strong>');
-  if (adminCanApproveOperations()) parts.push('approve <strong>operations</strong> (invoices, applications, receipts)');
-  if (adminCanApprovePayout()) parts.push('approve <strong>payouts</strong>');
-  if (adminCanWriteAll()) parts.push('edit <strong>full records</strong>');
-  if (adminIsSuperAdmin()) parts.push('manage <strong>board access</strong>');
-  return `<div class="tracker-banner wl-slots-banner admin-readonly-banner" role="status">${parts.join(' · ')}.</div>`;
+  if (adminIsSuperAdmin()) return '';
+  const keys = boardPermissionDefs().filter((d) => adminHasPerm(d.key)).map((d) => d.key);
+  if (!keys.length) {
+    return '<div class="tracker-banner wl-slots-banner admin-readonly-banner" role="status">Read-only — view all board sections except <strong>Security</strong>. No write permissions granted.</div>';
+  }
+  if (boardAccessMatchesTier(keys, BOARD_ACCESS_TIER_RESTRICTED)) {
+    return '<div class="tracker-banner wl-slots-banner admin-readonly-banner" role="status"><strong>Restricted</strong> — read-only <strong>Members CRM</strong> only. Other sections are hidden.</div>';
+  }
+  if (boardAccessMatchesTier(keys, BOARD_ACCESS_TIER_OPERATION)) {
+    return '<div class="tracker-banner wl-slots-banner admin-readonly-banner" role="status"><strong>Operation</strong> — Basic rights + edit member records, reset PIN, and approve PIN resets.</div>';
+  }
+  if (boardAccessMatchesTier(keys, BOARD_ACCESS_TIER_BASIC)) {
+    return '<div class="tracker-banner wl-slots-banner admin-readonly-banner" role="status"><strong>Basic rights</strong> — view all sections except Security, plus PayPal sync, board notes, and contact messages.</div>';
+  }
+  const granted = keys.map((k) => boardPermissionDefByKey(k)?.label).filter(Boolean);
+  return `<div class="tracker-banner wl-slots-banner admin-readonly-banner" role="status">View access to all sections except Security. Your write permissions: ${granted.map((g) => esc(g)).join(' · ')}.</div>`;
 }
 
 function fieldReadonlyAttr() {
@@ -587,6 +679,11 @@ function fieldReadonlyAttr() {
 
 function writeActionBtn(attrs, label) {
   if (!adminCanWriteAll()) return '';
+  return `<button type="button" ${attrs}>${label}</button>`;
+}
+
+function writeAnnounceBtn(attrs, label) {
+  if (!adminCanAnnounce()) return '';
   return `<button type="button" ${attrs}>${label}</button>`;
 }
 
@@ -1390,11 +1487,12 @@ function renderMemberApplicationReadOnlyHtml(app, member) {
 
 function renderMemberProfileFormHtml(m) {
   const names = memberDisplayNames(m);
+  const spouse = memberSpouseName(m);
   const ro = fieldReadonlyAttr();
   return `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tk-muted)">PayPal name (primary — matches invoices)</label><input class="field-input" id="ef_paypal_name" value="${esc(m.paypal_name || names.paypal)}"${ro}></div>
-      <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tk-muted)">Household / full name (both spouses if applicable)</label><input class="field-input" id="ef_full_name" value="${esc(m.full_name || names.household || names.paypal)}"${ro}></div>
+      <div><label style="font-size:11px;color:var(--tk-muted)">Member name (PayPal / primary)</label><input class="field-input" id="ef_paypal_name" value="${esc(m.paypal_name || names.paypal)}"${ro}></div>
+      <div><label style="font-size:11px;color:var(--tk-muted)">Spouse</label><input class="field-input" id="ef_spouse_name" value="${esc(spouse)}" placeholder="Optional"${ro}></div>
       <div><label style="font-size:11px;color:var(--tk-muted)">First</label><input class="field-input" id="ef_first" value="${esc(m.first)}"${ro}></div>
       <div><label style="font-size:11px;color:var(--tk-muted)">Last</label><input class="field-input" id="ef_last" value="${esc(m.last)}"${ro}></div>
       <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tk-muted)">Email</label><input class="field-input" id="ef_email" value="${esc(m.email)}"${ro}></div>
@@ -1738,15 +1836,24 @@ async function fetchAdminCore(options = {}) {
   adminDataError = null;
   let apiLoaded = false;
   const keepFullInvoiceCache = invoicesFullyLoaded && options.forceInvoices !== true;
+  const restricted = adminIsRestrictedMembersOnly();
 
-  const [membersResult, statsResult, invoicesResult, eventsResult] = await Promise.allSettled([
-    apiGet('portal/members?limit=2500'),
-    apiGet('portal/invoice-stats'),
-    apiGet('portal/invoices?outstanding=1&limit=500&activeOnly=1'),
-    fetchDeceasedCatalog(),
-  ]);
+  const coreTasks = [apiGet('portal/members?limit=2500')];
+  if (!restricted) {
+    coreTasks.push(
+      apiGet('portal/invoice-stats'),
+      apiGet('portal/invoices?outstanding=1&limit=500&activeOnly=1'),
+      fetchDeceasedCatalog()
+    );
+  }
 
-  if (eventsResult.status === 'fulfilled') {
+  const settled = await Promise.allSettled(coreTasks);
+  const membersResult = settled[0];
+  const statsResult = restricted ? null : settled[1];
+  const invoicesResult = restricted ? null : settled[2];
+  const eventsResult = restricted ? null : settled[3];
+
+  if (eventsResult && eventsResult.status === 'fulfilled') {
     setEventsCatalog(eventsResult.value ?? []);
   }
 
@@ -1759,12 +1866,12 @@ async function fetchAdminCore(options = {}) {
     MEMBERS.splice(0, MEMBERS.length);
   }
 
-  if (statsResult.status === 'fulfilled') {
+  if (!restricted && statsResult && statsResult.status === 'fulfilled') {
     INVOICE_STATS = statsResult.value?.stats ?? null;
     statsCache = null;
   }
 
-  if (invoicesResult.status === 'fulfilled' && invoicesResult.value != null) {
+  if (!restricted && invoicesResult && invoicesResult.status === 'fulfilled' && invoicesResult.value != null) {
     const invoiceList = dedupeInvoicesByNumber(invoicesResult.value?.invoices ?? []);
     if (keepFullInvoiceCache && INVOICES.length) {
       mergeInvoiceListUpdates(invoiceList);
@@ -1776,7 +1883,7 @@ async function fetchAdminCore(options = {}) {
     if (invoiceList.length) apiLoaded = true;
     if (invoiceList.length) dataSource = 'api';
     resetMemberLateCache();
-  } else {
+  } else if (!restricted && invoicesResult) {
     console.warn('Invoices API failed:', invoicesResult.reason);
     if (!keepFullInvoiceCache) {
       INVOICES.splice(0, INVOICES.length);
@@ -1960,6 +2067,7 @@ async function fetchReceiptsList() {
 }
 
 async function fetchActivity() {
+  if (!adminIsSuperAdmin()) return;
   try {
     const actRes = await apiGet('portal/activity?limit=150');
     ACTIVITY.splice(0, ACTIVITY.length, ...(actRes?.activity || []));
@@ -1970,10 +2078,15 @@ async function fetchActivity() {
 }
 
 async function fetchBoardMembers() {
+  if (!adminIsSuperAdmin()) return false;
   try {
     const res = await apiGet('auth/admin/board-members');
     BOARD_MEMBERS.splice(0, BOARD_MEMBERS.length, ...(res?.boardMembers || []));
+    if (res?.permissionDefs?.length) {
+      BOARD_PERMISSION_DEFS.splice(0, BOARD_PERMISSION_DEFS.length, ...res.permissionDefs);
+    }
     adminSectionsLoaded.boardAccess = true;
+    syncBoardAccessSelection();
     return true;
   } catch (e) {
     console.warn('Board members API failed:', e.message || e);
@@ -1994,6 +2107,10 @@ async function fetchPayoutsList() {
 }
 
 async function fetchAdminSecondary() {
+  if (adminIsRestrictedMembersOnly()) {
+    updateSidebar();
+    return;
+  }
   const tasks = [];
   if (!adminSectionsLoaded.applications) tasks.push(fetchApprovalData());
   if (!adminSectionsLoaded.receipts) tasks.push(fetchReceiptsList());
@@ -2027,7 +2144,7 @@ async function refreshAdminSections(sections = []) {
   if (want.has('receipts')) tasks.push(fetchReceiptsList());
   if (want.has('inbox') || want.has('messages')) tasks.push(fetchInbox());
   if (want.has('payouts')) tasks.push(fetchPayoutsList());
-  if (want.has('activity')) tasks.push(fetchActivity());
+  if (want.has('activity') && adminIsSuperAdmin()) tasks.push(fetchActivity());
   if (tasks.length) await Promise.all(tasks);
   updateSidebar();
 }
@@ -2143,7 +2260,7 @@ function trackerHeaderHtml(stats) {
     : currentView === 'events' ? 'Event Summary'
     : currentView === 'announcement' ? 'Funeral Announcement'
     : currentView === 'payouts' ? 'Payout Fund'
-    : currentView === 'board-access' ? 'Board Access'
+    : currentView === 'board-access' ? 'Access Management'
     : currentView === 'health-dashboard' ? 'System Health — Dashboard'
     : currentView === 'qa-testing' ? 'QA Testing'
     : currentView === 'activity' ? 'Activity Log'
@@ -2325,6 +2442,7 @@ function closeAdminMenu() {
 async function switchView(v) {
   closeAdminMenu();
   v = guardSuperAdminView(v);
+  v = guardRestrictedView(v);
   currentView = v;
   if (v === 'invoices') fetchPayPalBalance();
   if (v === 'events') {
@@ -2371,10 +2489,10 @@ async function switchView(v) {
       alert(e.message || 'Could not refresh invoices.');
       return;
     }
-  } else if (v === 'activity' && !adminSectionsLoaded.activity) {
+  } else if (v === 'activity' && adminIsSuperAdmin() && !adminSectionsLoaded.activity) {
     showMainLoading('Loading activity log…');
     await fetchActivity();
-  } else if (v === 'board-access' && !adminSectionsLoaded.boardAccess) {
+  } else if (v === 'board-access' && adminIsSuperAdmin() && !adminSectionsLoaded.boardAccess) {
     showMainLoading('Loading board access…');
     const ok = await fetchBoardMembers();
     if (!ok) {
@@ -2573,7 +2691,7 @@ function renderReadyToInviteCardsHtml(entries) {
           <div class="wl-ready-card-date">Applied ${esc(fmtDate(w.applied_at))}</div>
         </div>
       </div>
-      ${adminCanApproveOperations() ? `<button type="button" class="wl-invite-btn" onclick="inviteWaitingListEntry(${w.id})">Send Invitation →</button>` : ''}
+      ${adminCanInviteWaitingList() ? `<button type="button" class="wl-invite-btn" onclick="inviteWaitingListEntry(${w.id})">Send Invitation →</button>` : ''}
     </div>
   `).join('')}</div>`;
 }
@@ -2584,8 +2702,8 @@ function renderWaitingListRow(w, muted) {
     : w.status === 'Pending' ? 'warn'
     : w.status === 'Added as Member' ? 'paid'
     : w.status === 'Rejected' ? 'unpaid' : '';
-  const canInvite = adminCanApproveOperations() && isWlQueueAwaiting(w.status) && w.eligible_for_invite;
-  const canReject = adminCanApproveOperations() && !['Added as Member', 'Rejected'].includes(w.status);
+  const canInvite = adminCanInviteWaitingList() && isWlQueueAwaiting(w.status) && w.eligible_for_invite;
+  const canReject = adminCanRemoveWaitingList() && !['Added as Member', 'Rejected'].includes(w.status);
   const statusLabel = w.eligible_for_invite ? 'Ready to Invite' : w.status;
   return `<tr class="data-row${w.eligible_for_invite ? ' wl-eligible-row' : ''}${muted ? ' wl-added-row' : ''}">
     <td><span class="tracker-inv-num">#${w.display_rank ?? w.pending_rank ?? w.queue_position ?? w.id}</span></td>
@@ -3031,7 +3149,7 @@ function applyAnnPreviewEditState() {
   const letter = document.querySelector('#annPreviewBody .ann-preview-letter');
   if (!letter) return;
   const collectUnset = annIntake?.collect_dues == null;
-  const canEdit = adminCanWriteAll() && !collectUnset;
+  const canEdit = adminCanAnnounce() && !collectUnset;
   letter.contentEditable = canEdit ? 'true' : 'false';
   letter.classList.toggle('ann-preview-letter-editable', canEdit);
   letter.oninput = canEdit ? onAnnPreviewInput : null;
@@ -3455,8 +3573,8 @@ function updateAnnouncementPreview(options = {}) {
 }
 
 async function saveAnnouncementIntake() {
-  if (!adminCanWriteAll()) {
-    showAdminToast('You need full access to save announcements.', 'warn');
+  if (!adminCanAnnounce()) {
+    showAdminToast('You need announcement permission to save.', 'warn');
     return;
   }
   const payload = readAnnIntakeFromForm();
@@ -3679,7 +3797,7 @@ function renderAnnouncementView(options = {}) {
         ${renderAnnServiceSection('annFuneral', funeralStep, 'Will there be a funeral / burial service?', annIntake.funeral_service, 'funeral')}
 
         <div class="ann-intake-actions">
-          ${writeActionBtn('class="btn primary" onclick="saveAnnouncementIntake()"', 'Save announcement')}
+          ${writeAnnounceBtn('class="btn primary" onclick="saveAnnouncementIntake()"', 'Save announcement')}
           <a class="btn" href="/#announcement" target="_blank" rel="noopener">View public page ↗</a>
         </div>
       </div>
@@ -3746,6 +3864,23 @@ function memberDisplayNames(m) {
   return { paypal, household };
 }
 
+function parseHouseholdFromFullName(fullName) {
+  const raw = String(fullName || '').trim();
+  if (!raw || !raw.includes('/')) return { primary: raw, spouse: '' };
+  const idx = raw.indexOf('/');
+  return {
+    primary: raw.slice(0, idx).trim(),
+    spouse: raw.slice(idx + 1).trim(),
+  };
+}
+
+function memberSpouseName(m) {
+  const d = getMemberData(m);
+  const explicit = String(d.spouse_name || '').trim();
+  if (explicit) return explicit;
+  return parseHouseholdFromFullName(d.full_name).spouse;
+}
+
 function compareMembersByMemberNumber(a, b) {
   const na = a.member_number != null && a.member_number !== '' ? Number(a.member_number) : NaN;
   const nb = b.member_number != null && b.member_number !== '' ? Number(b.member_number) : NaN;
@@ -3768,7 +3903,8 @@ function getMemberFiltered() {
     const q = memberSearch.toLowerCase();
     if (q) {
       const names = memberDisplayNames(m);
-      const hay = [m.member_number, m.id, d.first, d.last, d.email, d.mobile, d.paypal_name, d.full_name, names.paypal, names.household].join(' ').toLowerCase();
+      const spouse = memberSpouseName(m);
+      const hay = [m.member_number, m.id, d.first, d.last, d.email, d.mobile, d.paypal_name, d.full_name, d.spouse_name, names.paypal, names.household, spouse].join(' ').toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -3782,13 +3918,12 @@ function renderMembersTableHtml(filtered) {
   const rows = filtered.length ? filtered.map(m => {
     const d = getMemberData(m);
     const names = memberDisplayNames(m);
-    const householdLine = names.household
-      ? `<div class="tracker-member-email">${esc(names.household)}</div>`
-      : '';
+    const spouse = memberSpouseName(m);
     const lateCount = countLateInvoicesForMember(m);
     return `<tr class="data-row data-row-clickable" onclick="openMemberDetail(${m.id})" role="button" tabindex="0" onkeydown="if(event.key==='Enter')openMemberDetail(${m.id})">
       <td><span class="tracker-inv-num">#${esc(m.member_number || m.id)}</span></td>
-      <td><div class="tracker-member-name">${esc(names.paypal)}</div>${householdLine}${lateCount ? `<button type="button" class="tracker-late-member-link" onclick="event.stopPropagation();openMemberUnpaidInvoices(${m.id})">${lateCount} late invoice${lateCount !== 1 ? 's' : ''} — view unpaid</button>` : ''}</td>
+      <td><div class="tracker-member-name">${esc(names.paypal)}</div>${lateCount ? `<button type="button" class="tracker-late-member-link" onclick="event.stopPropagation();openMemberUnpaidInvoices(${m.id})">${lateCount} late invoice${lateCount !== 1 ? 's' : ''} — view unpaid</button>` : ''}</td>
+      <td><div class="tracker-member-name tracker-member-spouse">${spouse ? esc(spouse) : '<span class="tracker-member-empty">—</span>'}</div></td>
       <td>${esc(d.email || '—')}</td>
       <td>${esc(d.mobile || d.home || '—')}</td>
       <td><span class="tracker-status ${m.status === 'Active' ? 'paid' : 'unpaid'}">${esc(m.status)}</span></td>
@@ -3796,7 +3931,7 @@ function renderMembersTableHtml(filtered) {
     </tr>`;
   }).join('') : '';
   return filtered.length ? `<table class="tracker-table">
-        <thead><tr><th>#</th><th>Member</th><th>Email</th><th>Phone</th><th>Status</th><th>Action</th></tr></thead>
+        <thead><tr><th>#</th><th>Member</th><th>Spouse</th><th>Email</th><th>Phone</th><th>Status</th><th>Action</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>` : '<div class="tracker-empty">No members loaded yet</div>';
 }
@@ -3821,7 +3956,7 @@ function renderMembersView() {
       <div class="tracker-search tracker-search-prominent">
         <label class="tracker-search-label" for="memberSearchBox">Search</label>
         <span class="tracker-search-icon">⌕</span>
-        <input type="search" id="memberSearchBox" placeholder="Search PayPal name, household, email, #..." value="${esc(memberSearch)}" oninput="memberSearch=this.value; scheduleMemberSearchUpdate()">
+        <input type="search" id="memberSearchBox" placeholder="Search name, spouse, email, #..." value="${esc(memberSearch)}" oninput="memberSearch=this.value; scheduleMemberSearchUpdate()">
       </div>
       <select class="tracker-select" onchange="memberFilter=this.value; updateMembersList()">
         <option value="active"${memberFilter === 'active' ? ' selected' : ''}>Active</option>
@@ -4285,6 +4420,10 @@ function getReviewChecklistFromModal() {
 
 async function saveApplicationReview() {
   if (!reviewingApplicationId) return;
+  if (!adminCanWriteAll() && !adminCanWriteNotes() && !adminCanReviewApplications()) {
+    showAdminToast('You have view-only access for applications.', 'warn');
+    return;
+  }
   const app = APPLICATIONS.find(a => a.id === reviewingApplicationId);
   if (app?.status === 'Awaiting Payment') {
     alert('Application is awaiting payment. Use Mark Registration Paid when fee is received.');
@@ -4526,7 +4665,7 @@ function renderPayoutsView() {
       SSN copies are optional per board policy — confirm legal requirements before collecting.
     </div>
     <div style="margin-bottom:12px">
-      ${adminCanWriteAll() ? '<button type="button" class="tracker-mark-btn" onclick="openNewPayoutModal()">+ Open Payout Case</button>' : ''}
+      ${adminCanManagePayouts() ? '<button type="button" class="tracker-mark-btn" onclick="openNewPayoutModal()">+ Open Payout Case</button>' : ''}
     </div>
     <div class="tracker-table-wrap">
       ${renderPayoutsTableHtml(filtered)}
@@ -4744,6 +4883,10 @@ async function openPayoutReview(id) {
 async function savePayoutReview() {
   if (!reviewingPayoutId) return;
   const notes = readBoardNotesField('payoutNotes', payoutNotesBaseline);
+  if (!adminCanWriteAll() && !adminCanWriteNotes()) {
+    showAdminToast('You have view-only access for payout cases.', 'warn');
+    return;
+  }
   if (!adminCanWriteAll()) {
     try {
       const res = await apiPatch('payouts/' + reviewingPayoutId, { notes });
@@ -5000,7 +5143,7 @@ function renderMessagesBodyHtml() {
   if (messagesFilter === 'pin-reset') {
     const pinRows = PIN_RESET_REQUESTS.length ? PIN_RESET_REQUESTS.map(r => {
       const statusClass = r.status === 'Approved' ? 'paid' : r.status === 'Rejected' ? 'unpaid' : 'warn';
-      const canReview = adminCanApproveOperations() && r.status === 'Pending';
+      const canReview = adminCanApproveReceipts() && r.status === 'Pending';
       return `<tr class="data-row">
         <td><div class="tracker-member-name">${esc(r.member_name || '—')}</div><div class="tracker-member-email">${r.member_number ? '#' + esc(r.member_number) : esc(r.phone || '—')}</div></td>
         <td>${esc(r.phone || '—')}</td>
@@ -5040,7 +5183,7 @@ function renderMessagesBodyHtml() {
         <td><span class="tracker-status ${statusClass}"><span class="tracker-status-dot"></span>${statusLabel}</span></td>
         <td><div class="msg-preview">${esc(m.message || '').slice(0, 120)}${(m.message || '').length > 120 ? '…' : ''}</div></td>
         <td><span class="tracker-date">${esc(fmtDate(m.created_at))}</span></td>
-        <td>${adminCanApproveOperations() ? `<button type="button" class="tracker-mark-btn" onclick="openMessageReply(${m.id})">${m.board_reply ? 'Edit reply' : 'Reply'}</button>` : (m.board_reply ? 'Replied' : '—')}</td>
+        <td>${adminCanReplyMessages() ? `<button type="button" class="tracker-mark-btn" onclick="openMessageReply(${m.id})">${m.board_reply ? 'Edit reply' : 'Reply'}</button>` : (m.board_reply ? 'Replied' : '—')}</td>
       </tr>
       <tr class="data-row msg-detail-row">
         <td colspan="7"><div class="msg-detail-body">${esc(m.message || '')}${m.board_reply ? `<div class="msg-reply-block"><div class="msg-reply-head"><strong>Board reply</strong><span class="msg-reply-date">(${esc(fmtDate(m.replied_at))})</span></div><div class="msg-reply-text">${esc(m.board_reply)}</div></div>` : ''}</div></td>
@@ -5233,71 +5376,286 @@ function boardAccessStatusLabel(b) {
   if (!b.is_active) return { text: 'Deactivated', cls: 'cancelled' };
   if (!b.has_password) return { text: 'Pending setup', cls: 'warn' };
   if (b.is_super_admin) return { text: 'Super Admin', cls: 'paid' };
+  if (String(b.role || '').toLowerCase() === 'advisor') return { text: 'Advisor', cls: 'warn' };
   return { text: 'Active', cls: 'paid' };
 }
 
-const BOARD_PERM_WRITE_HINTS = {
-  perm_notes: [
-    'Board notes (members, applications, payouts)',
-    'PayPal sync',
-  ],
-  perm_full_access: [
-    'Edit member contact & profile fields',
-    'Create & manage payout cases (docs, checklist)',
-    'Full application review saves',
-    'Reset member PIN',
-  ],
-  perm_approve_operations: [
-    'Mark invoices paid (submit & approve)',
-    'Approve/reject applications',
-    'Waiting list invite & remove',
-    'Receipt & PIN reset approval',
-    'Reply to member messages',
-  ],
-  perm_approve_payout: [
-    'Board-approve payout cases',
-    'Mark $15,000 paid out',
-  ],
-};
+const FALLBACK_PERMISSION_DEFS = [
+  { key: 'view_members_crm', label: 'View Members CRM', desc: 'Read-only access to the Members CRM section only' },
+  { key: 'board_notes', label: 'Board notes', desc: 'Add notes on members, applications, and payouts' },
+  { key: 'sync_paypal', label: 'PayPal sync', desc: 'Run Sync PayPal on the invoices tab' },
+  { key: 'edit_members', label: 'Edit member records', desc: 'Change member contact and profile fields' },
+  { key: 'reset_pin', label: 'Reset member PIN', desc: 'Clear a member PIN so they can set a new one' },
+  { key: 'announce', label: 'Funeral announcements', desc: 'Create and save memorial announcements' },
+  { key: 'waiting_list_invite', label: 'Waiting list invite', desc: 'Send invitation to apply' },
+  { key: 'waiting_list_remove', label: 'Waiting list remove', desc: 'Reject or remove someone from the queue' },
+  { key: 'applications_review', label: 'Application review', desc: 'Save vetting checklist on applications' },
+  { key: 'applications_approve', label: 'Application decisions', desc: 'Approve for payment, reject, mark paid, add to CRM' },
+  { key: 'mark_paid', label: 'Invoice mark paid', desc: 'Submit and approve mark-paid requests' },
+  { key: 'receipts', label: 'Receipt approval', desc: 'Approve uploaded Zelle or Bank of America receipts' },
+  { key: 'pin_reset_approve', label: 'PIN reset approval', desc: 'Approve or reject forgot-PIN requests' },
+  { key: 'beneficiary', label: 'Beneficiary approval', desc: 'Approve beneficiary change requests' },
+  { key: 'messages', label: 'Contact messages', desc: 'Reply to public contact form messages' },
+  { key: 'payout_manage', label: 'Manage payout cases', desc: 'Open and edit payout paperwork' },
+  { key: 'payout_approve', label: 'Approve payouts', desc: 'Board-approve $15,000 payout cases' },
+  { key: 'payout_mark_paid', label: 'Mark payout paid', desc: 'Record a payout as disbursed' },
+];
 
-function boardPermHintHtml(key) {
-  const items = BOARD_PERM_WRITE_HINTS[key] || [];
-  if (!items.length) return '';
-  return `<span class="board-perm-tip" role="tooltip"><strong>Grants write:</strong><ul>${items.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></span>`;
+const BOARD_PERMISSION_GROUPS = [
+  { title: 'Members & CRM', keys: ['view_members_crm', 'edit_members', 'reset_pin', 'board_notes', 'beneficiary', 'pin_reset_approve'] },
+  { title: 'Onboarding', keys: ['waiting_list_invite', 'waiting_list_remove', 'applications_review', 'applications_approve'] },
+  { title: 'Invoices & payments', keys: ['sync_paypal', 'mark_paid', 'receipts'] },
+  { title: 'Announcements & messages', keys: ['announce', 'messages'] },
+  { title: 'Payout fund', keys: ['payout_manage', 'payout_approve', 'payout_mark_paid'] },
+];
+
+const BOARD_ACCESS_TIER_RESTRICTED = ['view_members_crm'];
+const BOARD_ACCESS_TIER_BASIC = ['board_notes', 'sync_paypal', 'messages'];
+const BOARD_ACCESS_TIER_OPERATION = [...BOARD_ACCESS_TIER_BASIC, 'edit_members', 'reset_pin', 'pin_reset_approve'];
+
+function boardAccessGrantedKeys(b) {
+  if (!b || b.is_super_admin) return boardPermissionDefs().map((d) => d.key);
+  const perms = b.perms || {};
+  return boardPermissionDefs().filter((d) => perms[d.key]).map((d) => d.key);
 }
 
-function boardPermCheckbox(id, key, label, b, canEdit) {
-  const checked = b.is_super_admin ? true : !!b[key];
-  const disabled = !canEdit || b.is_super_admin || key === 'perm_notes';
-  return `<span class="board-perm-tip-wrap">
-    <label class="board-perm-chip${checked ? ' on' : ''}">
-      <input type="checkbox" id="perm_${id}_${key}" data-member="${id}" data-perm="${key}"
-        ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}
-        onchange="this.closest('.board-perm-chip').classList.toggle('on', this.checked)">
-      <span>${label}</span>
-    </label>
-    ${boardPermHintHtml(key)}
-  </span>`;
+function boardAccessMatchesTier(keys, tierKeys) {
+  if (keys.length !== tierKeys.length) return false;
+  const set = new Set(keys);
+  return tierKeys.every((k) => set.has(k));
 }
 
-function boardPermissionsRowHtml(b, canManage) {
-  if (!b.is_active || !b.has_password) return '<span class="tracker-member-email">—</span>';
-  if (b.is_super_admin) {
-    return `<span class="board-perm-tip-wrap">
-      <span class="tracker-status paid"><span class="tracker-status-dot"></span>All permissions</span>
-      <span class="board-perm-tip" role="tooltip"><strong>Grants write:</strong><ul>
-        <li>Everything below + invite/manage board members</li>
-      </ul></span>
-    </span>`;
+function boardPermissionDefByKey(key) {
+  return boardPermissionDefs().find((d) => d.key === key);
+}
+
+function boardAccessGrantedSummary(b) {
+  if (b?.is_super_admin) return 'Full access';
+  const keys = boardAccessGrantedKeys(b);
+  if (boardAccessMatchesTier(keys, BOARD_ACCESS_TIER_RESTRICTED)) return 'Restricted';
+  if (!keys.length) return 'Read-only';
+  if (boardAccessMatchesTier(keys, BOARD_ACCESS_TIER_OPERATION)) return 'Operation';
+  if (boardAccessMatchesTier(keys, BOARD_ACCESS_TIER_BASIC)) return 'Basic rights';
+  return `${keys.length} permission${keys.length === 1 ? '' : 's'}`;
+}
+
+function selectBoardMemberForAccess(id) {
+  boardAccessSelectedId = Number(id);
+  renderBoardAccessView();
+}
+
+function filterBoardAccessList(value) {
+  boardAccessFilter = value;
+  const list = document.querySelector('.board-access-member-list');
+  if (!list) {
+    renderBoardAccessView();
+    return;
   }
+  const filtered = boardAccessFilteredMembers();
+  const selected = BOARD_MEMBERS.find((b) => Number(b.id) === Number(boardAccessSelectedId)) || null;
+  list.innerHTML = filtered.length
+    ? filtered.map((b) => boardAccessMemberListItem(b, selected && Number(b.id) === Number(selected.id))).join('')
+    : `<div class="board-access-list-empty">${BOARD_MEMBERS.length ? 'No members match your search.' : 'No board logins yet.'}</div>`;
+}
+
+function boardPermToggleRow(id, def, b, canEdit) {
+  const key = def.key;
+  const checked = b.is_super_admin ? true : !!(b.perms && b.perms[key]);
+  const disabled = !canEdit || b.is_super_admin;
+  return `<label class="board-access-perm-row${checked ? ' is-on' : ''}">
+    <input type="checkbox" class="board-access-perm-input" id="perm_${id}_${key}" data-member="${id}" data-perm="${key}"
+      ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}
+      onchange="this.closest('.board-access-perm-row').classList.toggle('is-on', this.checked)">
+    <span class="board-access-perm-copy">
+      <span class="board-access-perm-label">${esc(def.label)}</span>
+      <span class="board-access-perm-desc">${esc(def.desc || '')}</span>
+    </span>
+  </label>`;
+}
+
+function renderBoardAccessDetailPanel(b, canManage) {
+  if (!b) {
+    return `<div class="board-access-detail-empty">
+      <div class="board-access-detail-empty-icon">🔐</div>
+      <h3>Select a board member</h3>
+      <p>Choose someone from the list to review status and grant individual permissions.</p>
+    </div>`;
+  }
+
+  const st = boardAccessStatusLabel(b);
+  const when = b.created_at ? String(b.created_at).replace('T', ' ').slice(0, 10) : '—';
   const isSelf = adminUser && Number(adminUser.id) === Number(b.id);
-  const canEdit = canManage && !isSelf;
-  return `<div class="board-perm-grid">
-    ${boardPermCheckbox(b.id, 'perm_notes', 'Notes + sync', b, false)}
-    ${boardPermCheckbox(b.id, 'perm_full_access', 'Full access', b, canEdit)}
-    ${boardPermCheckbox(b.id, 'perm_approve_operations', 'Ops approval', b, canEdit)}
-    ${boardPermCheckbox(b.id, 'perm_approve_payout', 'Payout approval', b, canEdit)}
-  </div>${canEdit ? `<button type="button" class="btn sm primary board-perm-save" onclick="saveBoardPermissions(${b.id})">Save</button>` : ''}`;
+  const canEditPerms = canManage && b.is_active && !b.is_super_admin && !isSelf;
+
+  let actions = '';
+  if (canManage && b.is_active && !isSelf) {
+    if (b.has_password) {
+      actions += `<button type="button" class="btn sm" onclick="resetBoardPassword(${b.id})">Reset password</button>`;
+    }
+    actions += `<button type="button" class="btn sm danger" onclick="deactivateBoardMember(${b.id})">Deactivate</button>`;
+  } else if (canManage && !b.is_active) {
+    actions = `<button type="button" class="btn sm primary" onclick="reactivateBoardMember(${b.id})">Re-invite</button>`;
+  }
+
+  const permGroups = b.is_super_admin
+    ? `<div class="board-access-super-note">
+        <span class="tracker-status paid"><span class="tracker-status-dot"></span>Super Admin</span>
+        <p>Full access to all areas. Managed via <code>BOARD_SUPER_ADMIN_EMAILS</code> in environment config — not editable here.</p>
+      </div>`
+    : !b.is_active || !b.has_password
+      ? `<div class="board-access-pending-note">
+          <p>${!b.has_password ? 'Pending first sign-in — they will create a password when they log in. You can pre-configure access below.' : 'Account deactivated. Re-invite to restore access.'}</p>
+        </div>
+        ${!b.is_active ? '' : BOARD_PERMISSION_GROUPS.map((group) => {
+          const items = group.keys.map((key) => boardPermissionDefByKey(key)).filter(Boolean);
+          if (!items.length) return '';
+          return `<section class="board-access-perm-group">
+            <h4 class="board-access-perm-group-title">${esc(group.title)}</h4>
+            <div class="board-access-perm-list">${items.map((d) => boardPermToggleRow(b.id, d, b, canEditPerms)).join('')}</div>
+          </section>`;
+        }).join('')}`
+      : BOARD_PERMISSION_GROUPS.map((group) => {
+          const items = group.keys.map((key) => boardPermissionDefByKey(key)).filter(Boolean);
+          if (!items.length) return '';
+          return `<section class="board-access-perm-group">
+            <h4 class="board-access-perm-group-title">${esc(group.title)}</h4>
+            <div class="board-access-perm-list">${items.map((d) => boardPermToggleRow(b.id, d, b, canEditPerms)).join('')}</div>
+          </section>`;
+        }).join('');
+
+  const presetBtns = canEditPerms ? `<div class="board-access-presets">
+    <span class="board-access-presets-label">Access tier:</span>
+    <button type="button" class="btn sm" onclick="applyBoardAccessPreset('restricted')">Restricted</button>
+    <button type="button" class="btn sm" onclick="applyBoardAccessPreset('readonly')">Read-only</button>
+    <button type="button" class="btn sm" onclick="applyBoardAccessPreset('basic')">Basic rights</button>
+    <button type="button" class="btn sm" onclick="applyBoardAccessPreset('operation')">Operation</button>
+    <button type="button" class="btn sm" onclick="applyBoardAccessPreset('approver')">Approver</button>
+    <span class="board-access-presets-hint">Restricted = read-only Members CRM. Read-only = view all sections except Security. Basic rights = view all + PayPal sync, board notes, contact messages. Operation = Basic + edit member records, reset PIN, approve PIN resets.</span>
+  </div>` : '';
+
+  const saveBtn = canEditPerms
+    ? `<button type="button" class="btn primary" id="boardPermSaveBtn" onclick="saveSelectedBoardPermissions()">Save access</button>`
+    : '';
+
+  const nameField = canManage && !b.is_super_admin
+    ? `<div class="board-access-name-row">
+        <label class="board-access-name-label" for="boardAccessName">Board display name</label>
+        <input type="text" class="field-input board-access-name-input" id="boardAccessName" value="${esc(b.display_name || '')}" placeholder="Shown in Access Management only">
+        <span class="board-access-name-hint">${b.member_number != null ? `Linked to CRM #${esc(String(b.member_number))} — ` : ''}Member names are edited in <strong>Members CRM</strong>, not here.</span>
+      </div>`
+    : '';
+
+  return `<div class="board-access-detail">
+    <header class="board-access-detail-head">
+      <div>
+        <h3 class="board-access-detail-email">${esc(boardMemberPrimaryLabel(b))}${isSelf ? ' <span class="board-access-you-tag">You</span>' : ''}</h3>
+        <div class="board-access-detail-meta">
+          <span class="tracker-status ${st.cls}"><span class="tracker-status-dot"></span>${st.text}</span>
+          ${b.member_number != null ? `<span>Member #${esc(String(b.member_number))}</span>` : ''}
+          ${String(b.role || '').toLowerCase() === 'advisor' ? '<span>Advisor</span>' : ''}
+          <span>Joined ${when}</span>
+          <span>${esc(boardAccessGrantedSummary(b))}</span>
+        </div>
+      </div>
+      <div class="board-access-detail-actions">${actions}</div>
+    </header>
+    ${nameField}
+    ${presetBtns}
+    <div class="board-access-detail-body">${permGroups}</div>
+    ${saveBtn ? `<footer class="board-access-detail-foot">${saveBtn}</footer>` : ''}
+  </div>`;
+}
+
+function applyBoardAccessPreset(preset) {
+  const b = BOARD_MEMBERS.find((x) => Number(x.id) === Number(boardAccessSelectedId));
+  if (!b) return;
+  const defs = boardPermissionDefs();
+  const set = {};
+  for (const d of defs) set[d.key] = false;
+  if (preset === 'restricted') {
+    for (const key of BOARD_ACCESS_TIER_RESTRICTED) set[key] = true;
+  } else if (preset === 'basic' || preset === 'notes') {
+    for (const key of BOARD_ACCESS_TIER_BASIC) set[key] = true;
+  } else if (preset === 'operation') {
+    for (const key of BOARD_ACCESS_TIER_OPERATION) set[key] = true;
+  } else if (preset === 'approver') {
+    for (const d of defs) set[d.key] = true;
+    set.edit_members = false;
+    set.reset_pin = false;
+    set.announce = false;
+    set.payout_manage = false;
+  }
+  for (const d of defs) {
+    const el = document.getElementById(`perm_${b.id}_${d.key}`);
+    if (el && !el.disabled) {
+      el.checked = !!set[d.key];
+      el.closest('.board-access-perm-row')?.classList.toggle('is-on', el.checked);
+    }
+  }
+}
+
+function syncBoardAccessSelection() {
+  if (!BOARD_MEMBERS.length) {
+    boardAccessSelectedId = null;
+    return;
+  }
+  const found = BOARD_MEMBERS.some((b) => Number(b.id) === Number(boardAccessSelectedId));
+  if (!found) {
+    const preferred = BOARD_MEMBERS.find((b) => b.is_active) || BOARD_MEMBERS[0];
+    boardAccessSelectedId = preferred ? Number(preferred.id) : null;
+  }
+}
+
+function boardMemberPrimaryLabel(b) {
+  const name = (b?.display_name || '').trim();
+  const num = b?.member_number != null ? Number(b.member_number) : null;
+  if (num && name) return `#${num} ${name}`;
+  if (name) return name;
+  return b?.email || 'Board member';
+}
+
+function boardAccessFilteredMembers() {
+  const q = boardAccessFilter.trim().toLowerCase();
+  if (!q) return BOARD_MEMBERS.slice().sort(boardAccessMemberSort);
+  return BOARD_MEMBERS.filter((b) => {
+    const logins = Array.isArray(b.login_emails) && b.login_emails.length
+      ? b.login_emails
+      : (b.email ? [b.email] : []);
+    const hay = [
+      b.email,
+      b.display_name,
+      ...logins,
+      b.member_number != null ? `#${b.member_number}` : '',
+      b.member_number != null ? String(b.member_number) : '',
+    ].join(' ').toLowerCase();
+    return hay.includes(q);
+  }).sort(boardAccessMemberSort);
+}
+
+function boardAccessMemberSort(a, b) {
+  const an = a.member_number != null ? Number(a.member_number) : 999999;
+  const bn = b.member_number != null ? Number(b.member_number) : 999999;
+  if (an !== bn) return an - bn;
+  return String(a.email || '').localeCompare(String(b.email || ''));
+}
+
+function boardAccessMemberListItem(b, selected) {
+  const st = boardAccessStatusLabel(b);
+  const summary = boardAccessGrantedSummary(b);
+  const isSelf = adminUser && Number(adminUser.id) === Number(b.id);
+  const primary = boardMemberPrimaryLabel(b);
+  return `<button type="button" class="board-access-member-item${selected ? ' is-selected' : ''}"
+    onclick="selectBoardMemberForAccess(${b.id})">
+    <span class="board-access-member-main">
+      <span class="board-access-member-email">${esc(primary)}${isSelf ? ' <span class="board-access-you-tag">You</span>' : ''}</span>
+      <span class="board-access-member-summary">${esc(summary)}</span>
+    </span>
+    <span class="tracker-status ${st.cls} sm"><span class="tracker-status-dot"></span>${st.text}</span>
+  </button>`;
+}
+
+function boardPermissionDefs() {
+  return BOARD_PERMISSION_DEFS.length ? BOARD_PERMISSION_DEFS : FALLBACK_PERMISSION_DEFS;
 }
 
 async function fetchMonitorHealth() {
@@ -5384,13 +5742,13 @@ function qaCheckStatusClass(status) {
 }
 
 function renderDemoQaResetButtonHtml() {
-  if (!MONITOR_HEALTH?.demo?.enabled) return '';
+  if (!adminIsSuperAdmin() || !MONITOR_HEALTH?.demo?.enabled) return '';
   return `<button type="button" class="btn secondary mh-step-btn" onclick="monitorHealthResetDemo()">Reset demo cycle</button>`;
 }
 
 function renderMonitorHealthDashboardPanel(d) {
   const healthCards = (d.health || []).map(h => {
-    const testEmailBtn = h.id === 'sendgrid' && h.status === 'pass' && d.demo?.email_full
+    const testEmailBtn = h.id === 'sendgrid' && h.status === 'pass' && d.demo?.email_full && adminIsSuperAdmin()
       ? `<button type="button" class="btn secondary mh-step-btn mh-health-action" onclick="monitorHealthTestNotify()">Send test email</button>`
       : '';
     return `
@@ -5446,11 +5804,11 @@ function renderMonitorHealthTestPanel(d) {
         : '';
       const actions = [];
       if (step.action === 'reset' || step.id === 'ONB-08') {
-        if (d.demo?.enabled) {
+        if (adminIsSuperAdmin() && d.demo?.enabled) {
           actions.push(`<button type="button" class="btn secondary mh-step-btn" onclick="monitorHealthResetDemo()">Reset demo cycle</button>`);
         }
       } else if (step.action === 'test_notify' || step.id === 'NTF-01') {
-        if (d.demo?.email_full) {
+        if (adminIsSuperAdmin() && d.demo?.email_full) {
           actions.push(`<button type="button" class="btn primary mh-step-btn" onclick="monitorHealthTestNotify()">Send test email</button>`);
         }
       } else if (step.link && step.mode !== 'planned' && step.can_test !== false) {
@@ -5458,7 +5816,7 @@ function renderMonitorHealthTestPanel(d) {
       } else if (step.link && step.mode !== 'planned') {
         actions.push(`<span class="mh-step-blocked">Complete prerequisites above first</span>`);
       }
-      if (step.id === 'EVT-01') {
+      if (step.id === 'EVT-01' && adminCanSyncPaypal()) {
         actions.push(`<button type="button" class="btn secondary mh-step-btn" onclick="monitorHealthSyncPayPal()">Sync PayPal</button>`);
       }
       if (step.mode !== 'planned') {
@@ -5540,74 +5898,105 @@ function applyAdminRouteFromUrl() {
   let hash = (location.hash || '').replace(/^#/, '').trim();
   if (hash === 'monitor-health' || hash === 'system-health') hash = 'health-dashboard';
   if (!hash) return;
-  const valid = ['members', 'invoices', 'applications', 'receipts', 'messages', 'events', 'payouts', 'health-dashboard', 'qa-testing'];
-  if (adminIsSuperAdmin()) valid.push('board-access', 'activity');
+  const valid = ['members', 'invoices', 'applications', 'receipts', 'messages', 'events', 'payouts', 'announcement', 'health-dashboard', 'qa-testing'];
+  if (adminIsSuperAdmin()) valid.push(...SECURITY_ADMIN_VIEWS);
+  if (adminIsRestrictedMembersOnly()) {
+    if (hash === 'members') switchView(hash);
+    return;
+  }
   if (valid.includes(hash)) switchView(hash);
+  else if (isSecurityAdminView(hash)) guardSuperAdminView(hash);
 }
 
 function renderBoardAccessView() {
   const stats = getStats();
   const canManage = adminCanManageBoard();
-  const rows = BOARD_MEMBERS.length ? BOARD_MEMBERS.map(b => {
-    const st = boardAccessStatusLabel(b);
-    const when = b.created_at ? String(b.created_at).replace('T', ' ').slice(0, 10) : '—';
-    const isSelf = adminUser && Number(adminUser.id) === Number(b.id);
-    let actions = '';
-    if (b.is_active) {
-      if (canManage && b.has_password && !isSelf) {
-        actions += `<button type="button" class="btn sm" onclick="resetBoardPassword(${b.id})">Reset password</button> `;
-      }
-      if (canManage && !isSelf) {
-        actions += `<button type="button" class="btn sm danger" onclick="deactivateBoardMember(${b.id})">Deactivate</button>`;
-      } else if (isSelf) {
-        actions += '<span class="tracker-member-email">You</span>';
-      }
-    } else if (canManage) {
-      actions = `<button type="button" class="btn sm primary" onclick="reactivateBoardMember(${b.id})">Re-invite</button>`;
-    }
-    return `<tr class="data-row">
-      <td><div class="tracker-member-name">${esc(b.email)}</div>${b.is_super_admin ? '<div class="tracker-member-email">Super Admin</div>' : ''}</td>
-      <td><span class="tracker-status ${st.cls}"><span class="tracker-status-dot"></span>${st.text}</span></td>
-      <td class="board-perm-cell">${boardPermissionsRowHtml(b, canManage)}</td>
-      <td><span class="tracker-date">${when}</span></td>
-      <td class="tracker-actions">${actions}</td>
-    </tr>`;
-  }).join('') : '';
+  syncBoardAccessSelection();
 
-  document.getElementById('mainArea').innerHTML = `
-    ${trackerHeaderHtml(stats)}
-    <div class="tracker-banner tracker-intro-banner">Everyone can <strong>read</strong> the admin. Super admins grant: <strong>Notes + PayPal sync</strong> (default), <strong>Full access</strong> (edit records), <strong>Ops approval</strong> (invoices, applications, receipts), and <strong>Payout approval</strong>. Super admins are set via <code>BOARD_SUPER_ADMIN_EMAILS</code> in environment config.</div>
-    ${canManage ? `<div class="board-access-invite">
+  const filtered = boardAccessFilteredMembers();
+  const selected = BOARD_MEMBERS.find((b) => Number(b.id) === Number(boardAccessSelectedId)) || null;
+  const listHtml = filtered.length
+    ? filtered.map((b) => boardAccessMemberListItem(b, selected && Number(b.id) === Number(selected.id))).join('')
+    : `<div class="board-access-list-empty">${BOARD_MEMBERS.length ? 'No members match your search.' : 'No board logins yet.'}</div>`;
+
+  const inviteBlock = canManage ? `<div class="board-access-invite">
       <label class="admin-login-label" for="boardInviteEmail">Invite board member</label>
       <div class="board-access-invite-row">
         <input type="email" class="field-input" id="boardInviteEmail" placeholder="name@example.com"
           onkeydown="if(event.key==='Enter')inviteBoardMember()">
-        <button type="button" class="btn primary" onclick="inviteBoardMember()">Add Email</button>
+        <button type="button" class="btn primary" onclick="inviteBoardMember()">Add email</button>
       </div>
       <div class="board-access-invite-msg" id="boardInviteMsg"></div>
-    </div>` : '<div class="tracker-banner" role="status">Only super admins can invite board members or change permissions.</div>'}
-    <div class="tracker-table-wrap">
-      ${BOARD_MEMBERS.length ? `<table class="tracker-table board-access-table">
-        <thead><tr><th>Email</th><th>Status</th><th>Permissions</th><th>Added</th><th></th></tr></thead>
-        <tbody>${rows}</tbody>
-      </table>` : '<div class="tracker-empty">No board logins yet. Add an email above — they will set their password when they first sign in.</div>'}
+    </div>` : '';
+
+  document.getElementById('mainArea').innerHTML = `
+    ${trackerHeaderHtml(stats)}
+    <div class="tracker-banner tracker-intro-banner">Select a board member and set their access tier. <strong>Restricted</strong> = read-only Members CRM. <strong>Read-only</strong> can view everything except Security. <strong>Basic rights</strong> adds PayPal sync, board notes, and contact messages. <strong>Operation</strong> adds edit member records + reset/approve PIN resets.</div>
+    ${inviteBlock || '<div class="tracker-banner" role="status">Only super admins can invite board members or change permissions.</div>'}
+    <div class="board-access-shell">
+      <aside class="board-access-list-panel">
+        <div class="board-access-list-head">
+          <h3 class="board-access-list-title">Board members</h3>
+          <span class="board-access-list-count">${BOARD_MEMBERS.length}</span>
+        </div>
+        <input type="search" class="field-input board-access-search" id="boardAccessSearch" placeholder="Search by name or #…"
+          value="${esc(boardAccessFilter)}"
+          oninput="filterBoardAccessList(this.value)">
+        <div class="board-access-member-list">${listHtml}</div>
+      </aside>
+      <div class="board-access-detail-panel">
+        ${renderBoardAccessDetailPanel(selected, canManage)}
+      </div>
     </div>`;
 }
 
+function collectBoardPermissionBody(id) {
+  const body = {};
+  for (const def of boardPermissionDefs()) {
+    const el = document.getElementById(`perm_${id}_${def.key}`);
+    body[def.key] = el ? el.checked === true : false;
+  }
+  return body;
+}
+
 async function saveBoardPermissions(id) {
-  const keys = ['perm_full_access', 'perm_approve_operations', 'perm_approve_payout'];
-  const body = { perm_notes: true };
-  keys.forEach((key) => {
-    const el = document.getElementById(`perm_${id}_${key}`);
-    body[key] = el ? el.checked === true : false;
-  });
+  const body = collectBoardPermissionBody(id);
+  const nameEl = document.getElementById('boardAccessName');
+  if (nameEl) {
+    body.display_name = String(nameEl.value || '').trim();
+  }
+  await apiPost('auth/admin/board-members/' + id + '/permissions', body);
+}
+
+async function saveSelectedBoardPermissions() {
+  const id = boardAccessSelectedId;
+  if (!id) {
+    showAdminToast('Select a board member first.', 'info');
+    return;
+  }
+  const b = BOARD_MEMBERS.find((x) => Number(x.id) === Number(id));
+  if (!b || b.is_super_admin || !adminCanManageBoard()) return;
+  if (adminUser && Number(adminUser.id) === Number(b.id)) {
+    showAdminToast('You cannot change your own permissions.', 'info');
+    return;
+  }
+  const btn = document.getElementById('boardPermSaveBtn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+  }
   try {
-    await apiPost('auth/admin/board-members/' + id + '/permissions', body);
-    showAdminToast('Permissions saved.', 'ok');
+    await saveBoardPermissions(id);
+    showAdminToast(`Access updated for ${boardMemberPrimaryLabel(BOARD_MEMBERS.find((x) => Number(x.id) === Number(id)) || b)}.`, 'ok');
     await fetchBoardMembers();
+    boardAccessSelectedId = Number(id);
     renderBoardAccessView();
   } catch (e) {
-    showAdminToast(e.message || 'Could not save permissions.', 'error');
+    showAdminToast(e.message || 'Could not save access.', 'error');
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Save access';
+    }
   }
 }
 
@@ -5625,6 +6014,8 @@ async function inviteBoardMember() {
     if (input) input.value = '';
     if (msg) { msg.textContent = res.message || 'Invited.'; msg.className = 'board-access-invite-msg ok'; }
     await fetchBoardMembers();
+    const invited = BOARD_MEMBERS.find((b) => String(b.email || '').toLowerCase() === email.toLowerCase());
+    if (invited) boardAccessSelectedId = Number(invited.id);
     renderBoardAccessView();
     showAdminToast(res.message || 'Board member invited.', 'ok');
   } catch (e) {
@@ -5676,15 +6067,21 @@ async function resetBoardPassword(id) {
 
 function syncMemberModalWriteAccess() {
   const full = adminCanWriteAll();
+  const notes = adminCanWriteNotes();
   const pinBtn = document.querySelector('#memberModal .modal-footer .btn.danger');
   const saveBtn = document.querySelector('#memberModal .modal-footer .btn.primary');
-  if (pinBtn) pinBtn.style.display = full ? '' : 'none';
-  if (saveBtn) saveBtn.textContent = full ? 'Save Changes' : 'Save Notes';
+  if (pinBtn) pinBtn.style.display = adminHasPerm('reset_pin') ? '' : 'none';
+  if (saveBtn) {
+    saveBtn.style.display = full || notes ? '' : 'none';
+    saveBtn.textContent = full ? 'Save Changes' : 'Save Notes';
+  }
 }
 
 function syncApplicationModalWriteAccess() {
   const full = adminCanWriteAll();
   const ops = adminCanApproveOperations();
+  const notes = adminCanWriteNotes();
+  const review = adminCanReviewApplications();
   const rejectBtn = document.querySelector('#applicationModal .modal-footer .btn.danger');
   const approveBtn = document.getElementById('appApproveBtn');
   const markPaidBtn = document.getElementById('appMarkPaidBtn');
@@ -5692,15 +6089,19 @@ function syncApplicationModalWriteAccess() {
   if (rejectBtn) rejectBtn.style.display = ops ? '' : 'none';
   if (approveBtn && !ops) approveBtn.style.display = 'none';
   if (markPaidBtn && !ops) markPaidBtn.style.display = 'none';
-  if (saveBtn) saveBtn.textContent = full ? 'Save Review' : 'Save Notes';
+  if (saveBtn) {
+    saveBtn.style.display = full || notes || review ? '' : 'none';
+    saveBtn.textContent = full || review ? 'Save Review' : 'Save Notes';
+  }
   ['chk_name_match', 'chk_fields_complete', 'chk_id_uploaded'].forEach((id) => {
     const el = document.getElementById(id);
-    if (el) el.disabled = !full;
+    if (el) el.disabled = !(full || review);
   });
 }
 
 function syncPayoutModalWriteAccess() {
   const full = adminCanWriteAll();
+  const notes = adminCanWriteNotes();
   const payout = adminCanApprovePayout();
   const holdBtn = document.querySelector('#payoutModal .modal-footer .btn.danger');
   const saveBtn = document.querySelector('#payoutModal .modal-footer .btn:not(.danger):not(.primary)');
@@ -5709,7 +6110,10 @@ function syncPayoutModalWriteAccess() {
   if (holdBtn) holdBtn.style.display = full ? '' : 'none';
   if (approveBtn) approveBtn.style.display = payout ? approveBtn.style.display : 'none';
   if (paidBtn) paidBtn.style.display = payout ? paidBtn.style.display : 'none';
-  if (saveBtn) saveBtn.textContent = full ? 'Save' : 'Save Notes';
+  if (saveBtn) {
+    saveBtn.style.display = full || notes ? '' : 'none';
+    saveBtn.textContent = full ? 'Save' : 'Save Notes';
+  }
   document.querySelectorAll('#payoutModalBody input:not(#payoutNotes), #payoutModalBody select, #payoutModalBody textarea:not(#payoutNotes)').forEach((el) => {
     if (el.id === 'payoutNotes') return;
     el.readOnly = !full;
@@ -5720,9 +6124,7 @@ function syncPayoutModalWriteAccess() {
 }
 
 function render() {
-  if ((currentView === 'board-access' || currentView === 'activity') && !adminIsSuperAdmin()) {
-    currentView = 'members';
-  }
+  redirectSecurityViewIfNeeded();
   updateSidebar();
   if (currentView === 'events') renderEventsView();
   else if (currentView === 'announcement') renderAnnouncementView();
@@ -5847,10 +6249,11 @@ async function openMemberDetail(id, options = {}) {
     console.warn('Member detail load:', e.message || e);
   }
   const names = memberDisplayNames(m);
+  const spouse = memberSpouseName(m);
   const unpaidCount = getUnpaidInvoicesForMember(m).length;
   const tab = memberDetailTab;
   document.getElementById('modalMemberName').textContent = names.paypal || 'Member';
-  document.getElementById('modalMemberSub').textContent = `Member #${m.member_number || m.id}${names.household ? ' · ' + names.household : ''}`;
+  document.getElementById('modalMemberSub').textContent = `Member #${m.member_number || m.id}${spouse ? ' · Spouse: ' + spouse : ''}`;
   document.getElementById('modalMemberBody').innerHTML = `
     <nav class="tracker-tabs member-detail-tabs">
       <button type="button" class="tracker-tab member-detail-tab${tab === 'profile' ? ' active' : ''}" data-tab="profile" onclick="switchMemberDetailTab('profile')">Profile</button>
@@ -5901,20 +6304,29 @@ async function loadMemberJourney(memberId) {
 
 async function saveMemberEdit() {
   if (!editingMemberId) return;
+  if (!adminCanWriteAll() && !adminCanWriteNotes()) {
+    showAdminToast('You have view-only access for member records.', 'warn');
+    return;
+  }
   const updated = adminCanWriteAll()
-    ? {
-      id: editingMemberId,
-      first: document.getElementById('ef_first').value,
-      last: document.getElementById('ef_last').value,
-      full_name: document.getElementById('ef_full_name').value,
-      paypal_name: document.getElementById('ef_paypal_name').value,
-      email: document.getElementById('ef_email').value,
-      mobile: document.getElementById('ef_mobile').value,
-      home: document.getElementById('ef_home').value,
-      address: document.getElementById('ef_address').value,
-      notes: readBoardNotesField('ef_notes', memberNotesBaseline),
-      application_drive_url: document.getElementById('ef_application_drive_url')?.value?.trim() || '',
-    }
+    ? (() => {
+      const paypal = String(document.getElementById('ef_paypal_name').value || '').trim();
+      const spouse = String(document.getElementById('ef_spouse_name').value || '').trim();
+      return {
+        id: editingMemberId,
+        first: document.getElementById('ef_first').value,
+        last: document.getElementById('ef_last').value,
+        full_name: spouse ? `${paypal}/${spouse}` : paypal,
+        spouse_name: spouse,
+        paypal_name: paypal,
+        email: document.getElementById('ef_email').value,
+        mobile: document.getElementById('ef_mobile').value,
+        home: document.getElementById('ef_home').value,
+        address: document.getElementById('ef_address').value,
+        notes: readBoardNotesField('ef_notes', memberNotesBaseline),
+        application_drive_url: document.getElementById('ef_application_drive_url')?.value?.trim() || '',
+      };
+    })()
     : {
       id: editingMemberId,
       notes: readBoardNotesField('ef_notes', memberNotesBaseline),
@@ -6145,10 +6557,11 @@ async function bootAdmin() {
     document.getElementById('mainArea').innerHTML = `<div class="tracker-banner" role="alert">${esc(adminDataError)}</div>`;
   }
   applyAdminRouteFromUrl();
+  window.addEventListener('hashchange', () => applyAdminRouteFromUrl());
   if (adminBackgroundFetch) adminBackgroundFetch = null;
   adminBackgroundFetch = Promise.all([
     fetchAdminSecondary(),
-    fetchAllInvoicesQuiet(),
+    adminIsRestrictedMembersOnly() ? Promise.resolve() : fetchAllInvoicesQuiet(),
   ]).then(() => {
     if (INVOICES.length && MEMBERS.length) {
       rebuildInvoiceMemberMap();
@@ -6179,6 +6592,12 @@ async function init() {
       email: 'dev',
       role: 'admin',
       is_super_admin: true,
+      perms: Object.fromEntries([
+        'board_notes','sync_paypal','edit_members','reset_pin','announce',
+        'waiting_list_invite','waiting_list_remove','applications_review','applications_approve',
+        'mark_paid','receipts','pin_reset_approve','beneficiary','messages',
+        'payout_manage','payout_approve','payout_mark_paid',
+      ].map((k) => [k, true])),
       can_write_all: true,
       can_write_notes: true,
       can_sync_paypal: true,

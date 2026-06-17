@@ -8,7 +8,9 @@ const {
   loadBoardMemberAccess,
   assertCanWriteAll,
   assertCanApprovePayout,
+  assertPerm,
   assertNotesOnlyUpdate,
+  hasPerm,
 } = require('./board-permissions');
 const { stampBoardNote, mergeBoardNotes } = require('./board-notes');
 
@@ -308,7 +310,10 @@ async function updatePayout(id, body, actor, access) {
   if (!existing.rows[0]) return json(404, { error: 'Payout case not found.' });
   const row = existing.rows[0];
 
-  if (!access?.canWriteAll) {
+  if (!hasPerm(access, 'payout_manage')) {
+    if (!hasPerm(access, 'board_notes')) {
+      return json(403, { error: 'You do not have permission to update payout cases.' });
+    }
     const notesErr = assertNotesOnlyUpdate(body, ['notes']);
     if (notesErr) return json(notesErr === 'Nothing to save.' ? 400 : 403, { error: notesErr });
     const merged = mergeBoardNotes(row.notes, body.notes, actor?.actor_label || 'Board');
@@ -550,7 +555,7 @@ exports.handler = async (event) => {
       return await getPayout(route.id, true);
     }
     if (event.httpMethod === 'POST' && route.isRoot) {
-      const denied = assertCanWriteAll(access);
+      const denied = assertPerm(access, 'payout_manage');
       if (denied) return json(403, { error: denied });
       return await createPayout(parseBody(event), actor);
     }
@@ -558,12 +563,12 @@ exports.handler = async (event) => {
       return await updatePayout(route.id, parseBody(event), actor, access);
     }
     if (event.httpMethod === 'POST' && route.id && route.action === 'approve') {
-      const denied = assertCanApprovePayout(access);
+      const denied = assertPerm(access, 'payout_approve', 'You do not have approval permission for payouts.');
       if (denied) return json(403, { error: denied });
       return await approvePayout(route.id, actor, admin);
     }
     if (event.httpMethod === 'POST' && route.id && route.action === 'mark-paid') {
-      const denied = assertCanApprovePayout(access);
+      const denied = assertPerm(access, 'payout_mark_paid', 'You do not have permission to mark payouts as paid.');
       if (denied) return json(403, { error: denied });
       return await markPayoutPaid(route.id, parseBody(event), actor);
     }
