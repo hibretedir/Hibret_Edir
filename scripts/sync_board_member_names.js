@@ -2,6 +2,7 @@
  * Link board_members to CRM members (member_id only) and merge login email aliases.
  * Never writes to the members (CRM) table.
  *
+ * Roster is keyed by CRM member_number — no super-admin emails in source (Netlify secrets scan).
  * display_name is set from the roster only when empty — Access Management edits are kept.
  *
  * Usage:
@@ -12,15 +13,15 @@
 require('dotenv').config();
 const { Client } = require('pg');
 
-/** Primary login email → CRM member_number + board display name (no spouse names). */
+/** CRM member_number → board display name (no spouse names). */
 const BOARD_ROSTER = [
-  { email: 'afbiru9@gmail.com', member_number: 1, display_name: 'Alemu Biru' },
-  { email: 'babimuli@gmail.com', member_number: 6, display_name: 'Betelhem Mulugeta', aliases: ['lily_mulugeta@yahoo.com', 'babimuli@yahoo.com'] },
-  { email: 'eteshome@ucla.edu', member_number: 14, display_name: 'Elizabeth Teshome' },
-  { email: 'emebetb@aol.com', member_number: 66, display_name: 'Emebeth Hibret Edir' },
-  { email: 'lulsegedg@sbcglobal.net', member_number: 96, display_name: 'Genene Hibret Edir', aliases: ['lulsegedge@gmail.com'] },
-  { email: 'emugela5@yahoo.com', member_number: 11, display_name: 'Tsehaye Mogus', role: 'advisor', aliases: ['tsehay@usc.edu'] },
-  { email: 'jaklilu@gmail.com', member_number: 52, display_name: 'Behailu Aklilu' },
+  { member_number: 1, display_name: 'Alemu Biru' },
+  { member_number: 6, display_name: 'Betelhem Mulugeta', aliases: ['lily_mulugeta@yahoo.com', 'babimuli@yahoo.com'] },
+  { member_number: 14, display_name: 'Elizabeth Teshome' },
+  { member_number: 66, display_name: 'Emebeth Hibret Edir' },
+  { member_number: 96, display_name: 'Genene Hibret Edir', aliases: ['lulsegedge@gmail.com'] },
+  { member_number: 11, display_name: 'Tsehaye Mogus', role: 'advisor', aliases: ['tsehay@usc.edu'] },
+  { member_number: 52, display_name: 'Behailu Aklilu' },
 ];
 
 const apply = process.argv.includes('--apply');
@@ -28,6 +29,41 @@ const forceNames = process.argv.includes('--force-names');
 
 function normEmail(email) {
   return String(email || '').trim().toLowerCase();
+}
+
+async function findBoardForMemberNumber(client, memberNumber) {
+  const linked = await client.query(
+    `SELECT bm.id, bm.email, bm.display_name, bm.member_id
+     FROM board_members bm
+     JOIN members m ON m.id = bm.member_id
+     WHERE m.member_number = $1
+     LIMIT 1`,
+    [memberNumber]
+  );
+  if (linked.rows[0]) return linked.rows[0];
+
+  const byPrimaryEmail = await client.query(
+    `SELECT bm.id, bm.email, bm.display_name, bm.member_id
+     FROM board_members bm
+     WHERE LOWER(bm.email) IN (
+       SELECT LOWER(email) FROM members WHERE member_number = $1 AND email IS NOT NULL AND TRIM(email) <> ''
+     )
+     LIMIT 1`,
+    [memberNumber]
+  );
+  if (byPrimaryEmail.rows[0]) return byPrimaryEmail.rows[0];
+
+  const byAliasEmail = await client.query(
+    `SELECT bm.id, bm.email, bm.display_name, bm.member_id
+     FROM board_members bm
+     JOIN board_member_emails bme ON bme.board_member_id = bm.id
+     WHERE LOWER(bme.email) IN (
+       SELECT LOWER(email) FROM members WHERE member_number = $1 AND email IS NOT NULL AND TRIM(email) <> ''
+     )
+     LIMIT 1`,
+    [memberNumber]
+  );
+  return byAliasEmail.rows[0] || null;
 }
 
 async function ensureEmailAlias(client, boardMemberId, email, { isPrimary = false } = {}) {
@@ -59,7 +95,7 @@ async function mergeDuplicateBoardAccount(client, primaryId, aliasEmail) {
     await ensureEmailAlias(client, primaryId, norm, { isPrimary: false });
     return;
   }
-  console.log(`${apply ? 'MERGE' : 'WOULD MERGE'} board#${dup.id} ${dup.email} into board#${primaryId} as alias`);
+  console.log(`${apply ? 'MERGE' : 'WOULD MERGE'} board#${dup.id} into board#${primaryId} as alias`);
   if (!apply) {
     await ensureEmailAlias(client, primaryId, norm, { isPrimary: false });
     return;
@@ -85,9 +121,8 @@ async function main() {
 
   let updated = 0;
   for (const entry of BOARD_ROSTER) {
-    const email = normEmail(entry.email);
     const mRes = await client.query(
-      `SELECT id, member_number, full_name FROM members WHERE member_number = $1 LIMIT 1`,
+      `SELECT id, member_number, full_name, email FROM members WHERE member_number = $1 LIMIT 1`,
       [entry.member_number]
     );
     const member = mRes.rows[0];
@@ -95,13 +130,9 @@ async function main() {
       console.warn(`CRM member #${entry.member_number} not found`);
       continue;
     }
-    const bRes = await client.query(
-      `SELECT id, email, display_name, member_id FROM board_members WHERE LOWER(email) = $1 LIMIT 1`,
-      [email]
-    );
-    const board = bRes.rows[0];
+    const board = await findBoardForMemberNumber(client, entry.member_number);
     if (!board) {
-      console.warn(`Board login not found for ${email} (${entry.display_name})`);
+      console.warn(`Board login not found for CRM #${entry.member_number} (${entry.display_name})`);
       continue;
     }
     const displayName = String(entry.display_name || '').trim();
@@ -110,32 +141,40 @@ async function main() {
     const needsDisplayName = forceNames
       ? board.display_name !== displayName
       : !hasDisplayName && !!displayName;
-    const needs = needsLink || needsDisplayName;
+    const needsRole = entry.role && board.role !== entry.role;
+    const needs = needsLink || needsDisplayName || needsRole;
     if (needs) {
       const action = [
         needsLink ? 'link' : null,
         needsDisplayName ? (forceNames ? 'rename' : 'seed name') : null,
+        needsRole ? `role=${entry.role}` : null,
       ].filter(Boolean).join(' + ');
-      console.log(`${apply ? 'UPDATE' : 'WOULD'} (${action}) #${member.member_number} → board#${board.id} ${board.email}${needsDisplayName ? ` name="${displayName}"` : ''}`);
+      console.log(`${apply ? 'UPDATE' : 'WOULD'} (${action}) #${member.member_number} → board#${board.id}${needsDisplayName ? ` name="${displayName}"` : ''}`);
       if (apply) {
-        if (needsDisplayName) {
-          await client.query(
-            `UPDATE board_members SET member_id = $1, display_name = $2 WHERE id = $3`,
-            [member.id, displayName, board.id]
-          );
-        } else {
-          await client.query(
-            `UPDATE board_members SET member_id = $1 WHERE id = $2`,
-            [member.id, board.id]
-          );
-        }
+        await client.query(
+          `UPDATE board_members
+           SET member_id = $1,
+               display_name = CASE WHEN $2::boolean THEN $3 ELSE display_name END,
+               role = COALESCE($4, role)
+           WHERE id = $5`,
+          [
+            member.id,
+            needsDisplayName,
+            displayName,
+            needsRole ? entry.role : null,
+            board.id,
+          ]
+        );
         updated += 1;
       }
     } else {
-      console.log(`OK  #${member.member_number} → ${board.email}${hasDisplayName ? ` (display: ${board.display_name})` : ''}`);
+      console.log(`OK  #${member.member_number} → board#${board.id}${hasDisplayName ? ` (display: ${board.display_name})` : ''}`);
     }
 
-    await ensureEmailAlias(client, board.id, email, { isPrimary: true });
+    const primaryEmail = normEmail(board.email) || normEmail(member.email);
+    if (primaryEmail) {
+      await ensureEmailAlias(client, board.id, primaryEmail, { isPrimary: true });
+    }
     for (const alias of entry.aliases || []) {
       await mergeDuplicateBoardAccount(client, board.id, alias);
     }
