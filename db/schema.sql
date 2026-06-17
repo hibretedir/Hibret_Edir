@@ -362,6 +362,38 @@ CREATE INDEX IF NOT EXISTS idx_invoice_mark_paid_status ON invoice_mark_paid_req
 CREATE UNIQUE INDEX IF NOT EXISTS idx_invoice_mark_paid_pending_unique
   ON invoice_mark_paid_requests(invoice_id) WHERE status = 'Pending';
 
+-- Public memorial announcements when no member collection (no PayPal funeral event)
+CREATE TABLE IF NOT EXISTS memorial_announcements (
+  id SERIAL PRIMARY KEY,
+  member_id INTEGER REFERENCES members(id),
+  deceased_name VARCHAR(200) NOT NULL,
+  deceased_relationship VARCHAR(100),
+  notes TEXT NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'Active',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_memorial_announcements_status
+  ON memorial_announcements(status, updated_at DESC);
+
+-- Saved church / funeral venues for announcement intake dropdowns
+CREATE TABLE IF NOT EXISTS announcement_service_venues (
+  id SERIAL PRIMARY KEY,
+  service_type VARCHAR(20) NOT NULL,
+  venue VARCHAR(200) NOT NULL,
+  address TEXT NOT NULL DEFAULT '',
+  use_count INTEGER NOT NULL DEFAULT 1,
+  last_used_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_ann_service_venues_unique
+  ON announcement_service_venues(service_type, venue, address);
+
+CREATE INDEX IF NOT EXISTS idx_ann_service_venues_type
+  ON announcement_service_venues(service_type, last_used_at DESC);
+
 -- Website / contact form messages (board inbox)
 CREATE TABLE IF NOT EXISTS contact_messages (
   id SERIAL PRIMARY KEY,

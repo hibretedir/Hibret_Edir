@@ -6,7 +6,7 @@
 <title>Hibret Edir Association — Ethiopian Mutual Assistance</title>
 <link rel="stylesheet" href="/css/hibret.css?v=nav1">
 <link rel="stylesheet" href="/css/compat.css?v=nav1">
-<link rel="stylesheet" href="/css/public-pages.css?v=pubfix20">
+<link rel="stylesheet" href="/css/public-pages.css?v=pubfix24">
 </head>
 <body class="site-public">
 
@@ -29,7 +29,9 @@
       <a href="#" class="nav-home" onclick="return goSection('home')"><span class="en">Home</span><span class="am">መነሻ</span></a>
       <a href="/portal/" class="nav-login"><span class="en">Member Login</span><span class="am">አባል መግቢያ</span></a>
     </div>
-    <button class="nav-ham" id="hamBtn" onclick="toggleMenu()" type="button" aria-label="Open menu" aria-expanded="false"><span aria-hidden="true">☰</span></button>
+    <div class="nav-menu-anchor">
+      <button class="nav-ham" id="hamBtn" onclick="toggleMenu()" type="button" aria-label="Open menu" aria-expanded="false"><span aria-hidden="true">☰</span></button>
+    </div>
     <div class="nav-lang-row">
       <button class="lang-btn on" id="lb-en" onclick="setLang('en')">EN</button>
       <button class="lang-btn" id="lb-am" onclick="setLang('am')">አማ</button>
@@ -37,7 +39,7 @@
   </div>
 </nav>
 
-<!-- ══ NAV DROPDOWN MENU ══ -->
+<!-- ══ NAV DROPDOWN BACKDROP ══ -->
 <div class="mmenu-backdrop" id="mmenuBackdrop" onclick="closeMenu()" aria-hidden="true"></div>
 <div class="mmenu" id="mmenu" role="dialog" aria-label="Site menu">
   <div class="mmenu-panel">
@@ -144,42 +146,53 @@
     <div class="sec-line"></div>
 
     <!-- Memorial announcement template — automation fills data-ann-* fields per event -->
-    <article class="ann-letter fade-up" id="annMemorial" data-announcement-template="memorial-v1"
+    <article class="ann-letter fade-up" id="annMemorial" data-announcement-template="memorial-v2"
       data-ann-deceased-name=""
       data-ann-event-number=""
       data-ann-collect-dues="true">
       <div class="ann-letter-icon" aria-hidden="true">🕊️</div>
       <div class="ann-letter-body">
-        <p class="ann-letter-opening">
-          It is with deep sorrow that we share the passing of our beloved Hibret Edir member,
-          <strong data-ann-field="deceased_name">—</strong>.
-        </p>
-
-        <div class="ann-service-block" data-ann-block="prayer">
-          <p class="ann-service-label">A prayer service will be held at:</p>
-          <p class="ann-service-venue" data-ann-field="prayer_venue">—</p>
-          <p class="ann-service-address" data-ann-field="prayer_address">—</p>
-          <p class="ann-service-datetime" data-ann-field="prayer_datetime">—</p>
+        <div class="ann-no-payment-lead" data-ann-block="no-payment-lead" hidden>
+          <p class="ann-no-payment-lead-text"><strong>No payment needed.</strong></p>
         </div>
 
-        <div class="ann-service-block" data-ann-block="burial">
+        <p class="ann-letter-opening">
+          It is with deep sorrow that we share the passing of our beloved Hibret Edir member,
+          <strong data-ann-field="deceased_name">—</strong><span data-ann-block="deceased-note" hidden><span data-ann-field="deceased_note_comma">,</span> <span data-ann-field="deceased_note"></span></span>.
+        </p>
+
+        <div class="ann-service-block" data-ann-block="guest">
+          <p class="ann-service-label">Family will be accepting guest:</p>
+          <p class="ann-service-venue" data-ann-field="guest_venue">—</p>
+          <p class="ann-service-address" data-ann-field="guest_address">—</p>
+          <p class="ann-service-datetime" data-ann-field="guest_datetime">—</p>
+        </div>
+
+        <div class="ann-service-block" data-ann-block="church">
+          <p class="ann-service-label">A prayer service will be held at:</p>
+          <p class="ann-service-venue" data-ann-field="church_venue">—</p>
+          <p class="ann-service-address" data-ann-field="church_address">—</p>
+          <p class="ann-service-datetime" data-ann-field="church_datetime">—</p>
+        </div>
+
+        <div class="ann-service-block" data-ann-block="funeral">
           <p class="ann-service-label">A burial service will follow at:</p>
-          <p class="ann-service-venue" data-ann-field="burial_venue">—</p>
-          <p class="ann-service-address" data-ann-field="burial_address">—</p>
+          <p class="ann-service-venue" data-ann-field="funeral_venue">—</p>
+          <p class="ann-service-address" data-ann-field="funeral_address">—</p>
+          <p class="ann-service-datetime" data-ann-field="funeral_datetime">—</p>
         </div>
 
         <div class="ann-dues-block" data-ann-dues-section="collect">
           <p class="ann-dues-note">* Please note that we will be collecting membership dues. Payments may be made through:</p>
           <ul class="ann-pay-list">
-            <li>PayPal: <a href="https://www.hibretedir.com/invoice" target="_blank" rel="noopener">https://www.hibretedir.com/invoice</a></li>
-            <li>Zelle: Hibret Edir (Business Account) – <a href="tel:4245475594">(424) 547-5594</a></li>
-            <li>Bank Deposit: Bank of America – Account #002174902906</li>
+            <li>PayPal: <a href="/portal/">Member portal</a><span class="ann-pay-sub">Most preferred — <a href="/portal/">sign in to pay</a></span></li>
+            <li>Zelle: <a href="tel:4245475594">(424) 547-5594</a><span class="ann-pay-sub"><a href="/portal/">Upload receipt</a></span></li>
+            <li>Bank of America: Account #002174902906<span class="ann-pay-sub"><a href="/portal/">Upload receipt</a></span></li>
           </ul>
-          <p class="ann-receipt-note">Kindly upload your payment receipt with your name to the <a href="/portal/#receipt">Member Portal receipt upload</a>.</p>
         </div>
 
         <div class="ann-no-dues-block" data-ann-dues-section="waived">
-          <p class="ann-no-dues-note">* No member contribution is required for this memorial. Sufficient funds are available in the Edir account to support the family at this time.</p>
+          <p class="ann-no-dues-note">* No member contribution is required for this memorial.</p>
         </div>
 
         <div class="ann-full-text-block" id="annFullTextBlock" hidden>
@@ -323,10 +336,9 @@
       <div class="pay-card fade-up">
         <div class="pay-icon">💙</div>
         <h3 class="pay-brand">PayPal</h3>
-        <p class="en">Preferred. Pay directly from your invoice email. Automatically recorded.</p>
-        <p class="am">ቀጥታ ከኢሜይል መለዋወሻዎ ይክፈሉ። በራስ-ሰር ይመዘገባል።</p>
-        <a href="https://www.paypal.com" target="_blank" class="pay-cta"><span class="en">Pay via PayPal →</span><span class="am">በፔፓል ይክፈሉ →</span></a>
-        <div class="pay-info">hibretedirautomation@gmail.com</div>
+        <p class="en">Preferred. Sign in to the member portal to pay your invoice. Automatically recorded.</p>
+        <p class="am">ቀጥታ በአባል ፖርታል መለዋወሻዎን ይክፈሉ። በራስ-ሰር ይመዘገባል።</p>
+        <a href="/portal/" class="pay-cta"><span class="en">Pay via PayPal →</span><span class="am">በፔፓል ይክፈሉ →</span></a>
       </div>
       <div class="pay-card fade-up" style="animation-delay:.1s">
         <div class="pay-icon">💚</div>
@@ -344,6 +356,8 @@
         <p class="en">Direct deposit to Hibret Edir Bank of America account. Upload receipt after transfer.</p>
         <p class="am">ቀጥታ ወደ ባንክ ኦፍ አሜሪካ መለያ ያስተላልፉ። ከማስተላለፍ በኋላ ደረሰኝ ይስቀሉ።</p>
         <a href="/portal/" class="pay-cta"><span class="en">Upload Receipt →</span><span class="am">ደረሰኝ ይስቀሉ →</span></a>
+        <div class="pay-info en">Bank of America — Account #002174902906</div>
+        <div class="pay-info am">ባንክ ኦፍ አሜሪካ — መለያ #002174902906</div>
       </div>
     </div>
   </div>
@@ -708,15 +722,46 @@ let wlStatusLoaded = false;
 
 function mob(){ return window.innerWidth <= 768; }
 
+function positionMmenu() {
+  const ham = document.getElementById('hamBtn');
+  const menu = document.getElementById('mmenu');
+  const nav = document.querySelector('.site-public .nav');
+  if (!ham || !menu) return;
+  const hamRect = ham.getBoundingClientRect();
+  const navRect = nav ? nav.getBoundingClientRect() : hamRect;
+  const gap = 8;
+  const top = navRect.bottom + gap;
+  menu.style.setProperty('position', 'fixed', 'important');
+  menu.style.setProperty('inset', 'auto', 'important');
+  menu.style.setProperty('top', `${top}px`, 'important');
+  menu.style.setProperty('bottom', 'auto', 'important');
+  menu.style.setProperty('right', 'auto', 'important');
+  const menuWidth = menu.offsetWidth || Math.min(300, window.innerWidth - 32);
+  let left = hamRect.right - menuWidth;
+  const pad = 16;
+  left = Math.max(pad, Math.min(left, window.innerWidth - menuWidth - pad));
+  menu.style.setProperty('left', `${left}px`, 'important');
+}
+
 function openMenu(){
-  document.getElementById('mmenu').classList.add('open');
+  const menu = document.getElementById('mmenu');
+  menu.classList.add('open');
+  positionMmenu();
   document.getElementById('mmenuBackdrop').classList.add('open');
   document.getElementById('hamBtn').setAttribute('aria-expanded', 'true');
+  requestAnimationFrame(positionMmenu);
 }
 function closeMenu(){
-  document.getElementById('mmenu').classList.remove('open');
+  const menu = document.getElementById('mmenu');
+  menu.classList.remove('open');
   document.getElementById('mmenuBackdrop').classList.remove('open');
   document.getElementById('hamBtn').setAttribute('aria-expanded', 'false');
+  menu.style.removeProperty('top');
+  menu.style.removeProperty('left');
+  menu.style.removeProperty('position');
+  menu.style.removeProperty('inset');
+  menu.style.removeProperty('bottom');
+  menu.style.removeProperty('right');
 }
 function toggleMenu(){
   const open=document.getElementById('mmenu').classList.contains('open');
@@ -732,6 +777,9 @@ document.addEventListener('pointerdown', (e) => {
   closeMenu();
 });
 
+window.addEventListener('resize', () => {
+  if (document.getElementById('mmenu')?.classList.contains('open')) positionMmenu();
+});
 window.addEventListener('scroll', () => {
   if(document.getElementById('mmenu')?.classList.contains('open')) closeMenu();
 }, { passive: true });
@@ -1248,6 +1296,10 @@ function applyMemberStats(data) {
   }
 }
 
+function isAnnLetterHtml(text) {
+  return /<\s*(p|ul|li|strong|em|br|a|div)\b/i.test(String(text || ''));
+}
+
 function applyAnnouncement(ann) {
   if (!ann) return;
   const memorial = document.getElementById('annMemorial');
@@ -1261,35 +1313,92 @@ function applyAnnouncement(ann) {
         el.textContent = val || '—';
       });
     };
-    setField('deceased_name', ann.deceased_name);
-    setField('prayer_venue', ann.prayer_venue);
-    setField('prayer_address', ann.prayer_address);
-    setField('prayer_datetime', ann.prayer_datetime);
-    setField('burial_venue', ann.burial_venue);
-    setField('burial_address', ann.burial_address);
+    setField('deceased_name', ann.deceased_name_display || ann.deceased_name);
+    const deceasedNote = String(ann.deceased_note || '').trim();
+    const noteBlock = memorial.querySelector('[data-ann-block="deceased-note"]');
+    if (noteBlock) {
+      noteBlock.hidden = !deceasedNote;
+      setField('deceased_note', deceasedNote);
+    }
 
-    const prayerBlock = memorial.querySelector('[data-ann-block="prayer"]');
-    const burialBlock = memorial.querySelector('[data-ann-block="burial"]');
-    const hasPrayer = !!(ann.prayer_venue || ann.prayer_address || ann.prayer_datetime);
-    const hasBurial = !!(ann.burial_venue || ann.burial_address);
-    if (prayerBlock) prayerBlock.style.display = hasPrayer ? '' : 'none';
-    if (burialBlock) burialBlock.style.display = hasBurial ? '' : 'none';
+    const guest = ann.guest_reception || {};
+    const church = ann.church_service || {};
+    const funeral = ann.funeral_service || {};
+    const guestOn = guest.enabled && (guest.venue || guest.address || guest.datetime);
+    const churchOn = church.enabled || !!(ann.prayer_venue || ann.prayer_address || ann.prayer_datetime);
+    const funeralOn = funeral.enabled || !!(ann.burial_venue || ann.burial_address);
 
+    if (guestOn) {
+      setField('guest_venue', guest.venue);
+      setField('guest_address', guest.address);
+      setField('guest_datetime', guest.datetime);
+    }
+    const churchVenue = church.venue || ann.prayer_venue;
+    const churchAddr = church.address || ann.prayer_address;
+    const churchTime = church.datetime || ann.prayer_datetime;
+    if (churchOn) {
+      setField('church_venue', churchVenue);
+      setField('church_address', churchAddr);
+      setField('church_datetime', churchTime);
+    }
+    const funeralVenue = funeral.venue || ann.burial_venue;
+    const funeralAddr = funeral.address || ann.burial_address;
+    const funeralTime = funeral.datetime || '';
+    if (funeralOn) {
+      setField('funeral_venue', funeralVenue);
+      setField('funeral_address', funeralAddr);
+      setField('funeral_datetime', funeralTime);
+    }
+
+    const showBlock = (sel, on) => {
+      const el = memorial.querySelector(sel);
+      if (el) el.style.display = on ? '' : 'none';
+    };
+
+    const customLetter = String(ann.announcement_text || '').trim();
+    const useCustomLetter = !!customLetter;
+    const opening = memorial.querySelector('.ann-letter-opening');
+    const signoff = memorial.querySelector('.ann-letter-signoff');
+    if (opening) opening.style.display = useCustomLetter ? 'none' : '';
+    if (signoff) signoff.style.display = useCustomLetter ? 'none' : '';
+
+    const noPayLead = memorial.querySelector('[data-ann-block="no-payment-lead"]');
     const collectBlock = memorial.querySelector('[data-ann-dues-section="collect"]');
     const waivedBlock = memorial.querySelector('[data-ann-dues-section="waived"]');
-    if (collectBlock) collectBlock.style.display = ann.collect_dues ? '' : 'none';
-    if (waivedBlock) waivedBlock.style.display = ann.collect_dues ? 'none' : '';
-
     const fullTextBlock = document.getElementById('annFullTextBlock');
     const fullTextEl = document.getElementById('annFullText');
-    const fullText = ann.announcement_text || '';
-    const hasStructured = hasPrayer || hasBurial;
-    if (fullTextBlock && fullTextEl) {
-      if (fullText && !hasStructured) {
-        fullTextEl.textContent = fullText;
+
+    if (useCustomLetter) {
+      showBlock('[data-ann-block="guest"]', false);
+      showBlock('[data-ann-block="church"]', false);
+      showBlock('[data-ann-block="funeral"]', false);
+      if (noPayLead) noPayLead.hidden = true;
+      if (collectBlock) collectBlock.style.display = 'none';
+      if (waivedBlock) waivedBlock.style.display = 'none';
+      if (fullTextBlock && fullTextEl) {
+        if (isAnnLetterHtml(customLetter)) {
+          fullTextEl.innerHTML = customLetter;
+          fullTextEl.classList.add('ann-full-text-html');
+        } else {
+          fullTextEl.textContent = customLetter;
+          fullTextEl.classList.remove('ann-full-text-html');
+        }
         fullTextBlock.hidden = false;
-      } else {
+      }
+    } else {
+      showBlock('[data-ann-block="guest"]', guestOn);
+      showBlock('[data-ann-block="church"]', churchOn);
+      showBlock('[data-ann-block="funeral"]', funeralOn);
+
+      if (noPayLead) noPayLead.hidden = !!ann.collect_dues;
+
+      if (collectBlock) collectBlock.style.display = ann.collect_dues ? '' : 'none';
+      if (waivedBlock) waivedBlock.style.display = ann.collect_dues ? 'none' : 'none';
+
+      if (fullTextBlock && fullTextEl) {
         fullTextEl.textContent = '';
+        fullTextEl.innerHTML = '';
+        fullTextEl.classList.remove('ann-full-text-html');
         fullTextBlock.hidden = true;
       }
     }
@@ -1297,7 +1406,7 @@ function applyAnnouncement(ann) {
 
   const evNum = ann.event_number != null ? `#${ann.event_number}` : '';
   const amt = fmtSiteMoney(ann.amount_per_member) || '$110';
-  const name = ann.deceased_name || '—';
+  const name = ann.deceased_name_display || ann.deceased_name || '—';
   const lblEn = document.getElementById('annSummaryLblEn');
   const lblAm = document.getElementById('annSummaryLblAm');
   if (lblEn) lblEn.textContent = evNum ? `Funeral Support · ${evNum}` : 'Funeral Support';
@@ -1311,7 +1420,7 @@ function applyAnnouncement(ann) {
   if (descEn) {
     descEn.textContent = ann.collect_dues
       ? `All active members are requested to make their ${amt} contribution within 3 days. PayPal invoices have been sent to all members. For assistance please contact (424) 547-5594.`
-      : 'No member contribution is required for this memorial. Sufficient funds are available in the Edir account to support the family at this time.';
+      : 'No member contribution is required for this memorial.';
   }
   if (descAm) {
     descAm.textContent = ann.collect_dues

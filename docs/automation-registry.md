@@ -138,7 +138,7 @@
 | NTF-02 | Twilio SMS | Partial | Any `notify.js` caller | `notify.js` | `notifications` — setup: `docs/notifications-setup.md` |
 | NTF-03 | Board alert email/SMS | Partial | Applications, receipts, etc. | `notify.js` | `notifications` |
 | NTF-04 | Graceful skip | Live | Missing API keys | `notify.js` | — |
-| NTF-05 | Config test script | Live | `npm run test:notify` | `scripts/test_notifications.js` | — |
+| NTF-05 | Config test script | Live | `npm run test:notify` or Admin **Send test email** | `scripts/test_notifications.js`, `apply/demo-qa/test-notify` | — |
 
 **Env:** `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`, `TWILIO_*`, `BOARD_NOTIFY_EMAIL`, `BOARD_NOTIFY_PHONE`.
 

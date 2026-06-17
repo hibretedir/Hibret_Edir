@@ -16,6 +16,7 @@
 }
 .mh-health-label { font-size: 12px; font-weight: 600; margin-bottom: 8px; }
 .mh-health-detail { font-size: 11px; color: var(--tk-muted); margin-top: 8px; line-height: 1.4; }
+.mh-health-action { margin-top: 10px; width: 100%; }
 .mh-meta-row {
   display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
   font-size: 12px; color: var(--tk-muted);

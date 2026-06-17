@@ -12,11 +12,19 @@ const { getDb } = require('../netlify/functions/db');
 const KNOWN = {
   30: {
     collect_dues: true,
-    prayer_venue: "St. Mary's Ethiopian Orthodox Tewahedo Church",
-    prayer_address: '5505 West Slauson Ave, Los Angeles, CA 90056',
-    prayer_datetime: 'Thursday, April 23 at 10:00 AM',
-    burial_venue: 'Holy Cross Cemetery',
-    burial_address: '5835 W Slauson Ave, Culver City, CA 90230',
+    church_service: {
+      enabled: true,
+      venue: "St. Mary's Ethiopian Orthodox Tewahedo Church",
+      address: '5505 West Slauson Ave, Los Angeles, CA 90056',
+      datetime: 'Thursday, April 23 at 10:00 AM',
+    },
+    funeral_service: {
+      enabled: true,
+      venue: 'Holy Cross Cemetery',
+      address: '5835 W Slauson Ave, Culver City, CA 90230',
+      datetime: '',
+    },
+    guest_reception: { enabled: false, venue: '', address: '', datetime: '' },
   },
 };
 
@@ -43,7 +51,8 @@ function parseArgs() {
 async function main() {
   const { eventNumber, meta } = parseArgs();
   const db = getDb();
-  const notes = JSON.stringify(meta);
+  const { metaToNotesJson, normalizeAnnouncementMeta } = require('../netlify/functions/event-announcement');
+  const notes = metaToNotesJson(normalizeAnnouncementMeta(meta));
   const result = await db.query(
     `UPDATE events
      SET notes = $2, updated_at = NOW()

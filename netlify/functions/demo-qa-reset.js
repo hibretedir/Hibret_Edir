@@ -213,6 +213,7 @@ async function resetDemoQaCycle(db, options = {}) {
         await client.query(
           `UPDATE members
            SET status = 'Inactive',
+               member_number = NULL,
                notes = TRIM(BOTH FROM COALESCE(notes, '') || E'\n' || $2),
                updated_at = NOW()
            WHERE id = $1`,

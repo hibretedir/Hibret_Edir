@@ -35,6 +35,17 @@ const {
 const { stampBoardNote, mergeBoardNotes } = require('./board-notes');
 const { invalidateInvoiceStatsCache } = require('./invoice-stats-cache');
 const { logActivity } = require('./audit');
+const {
+  getCurrentAnnouncementFromDb,
+  searchDeceasedInCrm,
+  getFundCollectionHint,
+  listEventsForAnnouncement,
+  getEventAnnouncementAdmin,
+  getMemorialAnnouncementAdmin,
+  saveEventAnnouncement,
+  saveMemorialAnnouncementOnly,
+  listServiceVenues,
+} = require('./event-announcement');
 const { createAndSendRegistrationInvoice } = require('./paypal-registration-invoice');
 const {
   completeMembershipFromApplication,
@@ -406,57 +417,6 @@ async function getWaitingListAddedCount(db) {
     `SELECT COUNT(*)::int AS c FROM waiting_list WHERE status = 'Added as Member'`
   );
   return Number(res.rows[0]?.c || 0);
-}
-
-function parseEventNotes(notes) {
-  if (!notes || typeof notes !== 'string') return {};
-  const trimmed = notes.trim();
-  if (!trimmed.startsWith('{')) return {};
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    return {};
-  }
-}
-
-async function getCurrentAnnouncementFromDb() {
-  const db = getDb();
-  const result = await db.query(`
-    SELECT event_number, deceased_name, event_date, amount_per_member, payout_amount, notes, status
-    FROM events
-    WHERE deceased_name IS NOT NULL AND TRIM(deceased_name) <> ''
-      AND status = 'Active'
-    ORDER BY event_number DESC NULLS LAST
-    LIMIT 1
-  `);
-  const row = result.rows[0];
-  if (!row) return null;
-  const meta = parseEventNotes(row.notes);
-  const eventDate = row.event_date
-    ? new Date(row.event_date).toLocaleDateString('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        timeZone: 'America/Los_Angeles',
-      })
-    : null;
-  return {
-    event_number: row.event_number,
-    deceased_name: String(row.deceased_name || '').trim(),
-    event_date: row.event_date,
-    event_date_text: eventDate,
-    amount_per_member: Number(row.amount_per_member || process.env.AMOUNT_PER_MEMBER || 110),
-    payout_amount: Number(row.payout_amount || process.env.PAYOUT_AMOUNT || 15000),
-    collect_dues: meta.collect_dues !== false && meta.waive_dues !== true,
-    prayer_venue: meta.prayer_venue || meta.prayer_location || null,
-    prayer_address: meta.prayer_address || null,
-    prayer_datetime: meta.prayer_datetime || meta.prayer_date || meta.prayer_time || null,
-    burial_venue: meta.burial_venue || meta.burial_location || null,
-    burial_address: meta.burial_address || null,
-    announcement_text: meta.announcement_text || meta.full_message || null,
-    updated_at: new Date().toISOString(),
-  };
 }
 
 async function getWaitingListStatusFromDb() {
@@ -1965,6 +1925,41 @@ async function handleDemoQaReset(actor) {
   return json(200, result);
 }
 
+async function handleDemoQaTestNotify(actor) {
+  const { sendEmail, getNotifyConfig } = require('./notify');
+  const { getDemoQaEmail, maskEmail: maskDemoEmail } = require('./demo-qa-reset');
+  const config = getNotifyConfig();
+  if (!config.email.configured) {
+    return json(400, { error: 'SendGrid is not configured. Set SENDGRID_API_KEY and SENDGRID_FROM_EMAIL.' });
+  }
+  const to = getDemoQaEmail() || process.env.TEST_NOTIFY_EMAIL;
+  if (!to) {
+    return json(400, { error: 'Set DEMO_QA_EMAIL (production QA) or TEST_NOTIFY_EMAIL (local) in environment.' });
+  }
+  const from = config.email.from;
+  const result = await sendEmail({
+    to,
+    subject: 'Hibret Edir — QA test email',
+    text: [
+      'This is a test message from the Hibret Edir admin QA tools.',
+      '',
+      `Sent by: ${actor?.actor_label || 'Board Admin'}`,
+      `SendGrid from: ${from}`,
+      `Time: ${new Date().toISOString()}`,
+      '',
+      'If you received this, invitation and application emails should work.',
+    ].join('\n'),
+  });
+  if (!result.ok) {
+    return json(502, { error: result.error || result.skipped || 'Could not send test email.' });
+  }
+  return json(200, {
+    ok: true,
+    to: maskDemoEmail(to),
+    message: `Test email sent to ${maskDemoEmail(to)}.`,
+  });
+}
+
 function matchWaitingListAdminPath(path) {
   const parts = path.replace(/\/$/, '').split('/').filter(Boolean);
   if (parts[0] !== 'waiting-list') return null;
@@ -1976,6 +1971,21 @@ function matchWaitingListAdminPath(path) {
   const id = Number(parts[1]);
   if (!Number.isFinite(id)) return null;
   return { id, action: parts[2] || null };
+}
+
+function matchAnnouncementPath(path) {
+  const parts = path.replace(/\/$/, '').split('/').filter(Boolean);
+  if (parts[0] !== 'announcement') return null;
+  if (parts[1] === 'deceased-search') return { action: 'deceased-search' };
+  if (parts[1] === 'fund-status') return { action: 'fund-status' };
+  if (parts[1] === 'memorial') return { action: 'memorial' };
+  if (parts[1] === 'service-venues') return { action: 'service-venues' };
+  if (parts[1] === 'events' && !parts[2]) return { action: 'events-list' };
+  if (parts[1] === 'events' && parts[2]) {
+    const eventNumber = Number(parts[2]);
+    if (Number.isFinite(eventNumber)) return { action: 'event', eventNumber };
+  }
+  return null;
 }
 
 function matchApplicationPath(path) {
@@ -1993,6 +2003,7 @@ exports.handler = async (event) => {
 
   const path = getPath(event);
   const appPath = matchApplicationPath(path);
+  const annPath = matchAnnouncementPath(path);
   const wlPath = matchWaitingListAdminPath(path);
   const changePath = matchChangeRequestPath(path);
   const contactMsgPath = matchContactMessagesPath(path);
@@ -2114,6 +2125,24 @@ exports.handler = async (event) => {
     }
   }
 
+  if ((path === '/demo-qa/test-notify' || path === '/demo-qa/test-notify/') && event.httpMethod === 'POST') {
+    const admin = verifyAdminRequest(event);
+    if (!admin) {
+      return json(401, { error: 'Admin authorization required. Please sign in.' });
+    }
+    try {
+      const db = getDb();
+      const access = await loadBoardMemberAccess(db, admin);
+      const denied = assertCanWriteAll(access);
+      if (denied) return json(403, { error: denied });
+      const actor = await resolveAdminActor(admin);
+      return await handleDemoQaTestNotify(actor);
+    } catch (err) {
+      console.error('demo qa test notify error:', err);
+      return json(500, { error: err.message || 'Could not send test notification.' });
+    }
+  }
+
   const isWaitingListAdminRoute = wlPath && (
     (event.httpMethod === 'GET' && !wlPath.id)
     || (event.httpMethod === 'POST' && wlPath.id && (wlPath.action === 'invite' || wlPath.action === 'reject'))
@@ -2147,6 +2176,97 @@ exports.handler = async (event) => {
         return json(503, { error: 'Database is not configured.' });
       }
       return json(500, { error: 'Could not process waiting list action.' });
+    }
+  }
+
+  if (annPath && ['GET', 'PUT'].includes(event.httpMethod)) {
+    const admin = verifyAdminRequest(event);
+    if (!admin) {
+      return json(401, { error: 'Admin authorization required. Please sign in.' });
+    }
+    const db = getDb();
+    const access = await loadBoardMemberAccess(db, admin);
+    try {
+      if (annPath.action === 'deceased-search' && event.httpMethod === 'GET') {
+        const q = event.queryStringParameters?.q || '';
+        const matches = await searchDeceasedInCrm(db, q, 25);
+        return json(200, { matches });
+      }
+      if (annPath.action === 'fund-status' && event.httpMethod === 'GET') {
+        const fund = await getFundCollectionHint();
+        return json(200, fund);
+      }
+      if (annPath.action === 'service-venues' && event.httpMethod === 'GET') {
+        const venues = await listServiceVenues(db);
+        return json(200, { venues });
+      }
+      if (annPath.action === 'events-list' && event.httpMethod === 'GET') {
+        const data = await listEventsForAnnouncement(db);
+        return json(200, data);
+      }
+      if (annPath.action === 'memorial' && event.httpMethod === 'GET') {
+        const payload = await getMemorialAnnouncementAdmin(db);
+        if (!payload) return json(200, { source: null, announcement: null });
+        return json(200, payload);
+      }
+      if (annPath.action === 'memorial' && event.httpMethod === 'PUT') {
+        const denied = assertCanWriteAll(access);
+        if (denied) return json(403, { error: denied });
+        const actor = await resolveAdminActor(admin);
+        const body = parseBody(event);
+        const result = await saveMemorialAnnouncementOnly(db, body, actor);
+        await logActivity(db, {
+          ...actor,
+          member_id: result.announcement.member_id || null,
+          action: 'announcement.save',
+          entity_type: 'memorial_announcements',
+          table_name: 'memorial_announcements',
+          record_id: null,
+          new_value: {
+            deceased_name: result.announcement.deceased_name,
+            collect_dues: false,
+            source: 'memorial',
+          },
+          summary: `Saved memorial announcement (no collection) — ${result.announcement.deceased_name}`,
+        });
+        return json(200, result);
+      }
+      if (annPath.action === 'event' && event.httpMethod === 'GET') {
+        const payload = await getEventAnnouncementAdmin(db, annPath.eventNumber);
+        if (!payload) return json(404, { error: 'Event not found.' });
+        return json(200, payload);
+      }
+      if (annPath.action === 'event' && event.httpMethod === 'PUT') {
+        const denied = assertCanWriteAll(access);
+        if (denied) return json(403, { error: denied });
+        const actor = await resolveAdminActor(admin);
+        const body = parseBody(event);
+        const result = await saveEventAnnouncement(db, annPath.eventNumber, body, actor);
+        await logActivity(db, {
+          ...actor,
+          member_id: result.announcement.member_id || null,
+          action: 'announcement.save',
+          entity_type: 'events',
+          table_name: 'events',
+          record_id: result.event.id,
+          new_value: {
+            event_number: annPath.eventNumber,
+            deceased_name: result.announcement.deceased_name,
+            collect_dues: result.announcement.collect_dues,
+          },
+          summary: `Saved funeral announcement for Event #${annPath.eventNumber} — ${result.announcement.deceased_name}`,
+        });
+        return json(200, { ok: true, ...result });
+      }
+      return json(404, { error: 'Not found' });
+    } catch (err) {
+      console.error('announcement admin error:', err);
+      if (err.status === 404) return json(404, { error: err.message });
+      if (err.status === 400) return json(400, { error: err.message });
+      if (err.message?.includes('DATABASE_URL')) {
+        return json(503, { error: 'Database is not configured.' });
+      }
+      return json(500, { error: err.message || 'Could not process announcement.' });
     }
   }
 

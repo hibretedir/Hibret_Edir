@@ -26,6 +26,28 @@ function getRegistrationFee() {
 
 const QA_PHASES = [
   {
+    id: 'integrations',
+    title: 'Notifications',
+    phase: 0,
+    color: '#60a5fa',
+    steps: [
+      {
+        id: 'NTF-01',
+        title: 'SendGrid test email',
+        mode: 'action',
+        action: 'test_notify',
+        optional: true,
+        requires: [],
+        prerequisites: [
+          { key: 'sendgrid', label: 'SendGrid configured (SENDGRID_API_KEY)' },
+          { key: 'demo_email', label: 'DEMO_QA_EMAIL configured' },
+        ],
+        how_to_test: 'System Health → Dashboard: click Send test email (uses DEMO_QA_EMAIL). Locally: npm run test:notify then npm run test:notify -- --send with TEST_NOTIFY_EMAIL in .env.',
+        pass_criteria: 'Inbox receives “Hibret Edir — QA test email” (check spam). ONB-02 invite email works in the full onboarding run.',
+      },
+    ],
+  },
+  {
     id: 'onboarding',
     title: 'Onboarding',
     phase: 1,
@@ -433,7 +455,7 @@ function evaluateStepPrerequisites(step, ctx) {
 function findCurrentTestStep(phases) {
   for (const phase of phases) {
     for (const step of phase.steps) {
-      if (step.mode === 'planned') continue;
+      if (step.mode === 'planned' || step.optional) continue;
       const st = step.check?.status;
       if (st === 'pass') continue;
       if (['ready', 'warn', 'fail', 'partial'].includes(st)) {
@@ -451,14 +473,26 @@ function evaluateStep(step, ctx) {
   if (step.mode === 'partial') {
     return { status: 'partial', message: step.hint || 'Manual script or partial workflow' };
   }
+  const { pipeline, signup, slots, integrations } = ctx;
   if (step.id === 'ONB-08') {
     return {
       status: ctx.demo.enabled ? 'ready' : 'warn',
       message: ctx.demo.enabled ? 'Reset demo member, application, and waiting list' : 'Enable DEMO_QA_ENABLED',
     };
   }
+  if (step.id === 'NTF-01') {
+    if (!integrations.sendgrid?.ok) {
+      return { status: 'fail', message: 'Set SENDGRID_API_KEY and SENDGRID_FROM_EMAIL, then redeploy' };
+    }
+    if (!getDemoQaEmail()) {
+      return { status: 'warn', message: 'Set DEMO_QA_EMAIL for QA test sends' };
+    }
+    return {
+      status: 'ready',
+      message: `SendGrid OK — click Send test email (→ ${maskEmail(getDemoQaEmail())})`,
+    };
+  }
 
-  const { pipeline, signup, slots, integrations } = ctx;
   const stage = pipeline.stage;
 
   switch (step.id) {

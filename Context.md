@@ -1,9 +1,9 @@
 # Hibret Edir — Agent Context & Handoff
 
-**Last updated:** June 14, 2026 (QA reserved slot enforced; waiting list invite policy)  
+**Last updated:** June 16, 2026 (granular board permissions; waiting list same-day order; CRM ops)  
 **Purpose:** Onboard a new Cursor agent quickly. Read this file first, then `HIBRET_EDIR_PROJECT_HANDOFF (1).md` for deeper business rules and by-laws.
 
-**Current focus (next agent):** **Netlify deploy** of QA/system-health work when user approves. Finish **Twilio SMS** — account, buy SMS number, add `TWILIO_*` to `.env` + Netlify, `npm run test:notify -- --send`. SendGrid is **done**. See **`docs/notifications-setup.md`**. For onboarding QA before deploy: **`docs/system-validation-playbook.md`** + Admin **System Health → QA Testing**.
+**Current focus (next agent):** **Twilio SMS** — buy number, set `TWILIO_*` on Netlify, `npm run test:notify -- --send`. Then **production smoke-test** (invite email + SMS). **Netlify deploy** is current on `main` (`5368d35`); run **`npm run db:migrate`** on prod DB after schema pulls (user ran locally June 16). Set **`BOARD_SUPER_ADMIN_EMAILS`** on Netlify. SendGrid is **done** — see **`docs/notifications-setup.md`**. QA playbook: **`docs/system-validation-playbook.md`**.
 
 ---
 
@@ -13,7 +13,7 @@
 
 - Every **active member pays $110** per event (via PayPal invoice, Zelle, or direct deposit).
 - The grieving family receives a **$15,000 payout** for funeral costs.
-- **~197 active members** (cap 200; count is live from DB). Founded 2011.
+- **~198 active members** (cap 200; count is live from DB). Founded 2011.
 
 **Goal:** Replace Wix + PythonAnywhere + Google Sheets + N8N with one platform:
 
@@ -76,6 +76,7 @@ hibretedir/
 │   ├── payment-methods.js         # PayPal vs Zelle & BofA classification for stats
 │   ├── invoice-stats-cache.js     # 60s TTL cache for admin invoice stats
 │   ├── board-notes.js             # Board note merge helpers
+│   ├── board-permissions.js       # Granular board write perms + super admin helpers
 │   └── member-snapshot.js         # Static member export + dev PIN file
 ├── db/schema.sql                  # PostgreSQL schema + idempotent migrations
 ├── docs/
@@ -95,6 +96,9 @@ hibretedir/
 │   ├── run_schema.js              # npm run db:migrate
 │   ├── seed_from_exports.py
 │   ├── import_waiting_list.py     # Excel import + public JSON export
+│   ├── fix_waiting_list_order.py  # Same-day queue tie-break from Order of Registration.xlsx
+│   ├── add_yonas_misrak_crm.js    # One-off board CRM import (membership-completion flow)
+│   ├── lookup_yonas_misrak.js     # DB lookup helper for CRM imports
 │   ├── mark_added_waiting_list_members.py
 │   ├── mark_invitations_sent.py
 │   ├── seed_waiting_list_public.py
@@ -152,6 +156,7 @@ See `.env.example`. Critical ones:
 | `DATABASE_URL` | Render Postgres — required for real data |
 | `JWT_SECRET` | Member + board tokens |
 | `ADMIN_AUTH_ENABLED` | `true` on Netlify production (recommended) |
+| `BOARD_SUPER_ADMIN_EMAILS` | Comma-separated emails with full access + can grant board permissions |
 | `PAYPAL_CLIENT_ID` / `PAYPAL_SECRET` | PayPal sync |
 | `PAYPAL_ENV` | `sandbox` or production (empty/non-sandbox = production API). Not a secret — omitted from Netlify secrets scan via `netlify.toml` |
 | `CRON_SECRET` | **Required on Netlify** for scheduled + background PayPal sync |
@@ -203,10 +208,10 @@ Notifications **skip gracefully** when Twilio is unset; email sends when SendGri
 | `pin_reset_requests` | Member forgot-PIN requests |
 | `event_payouts` | $15K payout document + approval workflow |
 | `audit_log` | Activity log |
-| `board_members` | Board login accounts |
+| `board_members` | Board login accounts; granular perms: `is_super_admin`, `perm_full_access`, `perm_notes`, `perm_approve_payout`, `perm_approve_operations` |
 | `notifications` | Email/SMS send log |
 
-**Recent schema additions:** performance indexes; `invoices.paid_note`, `invoice_mark_paid_requests`; `waiting_list.invited_at`; `invoices.membership_application_id`; `membership_applications.registration_invoice_id`.
+**Recent schema additions:** performance indexes; `invoices.paid_note`, `invoice_mark_paid_requests`; `waiting_list.invited_at`; `invoices.membership_application_id`; `membership_applications.registration_invoice_id`; `board_members` granular permission columns; `members.application_drive_url`; `membership_applications.applicant_signature`.
 
 **Waiting list statuses (admin + DB):**
 
@@ -228,6 +233,7 @@ npm run import:waiting-list:seed          # if DB empty
 python scripts/import_waiting_list.py --file "data/waiting list with phone and email.xlsx" --seed
 python scripts/mark_added_waiting_list_members.py   # marks known members + refreshes public JSON
 python scripts/mark_invitations_sent.py             # one-off status updates
+python scripts/fix_waiting_list_order.py --apply    # Fix same-day queue order (tie-break from registration order file)
 node scripts/set_event_announcement.js 30           # Backfill public announcement for event #30 (or any event #)
 ```
 
@@ -366,7 +372,9 @@ Placeholders show `—` until API loads. Regenerate static JSON: `python scripts
 | System Health | **Dashboard** (integrations, test member, health checks) · **QA Testing** (ONB step playbook) |
 | Security | Activity Log |
 
-**Live stats bar:** Unpaid, Paid (PayPal), Zelle & BofA, Late — colors: green / green / red.
+**Live stats bar:** Unpaid, Paid (PayPal), Zelle & BofA, Late — colors: green / green / red. **Partial** invoices are not counted as late.
+
+**Board permissions (June 16):** Super Admin (`BOARD_SUPER_ADMIN_EMAILS`) + scoped grants on invite: **Notes + sync** (default), **Full access**, **Ops approval**, **Payout approval**. Admin UI is read-only or gated per permission; permission chips show hover tooltips. Enforced in `board-permissions.js` across `auth.js`, `apply.js`, `portal.js`, `payouts.js`, `receipts.js`, `paypal-sync.js`.
 
 **Refresh behavior:** Members and Invoices tabs refetch on switch; Event Summary loads full invoices + stats.
 
@@ -465,9 +473,19 @@ Auth, portal, admin CRM, applications, waiting list, notifications, audit, payou
 - [x] **Netlify env** — `SENDGRID_API_KEY`, `SENDGRID_FROM_EMAIL`, `SENDGRID_REPLY_TO` (redeploy after set)
 - [ ] **Twilio SMS** — account + number + `TWILIO_*` on Netlify; then smoke-test invite SMS
 
+### June 2026 — Board permissions, queue order, CRM ops (`5368d35`)
+
+- [x] **Granular board permissions** — `board-permissions.js`; schema + `auth.js` JWT/me/invite; API guards; Admin read-only + Board Access checkboxes + hover tooltips
+- [x] **Super admin** — `BOARD_SUPER_ADMIN_EMAILS` env; manages other board grants
+- [x] **Notes + sync** — PayPal sync allowed without full CRM write access
+- [x] **Partial ≠ late** — Admin stats/pills and portal `is_late` exclude partial payments
+- [x] **Same-day waiting list order** — `scripts/fix_waiting_list_order.py`; uses registration order # as intraday tie-breaker on `applied_at` (39 rows fixed June 16)
+- [x] **CRM board import** — Yonas Tesema & Misrak B. Demessie added as member **#232** (`misrak1940@gmail.com`); waiting list #12 → Added as Member
+- [x] **Schema migrate** — user ran `npm run db:migrate` locally June 16 after push
+
 ### Still partial / ops
 
-- [ ] **Twilio SMS** — **IN PROGRESS** — SendGrid done; follow `docs/notifications-setup.md` § Twilio
+- [ ] **Twilio SMS** — **NEXT** — SendGrid done; follow `docs/notifications-setup.md` § Twilio
 - [x] **Local E2E onboarding QA** — full cycle with `DEMO_QA_*` + `MEMBER_CAP=201` + `$1` PayPal (June 14, 2026)
 - [ ] **Netlify env for QA** — set `DEMO_QA_*`, `MEMBER_CAP=201`, `PUBLIC_SITE_URL`, `REGISTRATION_FEE` when deploying
 - [ ] Admin create event → bulk PayPal invoices via API
@@ -526,6 +544,15 @@ From by-laws / handoff:
 ---
 
 ## 12. Recent session changelog
+
+### June 16, 2026 — Board permissions, queue order, CRM import
+
+- **Granular board permissions** — Replaced binary `write_approved` with super admin + four scoped grants; `board-permissions.js`; enforced on admin APIs; UI gates + permission chip tooltips.
+- **Partial payments** — No longer counted as late in admin or member portal.
+- **Waiting list same-day order** — Imported rows shared midnight `applied_at`; fixed with `scripts/fix_waiting_list_order.py` using `data/Order of Registration.xlsx` order numbers (file removable after run).
+- **CRM** — Yonas Tesema (primary) / Misrak B. Demessie (spouse) → member #232; registration fee recorded; `scripts/add_yonas_misrak_crm.js`.
+- **Deploy** — Pushed `5368d35` to `main`; user ran `npm run db:migrate` locally (DB-only — no re-push needed).
+- **Next:** Twilio SMS + production invite smoke-test.
 
 ### June 14, 2026 — QA reserved slot (invite guard)
 
@@ -629,6 +656,8 @@ From by-laws / handoff:
 | `npm run db:migrate` timeout to Render | Retry; `run_schema.js` has 60s connect / 120s query / 3 retries |
 | Showcase changes not visible on localhost | Netlify serves `public/` — copy `docs/automation-showcase.html` → `public/docs/` |
 | Meridian voice sounds robotic on deploy | Normal — TTS runs in visitor's browser, not on Netlify; Edge + UK Natural voices sound best |
+| Board admin read-only / 403 on save | Run `npm run db:migrate`; set `BOARD_SUPER_ADMIN_EMAILS` on Netlify; re-login after permission change |
+| Same-day waiting list order wrong | Run `python scripts/fix_waiting_list_order.py --apply` with registration order file in `data/` |
 
 ---
 
@@ -651,15 +680,17 @@ From by-laws / handoff:
 
 ---
 
-## 15. Next agent priorities (June 14, 2026)
+## 15. Next agent priorities (June 16, 2026)
 
-1. **Deploy to Netlify** (when user ready) — set `PUBLIC_SITE_URL`, `MEMBER_CAP=201`, `DEMO_QA_*`, `REGISTRATION_FEE=1` for QA or `200` for production; redeploy.
-2. **Twilio SMS** — Create Twilio account, buy US SMS number, add `TWILIO_*` to `.env` + Netlify, redeploy. Run `npm run test:notify -- --send`.
-3. **Production smoke-test** — Admin → Waiting List → **Send Invitation** → confirm email (and SMS once Twilio live).
+1. **Twilio SMS** — Buy US SMS number; add `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_FROM` to Netlify; redeploy. `npm run test:notify -- --send`.
+2. **Production smoke-test** — Waiting list invite → email (+ SMS when Twilio live); confirm board permissions for non-super-admin accounts.
+3. **Prod DB migrate** — If not done on Render yet: `npm run db:migrate` with production `DATABASE_URL`; set `BOARD_SUPER_ADMIN_EMAILS` on Netlify.
 4. **Event announcement UI** — `scripts/set_event_announcement.js` exists; optional admin UI.
 5. **EVT-06** — Admin create event + bulk PayPal invoices.
 6. **EVT-08** — Payment reminders.
 
+**Done this cycle:** `main` at `5368d35` (board permissions, partial/late fix, queue order script). Local migrate run June 16.
+
 **SendGrid (done):** `notifications@hibretedir.com` / Reply `hibretedirtext@gmail.com` / DNS on Wix.
 
-**Do not regress Meridian showcase:** speech-gated advance, phase-2 scroll-before-speech, contact links after closing pitch (`ETHIO_CONTACT`).
+**Do not regress:** Meridian showcase (speech-gated advance, phase-2 scroll); waiting list same-day order uses full `applied_at` not just date; board permission gates on all write endpoints.

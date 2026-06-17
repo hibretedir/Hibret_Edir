@@ -16,6 +16,7 @@
     "build:members-snapshot": "python scripts/build_members_snapshot.py",
     "db:migrate": "node scripts/run_schema.js",
     "db:seed-waiting-list": "node scripts/seed_waiting_list_public.js",
+    "db:seed-ann-venues": "node scripts/seed_announcement_venues.js",
     "sync:paypal": "node scripts/sync_paypal.js",
     "test:notify": "node scripts/test_notifications.js",
     "demo:reset": "node scripts/demo_cycle_reset.js",

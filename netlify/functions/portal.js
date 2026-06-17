@@ -18,6 +18,7 @@ const {
   loadBoardMemberAccess,
   assertCanWriteAll,
   assertCanApproveOperations,
+  assertCanManageBoard,
   filterMemberUpdateForAccess,
   WRITE_DENIED_MSG,
 } = require('./board-permissions');
@@ -630,7 +631,7 @@ async function getMembers({ search, limit = 500 }) {
     sql += ` WHERE (${clauses.join(' OR ')})`;
   }
 
-  sql += ` ORDER BY id DESC LIMIT $${values.length + 1}`;
+  sql += ` ORDER BY member_number ASC NULLS LAST, id ASC LIMIT $${values.length + 1}`;
   values.push(limit);
 
   const result = await db.query(sql, values);
@@ -1343,6 +1344,9 @@ exports.handler = async (event) => {
 
     if (event.httpMethod === 'GET' && path === '/activity') {
       const db = getDb();
+      const access = await loadBoardMemberAccess(db, adminPayload);
+      const denied = assertCanManageBoard(access);
+      if (denied) return jsonResponse(403, { error: denied });
       const activity = await getActivityLog(db, {
         memberId: query.memberId ? Number(query.memberId) : undefined,
         limit: query.limit ? Number(query.limit) : 100,

@@ -830,6 +830,10 @@ exports.handler = async (event, context) => {
       const admin = verifyAdminRequest(event);
       if (!admin) return jsonResponse(401, { error: 'Admin authorization required.' });
       try {
+        const db = getDb();
+        const access = await loadBoardMemberAccess(db, admin);
+        const denied = assertCanManageBoard(access);
+        if (denied) return jsonResponse(403, { error: denied });
         return await listBoardMembers();
       } catch (err) {
         console.error('board members list error:', err);

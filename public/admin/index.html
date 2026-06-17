@@ -95,6 +95,10 @@
         <span class="sidebar-nav-icon">▦</span>
         <span>Event Summary</span>
       </button>
+      <button type="button" class="sidebar-nav accent-gold" id="nav-announcement" onclick="switchView('announcement')">
+        <span class="sidebar-nav-icon">📢</span>
+        <span>Announcement</span>
+      </button>
       <button type="button" class="sidebar-nav accent-gold" id="nav-payouts" onclick="switchView('payouts')">
         <span class="sidebar-nav-icon">$</span>
         <span>Payout Fund</span>
@@ -114,13 +118,13 @@
         <span class="sidebar-badge" id="sb-qa-testing">—</span>
       </button>
     </div>
-    <div class="sidebar-section">
+    <div class="sidebar-section" id="adminSecurityNavSection" hidden>
       <div class="sidebar-label">Security</div>
-      <button type="button" class="sidebar-nav" id="nav-board-access" onclick="switchView('board-access')">
+      <button type="button" class="sidebar-nav accent-gold" id="nav-board-access" onclick="switchView('board-access')">
         <span class="sidebar-nav-icon">🔐</span>
         <span>Board Access</span>
       </button>
-      <button type="button" class="sidebar-nav" id="nav-activity" onclick="switchView('activity')">
+      <button type="button" class="sidebar-nav accent-gold" id="nav-activity" onclick="switchView('activity')">
         <span class="sidebar-nav-icon">◷</span>
         <span>Activity Log</span>
       </button>
@@ -160,9 +164,10 @@
   <button type="button" data-view="receipts" onclick="switchView('receipts')">Receipts</button>
   <button type="button" data-view="messages" onclick="switchView('messages')">Messages</button>
   <button type="button" data-view="events" onclick="switchView('events')">Summary</button>
+  <button type="button" data-view="announcement" onclick="switchView('announcement')">Announce</button>
   <button type="button" data-view="payouts" onclick="switchView('payouts')">Payouts</button>
   <button type="button" data-view="health-dashboard" onclick="switchView('health-dashboard')">Health</button>
-  <button type="button" data-view="activity" onclick="switchView('activity')">Log</button>
+  <button type="button" data-view="activity" data-super-admin-only hidden onclick="switchView('activity')">Log</button>
 </nav>
 
 <div class="admin-mobile-menu-backdrop" id="adminMobileMenuBackdrop" onclick="closeAdminMenu()" aria-hidden="true"></div>
@@ -200,6 +205,9 @@
     <button type="button" class="sidebar-nav accent-red" data-view="events" onclick="switchView('events')">
       <span class="sidebar-nav-icon">▦</span><span>Event Summary</span>
     </button>
+    <button type="button" class="sidebar-nav accent-gold" data-view="announcement" onclick="switchView('announcement')">
+      <span class="sidebar-nav-icon">📢</span><span>Announcement</span>
+    </button>
     <button type="button" class="sidebar-nav accent-gold" data-view="payouts" onclick="switchView('payouts')">
       <span class="sidebar-nav-icon">$</span><span>Payout Fund</span><span class="sidebar-badge" id="mob-sb-payouts">—</span>
     </button>
@@ -213,12 +221,12 @@
       <span class="sidebar-nav-icon">✓</span><span>QA Testing</span><span class="sidebar-badge" id="mob-sb-qa-testing">—</span>
     </button>
   </div>
-  <div class="sidebar-section">
+  <div class="sidebar-section" data-super-admin-only hidden>
     <div class="sidebar-label">Security</div>
-    <button type="button" class="sidebar-nav" data-view="board-access" onclick="switchView('board-access')">
+    <button type="button" class="sidebar-nav accent-gold" data-view="board-access" onclick="switchView('board-access')">
       <span class="sidebar-nav-icon">🔐</span><span>Board Access</span>
     </button>
-    <button type="button" class="sidebar-nav" data-view="activity" onclick="switchView('activity')">
+    <button type="button" class="sidebar-nav accent-gold" data-view="activity" onclick="switchView('activity')">
       <span class="sidebar-nav-icon">◷</span><span>Activity Log</span>
     </button>
   </div>
@@ -457,6 +465,22 @@ let invoicesByMemberId = null;
 let writeAdminCacheTimer = null;
 let memberFilter = 'active';
 let memberSort = 'id_asc';
+let ANNOUNCEMENT_EVENTS = [];
+let ANN_NEXT_EVENT_NUMBER = null;
+let ANNOUNCEMENT_FUND = null;
+let ANN_SERVICE_VENUES = { church: [], funeral: [] };
+let annIntake = null;
+let annDeceasedLinkTimer = null;
+let annLetterUserEdited = false;
+
+function normalizeAnnName(name) {
+  return String(name || '').toLowerCase()
+    .replace(/^(ato|wzro|lij|weizero|w\/ro)\s*:\s*/i, '')
+    .replace(/^(ato|weizero|dr\.?)\s+/i, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
 let memberSearch = '';
 let editingMemberId = null;
 let memberDetailTab = 'profile';
@@ -497,6 +521,23 @@ function getAdminToken() {
 function adminIsSuperAdmin() {
   if (!ADMIN_AUTH_ENABLED) return true;
   return adminUser?.is_super_admin === true;
+}
+
+function updateSuperAdminNavVisibility() {
+  const show = adminIsSuperAdmin();
+  const section = document.getElementById('adminSecurityNavSection');
+  if (section) section.hidden = !show;
+  document.querySelectorAll('[data-super-admin-only]').forEach((el) => {
+    el.hidden = !show;
+  });
+}
+
+function guardSuperAdminView(v) {
+  if ((v === 'board-access' || v === 'activity') && !adminIsSuperAdmin()) {
+    showAdminToast('Only super admins can access this section.', 'warn');
+    return 'members';
+  }
+  return v;
 }
 
 function adminCanManageBoard() {
@@ -586,6 +627,9 @@ async function apiPost(path, body = {}) {
 }
 async function apiPatch(path, body = {}) {
   return apiFetch(path, { method: 'PATCH', body: JSON.stringify(body) });
+}
+async function apiPut(path, body = {}) {
+  return apiFetch(path, { method: 'PUT', body: JSON.stringify(body) });
 }
 
 function esc(s) {
@@ -1654,7 +1698,7 @@ function writeAdminCache() {
 
 function hydrateAdminCache(data) {
   if (!data) return false;
-  if (data.members?.length) MEMBERS.splice(0, MEMBERS.length, ...data.members);
+  if (data.members?.length) MEMBERS.splice(0, MEMBERS.length, ...sortMembersInPlace([...data.members]));
   if (data.invoices?.length) INVOICES.splice(0, INVOICES.length, ...data.invoices);
   INVOICE_STATS = data.stats || null;
   invoicesFullyLoaded = !!data.full;
@@ -1708,7 +1752,7 @@ async function fetchAdminCore(options = {}) {
 
   if (membersResult.status === 'fulfilled') {
     const memberList = membersResult.value?.members ?? [];
-    MEMBERS.splice(0, MEMBERS.length, ...memberList);
+    MEMBERS.splice(0, MEMBERS.length, ...sortMembersInPlace([...memberList]));
     if (memberList.length) apiLoaded = true;
   } else {
     console.warn('Members API failed:', membersResult.reason);
@@ -2097,6 +2141,7 @@ function trackerHeaderHtml(stats) {
     : currentView === 'receipts' ? 'Uploaded Receipts'
     : currentView === 'messages' ? 'Contact Messages'
     : currentView === 'events' ? 'Event Summary'
+    : currentView === 'announcement' ? 'Funeral Announcement'
     : currentView === 'payouts' ? 'Payout Fund'
     : currentView === 'board-access' ? 'Board Access'
     : currentView === 'health-dashboard' ? 'System Health — Dashboard'
@@ -2118,6 +2163,7 @@ function trackerHeaderHtml(stats) {
     : currentView === 'receipts' ? `${RECEIPTS.filter(r => r.status === 'Pending').length} pending review`
     : currentView === 'messages' ? `${PIN_RESET_REQUESTS.filter(r => r.status === 'Pending').length} PIN resets · ${CONTACT_MESSAGES.length} contact`
     : currentView === 'events' ? `${stats.events} passed away · ${stats.total} active member invoices`
+    : currentView === 'announcement' ? (ANNOUNCEMENT_EVENTS.length ? `${ANNOUNCEMENT_EVENTS.length} events · intake & preview` : 'Build the public memorial announcement')
     : currentView === 'payouts' ? `${PAYOUTS.filter(p => p.status !== 'Paid Out').length} open · $15,000 per event`
     : currentView === 'board-access' ? `${BOARD_MEMBERS.filter(b => b.is_active).length} active · ${BOARD_MEMBERS.filter(b => b.is_active && !b.has_password).length} pending setup`
     : currentView === 'health-dashboard' ? (MONITOR_HEALTH?.summary
@@ -2241,7 +2287,9 @@ function updateSidebar() {
   if (qaBadge) qaBadge.textContent = qaSummary;
   if (mobQaBadge) mobQaBadge.textContent = qaSummary;
 
-  ['members', 'invoices', 'applications', 'receipts', 'messages', 'events', 'payouts', 'board-access', 'health-dashboard', 'qa-testing', 'activity'].forEach(v => {
+  updateSuperAdminNavVisibility();
+
+  ['members', 'invoices', 'applications', 'receipts', 'messages', 'events', 'announcement', 'payouts', 'board-access', 'health-dashboard', 'qa-testing', 'activity'].forEach(v => {
     const el = document.getElementById('nav-' + v);
     if (el) el.classList.toggle('active', currentView === v);
   });
@@ -2276,6 +2324,7 @@ function closeAdminMenu() {
 
 async function switchView(v) {
   closeAdminMenu();
+  v = guardSuperAdminView(v);
   currentView = v;
   if (v === 'invoices') fetchPayPalBalance();
   if (v === 'events') {
@@ -2293,7 +2342,7 @@ async function switchView(v) {
       }
       if (membersRes.status === 'fulfilled') {
         const memberList = membersRes.value?.members ?? [];
-        if (memberList.length) MEMBERS.splice(0, MEMBERS.length, ...memberList);
+        if (memberList.length) MEMBERS.splice(0, MEMBERS.length, ...sortMembersInPlace([...memberList]));
       }
       invalidateAdminCaches();
       rebuildInvoiceMemberMap();
@@ -2338,6 +2387,17 @@ async function switchView(v) {
       await fetchMonitorHealth();
     } catch (e) {
       document.getElementById('mainArea').innerHTML = `<div class="tracker-banner" role="alert">${esc(e.message || 'Could not load system health.')}</div>`;
+      return;
+    }
+  } else if (v === 'announcement') {
+    showMainLoading('Loading announcement intake…');
+    try {
+      if (!MEMBERS.length) {
+        await refreshAdminSections(['core']);
+      }
+      await fetchAnnouncementIntakeData();
+    } catch (e) {
+      document.getElementById('mainArea').innerHTML = `<div class="tracker-banner" role="alert">${esc(e.message || 'Could not load announcement intake.')}</div>`;
       return;
     }
   } else if (v === 'payouts' && !adminSectionsLoaded.payouts) {
@@ -2774,6 +2834,868 @@ function getEventSummaryRows() {
   return Object.values(buildEventSummaryMap());
 }
 
+const ANN_PAYMENT_INTRO = '* Please note that we will be collecting membership dues. Payments may be made through:';
+const ANN_PORTAL_PATH = '/portal/';
+const ANN_PAYMENT_OPTIONS = [
+  { main: 'PayPal: Member portal', sub: 'sign in to pay', subPrefix: 'Most preferred —', subLink: ANN_PORTAL_PATH },
+  { main: 'Zelle: (424) 547-5594', sub: 'Upload receipt', subLink: ANN_PORTAL_PATH },
+  { main: 'Bank of America: Account #002174902906', sub: 'Upload receipt', subLink: ANN_PORTAL_PATH },
+];
+
+function annPaymentSubPlainText(opt) {
+  const label = opt.subPrefix ? `${opt.subPrefix} ${opt.sub}` : opt.sub;
+  if (!opt.subLink) return label;
+  const url = opt.subLink.startsWith('http') ? opt.subLink : `https://www.hibretedir.com${opt.subLink}`;
+  return `${label} — ${url}`;
+}
+
+function annPaymentBulletsPlainText() {
+  const lines = [ANN_PAYMENT_INTRO];
+  for (const opt of ANN_PAYMENT_OPTIONS) {
+    lines.push(`• ${opt.main}`);
+    lines.push(`     ${annPaymentSubPlainText(opt)}`);
+  }
+  return lines.join('\n');
+}
+
+function annPaymentBulletsPreviewHtml() {
+  const items = ANN_PAYMENT_OPTIONS.map((opt) => {
+    const prefix = opt.subPrefix ? `${esc(opt.subPrefix)} ` : '';
+    const sub = opt.subLink
+      ? `${prefix}<a href="${esc(opt.subLink)}">${esc(opt.sub)}</a>`
+      : esc(opt.subPrefix ? `${opt.subPrefix} ${opt.sub}` : opt.sub);
+    return `<li>${esc(opt.main)}<span class="ann-pay-sub">${sub}</span></li>`;
+  }).join('');
+  return `<p>${esc(ANN_PAYMENT_INTRO)}</p><ul class="ann-pay-list">${items}</ul>`;
+}
+
+const ANN_NOT_MEMBER_VALUE = 'not-member';
+const ANN_SPOUSE_CONTINUE_STATUSES = new Set(['yes', 'no', 'no_spouse']);
+
+function normalizeAnnSpouseContinueStatus(source) {
+  if (!source) return null;
+  const raw = String(source.spouse_continue_status || '').trim().toLowerCase();
+  if (ANN_SPOUSE_CONTINUE_STATUSES.has(raw)) return raw;
+  if (source.spouse_no_spouse === true) return 'no_spouse';
+  if (source.spouse_will_continue === true) return 'yes';
+  if (source.spouse_will_continue === false) return 'no';
+  return null;
+}
+const ANN_DECEASED_TITLES = [
+  { value: 'Ato', label: 'Ato' },
+  { value: 'Wzro', label: 'Wzro' },
+  { value: 'Lij', label: 'Lij' },
+];
+
+function normalizeAnnDeceasedTitle(raw) {
+  const t = String(raw || '').trim().replace(/:$/, '');
+  if (!t) return '';
+  const lower = t.toLowerCase();
+  if (lower === 'ato') return 'Ato';
+  if (lower === 'wzro' || lower === 'w/ro' || lower === 'weizero') return 'Wzro';
+  if (lower === 'lij') return 'Lij';
+  return '';
+}
+
+function splitAnnDeceasedTitleFromName(raw) {
+  const s = String(raw || '').trim();
+  const withColon = s.match(/^(Ato|Wzro|Lij)\s*:\s*(.+)$/i);
+  if (withColon) return { title: normalizeAnnDeceasedTitle(withColon[1]), name: withColon[2].trim() };
+  const bare = s.match(/^(Ato|Wzro|Lij)\s+(.+)$/i);
+  if (bare) return { title: normalizeAnnDeceasedTitle(bare[1]), name: bare[2].trim() };
+  return { title: '', name: s };
+}
+
+function formatAnnEventAutoLabel(ann) {
+  const num = ann?.event_number || ANN_NEXT_EVENT_NUMBER;
+  const name = formatAnnDeceasedDisplay(ann);
+  if (!num) return '—';
+  if (!name || name === '—') return `#${num}`;
+  return `#${num} ${name}`;
+}
+
+function assignAnnEventNumberIfCollecting() {
+  if (!annIntake || annIntake.collect_dues !== true) {
+    if (annIntake) annIntake.event_number = null;
+    return;
+  }
+  if (!annIntake.event_number && ANN_NEXT_EVENT_NUMBER) {
+    annIntake.event_number = ANN_NEXT_EVENT_NUMBER;
+  }
+}
+
+function syncAnnEventBlockUi() {
+  const block = document.getElementById('annEventBlock');
+  if (!block || block.hidden) return;
+  assignAnnEventNumberIfCollecting();
+  const hidden = document.getElementById('annEventNumber');
+  const label = document.getElementById('annEventAutoLabel');
+  if (hidden && annIntake?.event_number) hidden.value = String(annIntake.event_number);
+  if (label) label.textContent = formatAnnEventAutoLabel(annIntake);
+}
+
+function formatAnnDeceasedDisplay(ann) {
+  const name = String(ann?.deceased_name || '').trim();
+  if (!name) return '—';
+  const title = normalizeAnnDeceasedTitle(ann?.deceased_title);
+  return title ? `${title} ${name}` : name;
+}
+
+function renderAnnDeceasedTitleOptions(selected) {
+  const sel = normalizeAnnDeceasedTitle(selected);
+  let html = '<option value="">— Title —</option>';
+  for (const t of ANN_DECEASED_TITLES) {
+    html += `<option value="${t.value}"${sel === t.value ? ' selected' : ''}>${esc(t.label)}</option>`;
+  }
+  return html;
+}
+
+function emptyAnnIntake() {
+  return {
+    event_number: null,
+    not_member: false,
+    member_id: null,
+    spouse_continue_status: null,
+    deceased_title: '',
+    deceased_name: '',
+    deceased_note: '',
+    deceased_relationship: '',
+    announcement_text: '',
+    guest_reception: { enabled: false, venue: '', address: '', datetime: '' },
+    church_service: { enabled: false, venue: '', address: '', datetime: '' },
+    funeral_service: { enabled: false, venue: '', address: '', datetime: '' },
+    collect_dues: null,
+  };
+}
+
+function annServiceBlockFromForm(prefix) {
+  const enabled = document.getElementById(`${prefix}Enabled`)?.value === '1';
+  return {
+    enabled,
+    venue: document.getElementById(`${prefix}Venue`)?.value.trim() || '',
+    address: document.getElementById(`${prefix}Address`)?.value.trim() || '',
+    datetime: document.getElementById(`${prefix}Datetime`)?.value.trim() || '',
+  };
+}
+
+function readAnnIntakeFromForm() {
+  if (!annIntake) annIntake = emptyAnnIntake();
+  annIntake.event_number = Number(document.getElementById('annEventNumber')?.value) || null;
+  annIntake.deceased_title = normalizeAnnDeceasedTitle(document.getElementById('annDeceasedTitle')?.value);
+  annIntake.deceased_name = document.getElementById('annDeceasedName')?.value.trim() || '';
+  annIntake.deceased_note = document.getElementById('annDeceasedNote')?.value.trim() || '';
+  annIntake.deceased_relationship = document.getElementById('annDeceasedRel')?.value.trim() || '';
+  const memberVal = document.getElementById('annPrimaryMember')?.value || '';
+  if (memberVal === ANN_NOT_MEMBER_VALUE) {
+    annIntake.not_member = true;
+    annIntake.member_id = null;
+    annIntake.spouse_continue_status = null;
+  } else {
+    annIntake.not_member = false;
+    annIntake.member_id = memberVal ? Number(memberVal) : null;
+    if (!memberVal) annIntake.spouse_continue_status = null;
+    else {
+      const spouseVal = document.getElementById('annSpouseContinue')?.value || '';
+      annIntake.spouse_continue_status = ANN_SPOUSE_CONTINUE_STATUSES.has(spouseVal) ? spouseVal : null;
+    }
+  }
+  annIntake.guest_reception = annServiceBlockFromForm('annGuest');
+  annIntake.church_service = annServiceBlockFromForm('annChurch');
+  annIntake.funeral_service = annServiceBlockFromForm('annFuneral');
+  const collectVal = document.getElementById('annCollectDues')?.value;
+  annIntake.collect_dues = collectVal === '1' ? true : collectVal === '0' ? false : null;
+  if (annLetterUserEdited) {
+    annIntake.announcement_text = captureAnnLetterHtml();
+  } else {
+    annIntake.announcement_text = '';
+  }
+  return annIntake;
+}
+
+function isAnnLetterHtml(text) {
+  return /<\s*(p|ul|li|strong|em|br|a|div)\b/i.test(String(text || ''));
+}
+
+function captureAnnLetterHtml() {
+  const letter = document.querySelector('#annPreviewBody .ann-preview-letter');
+  return letter ? letter.innerHTML.trim() : '';
+}
+
+function onAnnPreviewInput() {
+  annLetterUserEdited = true;
+  annIntake.announcement_text = captureAnnLetterHtml();
+  updateAnnPreviewModeUi();
+}
+
+function applyAnnPreviewEditState() {
+  const letter = document.querySelector('#annPreviewBody .ann-preview-letter');
+  if (!letter) return;
+  const collectUnset = annIntake?.collect_dues == null;
+  const canEdit = adminCanWriteAll() && !collectUnset;
+  letter.contentEditable = canEdit ? 'true' : 'false';
+  letter.classList.toggle('ann-preview-letter-editable', canEdit);
+  letter.oninput = canEdit ? onAnnPreviewInput : null;
+}
+
+function useAnnFormattedLayout() {
+  if (!annLetterUserEdited) {
+    updateAnnouncementPreview();
+    showAdminToast('Letter already matches the form.', 'info');
+    return;
+  }
+  if (!confirm('Reset the letter from the form? Your edits in the preview will be replaced.')) return;
+  readAnnIntakeFromForm();
+  annLetterUserEdited = false;
+  annIntake.announcement_text = '';
+  updateAnnouncementPreview();
+  showAdminToast('Letter rebuilt from the form.', 'ok');
+}
+
+function buildAnnLetterPlainText(ann) {
+  if (!ann) return '';
+  const guest = ann.guest_reception || {};
+  const church = ann.church_service || {};
+  const funeral = ann.funeral_service || {};
+  const guestOn = guest.enabled && (guest.venue || guest.address || guest.datetime);
+  const churchOn = church.enabled && (church.venue || church.address || church.datetime);
+  const funeralOn = funeral.enabled && (funeral.venue || funeral.address || funeral.datetime);
+  const lines = [];
+  if (ann.collect_dues === false) lines.push('No payment needed.');
+  const note = ann.deceased_note ? `, ${ann.deceased_note}` : '';
+  lines.push(`It is with deep sorrow that we share the passing of our beloved Hibret Edir member, ${formatAnnDeceasedDisplay(ann)}${note}.`);
+  if (guestOn) {
+    lines.push('');
+    lines.push('Family will be accepting guest:');
+    if (guest.venue) lines.push(guest.venue);
+    if (guest.address) lines.push(guest.address);
+    if (guest.datetime) lines.push(guest.datetime);
+  }
+  if (churchOn) {
+    lines.push('');
+    lines.push('A prayer service will be held at:');
+    if (church.venue) lines.push(church.venue);
+    if (church.address) lines.push(church.address);
+    if (church.datetime) lines.push(church.datetime);
+  }
+  if (funeralOn) {
+    lines.push('');
+    lines.push('A burial service will follow at:');
+    if (funeral.venue) lines.push(funeral.venue);
+    if (funeral.address) lines.push(funeral.address);
+    if (funeral.datetime) lines.push(funeral.datetime);
+  }
+  if (ann.collect_dues === true) {
+    lines.push('');
+    lines.push(annPaymentBulletsPlainText());
+  }
+  lines.push('');
+  lines.push('With heartfelt condolences,');
+  lines.push('Hibret Edir');
+  return lines.join('\n');
+}
+
+function renderAnnouncementLetterHtml(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return '<div class="tracker-empty">Letter will appear here. Use Rebuild from form or type directly.</div>';
+  return `<div class="ann-preview-letter">${raw.split(/\n\n+/).map((p) => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join('')}</div>`;
+}
+
+function renderAnnouncementStructuredPreviewHtml(ann) {
+  const guest = ann.guest_reception || {};
+  const church = ann.church_service || {};
+  const funeral = ann.funeral_service || {};
+  const guestOn = guest.enabled && (guest.venue || guest.address || guest.datetime);
+  const churchOn = church.enabled && (church.venue || church.address || church.datetime);
+  const funeralOn = funeral.enabled && (funeral.venue || funeral.address || funeral.datetime);
+  const name = esc(formatAnnDeceasedDisplay(ann));
+  const blocks = [];
+  if (ann.collect_dues === false) {
+    blocks.push('<p class="ann-preview-lead"><strong>No payment needed.</strong></p>');
+  }
+  const note = ann.deceased_note ? `, ${esc(ann.deceased_note)}` : '';
+  blocks.push(`<p>It is with deep sorrow that we share the passing of our beloved Hibret Edir member, <strong>${name}${note}</strong>.</p>`);
+  if (guestOn) {
+    blocks.push(`<p><em>Family will be accepting guest:</em><br>${esc(guest.venue)}<br>${esc(guest.address)}<br>${esc(guest.datetime)}</p>`);
+  }
+  if (churchOn) {
+    blocks.push(`<p><em>A prayer service will be held at:</em><br>${esc(church.venue)}<br>${esc(church.address)}<br>${esc(church.datetime)}</p>`);
+  }
+  if (funeralOn) {
+    blocks.push(`<p><em>A burial service will follow at:</em><br>${esc(funeral.venue)}<br>${esc(funeral.address)}<br>${esc(funeral.datetime || '')}</p>`);
+  }
+  if (ann.collect_dues === true) {
+    blocks.push(annPaymentBulletsPreviewHtml());
+  }
+  blocks.push('<p>With heartfelt condolences,<br><strong>Hibret Edir</strong></p>');
+  return `<div class="ann-preview-letter">${blocks.join('')}</div>`;
+}
+
+function renderAnnouncementPreviewHtml(ann, { userEdited = false } = {}) {
+  if (!ann) return '<div class="tracker-empty">Fill in the form to preview the announcement.</div>';
+  if (userEdited) {
+    const raw = String(ann.announcement_text || '').trim();
+    if (!raw) {
+      return '<div class="tracker-empty">Click the letter below to add or change text.</div>';
+    }
+    if (isAnnLetterHtml(raw)) {
+      return `<div class="ann-preview-letter">${raw}</div>`;
+    }
+    return renderAnnouncementLetterHtml(raw);
+  }
+  return renderAnnouncementStructuredPreviewHtml(ann);
+}
+
+function syncAnnServiceFields(prefix, block) {
+  const b = block || { enabled: false, venue: '', address: '', datetime: '' };
+  const en = document.getElementById(`${prefix}Enabled`);
+  const fields = document.getElementById(`${prefix}Fields`);
+  if (en) en.checked = !!b.enabled;
+  if (fields) fields.style.display = b.enabled ? '' : 'none';
+  const venue = document.getElementById(`${prefix}Venue`);
+  const address = document.getElementById(`${prefix}Address`);
+  const datetime = document.getElementById(`${prefix}Datetime`);
+  if (venue) venue.value = b.venue || '';
+  if (address) address.value = b.address || '';
+  if (datetime) datetime.value = b.datetime || '';
+}
+
+async function fetchAnnouncementIntakeData() {
+  const [eventsRes, fundRes, venuesRes] = await Promise.all([
+    apiGet('apply/announcement/events'),
+    apiGet('apply/announcement/fund-status'),
+    apiGet('apply/announcement/service-venues').catch(() => ({ venues: { church: [], funeral: [] } })),
+  ]);
+  ANNOUNCEMENT_EVENTS = eventsRes?.events || [];
+  ANN_NEXT_EVENT_NUMBER = Number(eventsRes?.next_event_number) || null;
+  ANNOUNCEMENT_FUND = fundRes || null;
+  ANN_SERVICE_VENUES = venuesRes?.venues || { church: [], funeral: [] };
+  annIntake = emptyAnnIntake();
+  annLetterUserEdited = false;
+}
+
+function annIntakeFromAnnouncement(a, overrides = {}) {
+  const split = splitAnnDeceasedTitleFromName(a.deceased_name || '');
+  return {
+    event_number: overrides.event_number ?? null,
+    member_id: a.member_id || null,
+    not_member: a.not_member === true,
+    deceased_title: normalizeAnnDeceasedTitle(a.deceased_title) || split.title,
+    deceased_name: split.name || a.deceased_name || '',
+    deceased_note: a.deceased_note || '',
+    deceased_relationship: a.deceased_relationship || '',
+    spouse_continue_status: normalizeAnnSpouseContinueStatus(a),
+    announcement_text: a.announcement_text || '',
+    guest_reception: a.guest_reception || emptyAnnIntake().guest_reception,
+    church_service: a.church_service || emptyAnnIntake().church_service,
+    funeral_service: a.funeral_service || emptyAnnIntake().funeral_service,
+    collect_dues: overrides.collect_dues ?? false,
+    ...overrides,
+  };
+}
+
+function loadMemorialAnnouncement(res) {
+  const a = res?.announcement || emptyAnnIntake();
+  annIntake = annIntakeFromAnnouncement(a);
+  if (res?.fund_hint) ANNOUNCEMENT_FUND = res.fund_hint;
+}
+
+async function loadAnnouncementForEvent(eventNumber) {
+  const num = Number(eventNumber);
+  if (!Number.isFinite(num)) return;
+  const res = await apiGet(`apply/announcement/events/${num}`);
+  const a = res?.announcement || emptyAnnIntake();
+  const ev = ANNOUNCEMENT_EVENTS.find((e) => Number(e.event_number) === num);
+  const hasSaved = ev?.has_saved_intake || ev?.has_announcement_details;
+  annIntake = hasSaved
+    ? annIntakeFromAnnouncement(a, {
+      event_number: num,
+      not_member: a.not_member === true,
+      collect_dues: a.collect_dues !== false,
+    })
+    : annIntakeFromAnnouncement(emptyAnnIntake(), {
+      event_number: num,
+      not_member: false,
+      deceased_title: '',
+      deceased_name: '',
+      deceased_note: '',
+      deceased_relationship: '',
+      announcement_text: '',
+      guest_reception: emptyAnnIntake().guest_reception,
+      church_service: emptyAnnIntake().church_service,
+      funeral_service: emptyAnnIntake().funeral_service,
+      collect_dues: ANNOUNCEMENT_FUND?.suggest_collect_dues !== false,
+    });
+  annLetterUserEdited = hasSaved && !!(a.announcement_text || '').trim();
+  if (res?.fund_hint) ANNOUNCEMENT_FUND = res.fund_hint;
+}
+
+function formatAnnEventOptionLabel(e) {
+  const parts = [`Event #${e.event_number}`, e.status || 'Active'];
+  const date = e.event_date ? fmtDate(e.event_date) : '';
+  if (date && date !== '—') parts.push(date);
+  if (e.has_saved_intake || e.has_announcement_details) parts.push('intake saved');
+  return parts.join(' · ');
+}
+
+function annPrimaryMemberLabel(memberId) {
+  const m = MEMBERS.find((x) => Number(x.id) === Number(memberId));
+  if (!m) return '';
+  const names = memberDisplayNames(m);
+  return names.paypal || names.household || `Member #${m.member_number || m.id}`;
+}
+
+function syncAnnSpouseContinueUi(resetAnswer = false) {
+  const memberVal = document.getElementById('annPrimaryMember')?.value || '';
+  const notMember = memberVal === ANN_NOT_MEMBER_VALUE;
+  const memberId = !notMember && memberVal ? Number(memberVal) : null;
+  const show = !notMember && memberId;
+  const block = document.getElementById('annSpouseContinueBlock');
+  if (!block) return;
+  block.hidden = !show;
+  const label = block.querySelector('.ann-selected-member-label');
+  if (label) label.textContent = show ? annPrimaryMemberLabel(memberId) : '';
+  if (!show || resetAnswer) {
+    const hidden = document.getElementById('annSpouseContinue');
+    if (hidden) hidden.value = '';
+    document.getElementById('annSpouseContinueYes')?.classList.remove('active');
+    document.getElementById('annSpouseContinueNo')?.classList.remove('active');
+    document.getElementById('annSpouseContinueNone')?.classList.remove('active');
+    if (annIntake) annIntake.spouse_continue_status = null;
+  }
+}
+
+function setAnnSpouseContinueStatus(status) {
+  if (!ANN_SPOUSE_CONTINUE_STATUSES.has(status)) return;
+  readAnnIntakeFromForm();
+  annIntake.spouse_continue_status = status;
+  const hidden = document.getElementById('annSpouseContinue');
+  if (hidden) hidden.value = status;
+  const yesBtn = document.getElementById('annSpouseContinueYes');
+  const noBtn = document.getElementById('annSpouseContinueNo');
+  const noneBtn = document.getElementById('annSpouseContinueNone');
+  if (yesBtn) yesBtn.classList.toggle('active', status === 'yes');
+  if (noBtn) noBtn.classList.toggle('active', status === 'no');
+  if (noneBtn) noneBtn.classList.toggle('active', status === 'no_spouse');
+}
+
+function renderAnnPrimaryMemberOptions(selectedId, notMember) {
+  const active = MEMBERS.filter((m) => m.status === 'Active')
+    .sort((a, b) => memberDisplayNames(a).paypal.localeCompare(memberDisplayNames(b).paypal));
+  let options = `<option value="${ANN_NOT_MEMBER_VALUE}"${notMember ? ' selected' : ''}>Not Member</option>`;
+  options += `<option value=""${!notMember && !selectedId ? ' selected' : ''}>— Select member —</option>`;
+  for (const m of active) {
+    const names = memberDisplayNames(m);
+    const label = names.paypal || names.household || `Member #${m.member_number || m.id}`;
+    const sel = !notMember && Number(selectedId) === Number(m.id) ? ' selected' : '';
+    options += `<option value="${m.id}"${sel}>${esc(label)}</option>`;
+  }
+  return options;
+}
+
+function onAnnPrimaryMemberChange() {
+  const val = document.getElementById('annPrimaryMember')?.value || '';
+  readAnnIntakeFromForm();
+  annIntake.spouse_continue_status = null;
+  if (val === ANN_NOT_MEMBER_VALUE) {
+    annIntake.not_member = true;
+    annIntake.member_id = null;
+    annIntake.collect_dues = false;
+    annIntake.event_number = null;
+    renderAnnouncementView();
+    return;
+  }
+  annIntake.not_member = false;
+  if (val) annIntake.member_id = Number(val);
+  else annIntake.member_id = null;
+  renderAnnouncementView();
+}
+
+let annNameMatches = [];
+
+function onAnnDeceasedNameInput() {
+  updateAnnouncementPreview();
+  const name = document.getElementById('annDeceasedName')?.value.trim() || '';
+  const listEl = document.getElementById('annNameMatches');
+  const statusEl = document.getElementById('annMatchStatus');
+  clearTimeout(annDeceasedLinkTimer);
+  if (name.length < 2) {
+    if (listEl) listEl.innerHTML = '';
+    if (statusEl) { statusEl.textContent = ''; statusEl.className = 'ann-match-status'; }
+    annNameMatches = [];
+    return;
+  }
+  annDeceasedLinkTimer = setTimeout(async () => {
+    try {
+      const res = await apiGet(`apply/announcement/deceased-search?q=${encodeURIComponent(name)}`);
+      annNameMatches = res?.matches || [];
+    } catch {
+      annNameMatches = [];
+    }
+    renderAnnNameMatches(name);
+  }, 280);
+}
+
+function applyAnnNameMatch(m, setName) {
+  if (!m) return;
+  if (setName) {
+    const split = splitAnnDeceasedTitleFromName(m.deceased_name);
+    const input = document.getElementById('annDeceasedName');
+    const titleSel = document.getElementById('annDeceasedTitle');
+    if (input) input.value = split.name || m.deceased_name;
+    if (titleSel && split.title) titleSel.value = split.title;
+  }
+  const sel = document.getElementById('annPrimaryMember');
+  const relHidden = document.getElementById('annDeceasedRel');
+  const noteInput = document.getElementById('annDeceasedNote');
+  const rel = m.relationship === 'Family' ? 'Child' : m.relationship;
+  if (sel) {
+    sel.innerHTML = renderAnnPrimaryMemberOptions(m.member_id, false);
+    sel.value = String(m.member_id);
+  }
+  if (relHidden) relHidden.value = rel;
+  if (noteInput && !noteInput.value.trim()) {
+    if (rel === 'Spouse') noteInput.value = `spouse of ${m.member_name}`;
+    else if (rel === 'Child') noteInput.value = `child of ${m.member_name}`;
+  }
+  const listEl = document.getElementById('annNameMatches');
+  if (listEl) listEl.innerHTML = '';
+  const statusEl = document.getElementById('annMatchStatus');
+  if (statusEl) {
+    statusEl.className = 'ann-match-status matched';
+    statusEl.textContent = `Linked to family #${m.member_number || m.member_id} — ${m.member_name}`;
+  }
+  syncAnnSpouseContinueUi(true);
+  updateAnnouncementPreview();
+}
+
+function applyAnnNameMatchByIndex(i) {
+  applyAnnNameMatch(annNameMatches[i], true);
+}
+
+function renderAnnNameMatches(typedName) {
+  const listEl = document.getElementById('annNameMatches');
+  const statusEl = document.getElementById('annMatchStatus');
+  if (!listEl) return;
+  const needle = normalizeAnnName(typedName);
+  const exact = annNameMatches.find((m) => normalizeAnnName(m.deceased_name) === needle);
+  if (exact) {
+    applyAnnNameMatch(exact, false);
+    return;
+  }
+  if (annNameMatches.length) {
+    listEl.innerHTML = annNameMatches.slice(0, 5).map((m, i) =>
+      `<button type="button" class="ann-name-match-btn" onclick="applyAnnNameMatchByIndex(${i})">
+        <strong>${esc(m.deceased_name)}</strong>
+        <span>${esc(m.relationship)} · family #${esc(m.member_number || m.member_id)}</span>
+      </button>`
+    ).join('');
+    if (statusEl) {
+      statusEl.className = 'ann-match-status suggest';
+      statusEl.textContent = 'Tap a match below, or keep typing your own name.';
+    }
+  } else {
+    listEl.innerHTML = '';
+    if (statusEl) {
+      statusEl.className = 'ann-match-status none';
+      statusEl.textContent = 'No CRM match — use the name as typed and pick the member profile below.';
+    }
+  }
+}
+
+function setAnnServiceEnabled(prefix, yes) {
+  const hidden = document.getElementById(`${prefix}Enabled`);
+  const fields = document.getElementById(`${prefix}Fields`);
+  const yesBtn = document.getElementById(`${prefix}Yes`);
+  const noBtn = document.getElementById(`${prefix}No`);
+  if (hidden) hidden.value = yes ? '1' : '0';
+  if (fields) fields.style.display = yes ? '' : 'none';
+  if (yesBtn) yesBtn.classList.toggle('active', yes);
+  if (noBtn) noBtn.classList.toggle('active', !yes);
+  syncAnnPreviewFromFormSteps();
+}
+
+function setAnnCollectDues(collect) {
+  readAnnIntakeFromForm();
+  if (collect && annIntake.not_member) {
+    showAdminToast('Not member announcements do not collect dues. Select a member on file to enable collection.', 'warn');
+    return;
+  }
+  annIntake.collect_dues = collect;
+  if (!collect) annIntake.event_number = null;
+  else assignAnnEventNumberIfCollecting();
+  renderAnnouncementView({ syncLetterFromForm: true });
+}
+
+function updateAnnPreviewModeUi() {
+  const tag = document.getElementById('annPreviewModeTag');
+  if (tag) tag.hidden = !annLetterUserEdited;
+}
+
+function syncAnnPreviewFromFormSteps() {
+  updateAnnouncementPreview({ syncFromFormSteps: true });
+}
+
+function updateAnnouncementPreview(options = {}) {
+  const syncFromFormSteps = options.syncFromFormSteps === true;
+  readAnnIntakeFromForm();
+  if (syncFromFormSteps) {
+    annLetterUserEdited = false;
+    annIntake.announcement_text = '';
+  } else if (annLetterUserEdited) {
+    updateAnnPreviewModeUi();
+    return;
+  }
+  const el = document.getElementById('annPreviewBody');
+  if (el) {
+    el.innerHTML = renderAnnouncementStructuredPreviewHtml(annIntake);
+    applyAnnPreviewEditState();
+  }
+  syncAnnEventBlockUi();
+  updateAnnPreviewModeUi();
+}
+
+async function saveAnnouncementIntake() {
+  if (!adminCanWriteAll()) {
+    showAdminToast('You need full access to save announcements.', 'warn');
+    return;
+  }
+  const payload = readAnnIntakeFromForm();
+  if (!payload.deceased_name) {
+    alert('Enter the name of the person who passed away.');
+    document.getElementById('annDeceasedName')?.focus();
+    return;
+  }
+  if (!payload.deceased_title) {
+    alert('Select a title (Ato, Wzro, or Lij).');
+    document.getElementById('annDeceasedTitle')?.focus();
+    return;
+  }
+  if (payload.collect_dues !== true && payload.collect_dues !== false) {
+    alert('Start with collection — choose Yes or No for “Will there be a collection?”');
+    document.getElementById('annCollectBanner')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    document.getElementById('annCollectYes')?.focus();
+    return;
+  }
+  const collecting = payload.collect_dues === true;
+  if (collecting && !payload.event_number) {
+    alert('Event number is not ready — refresh the page and try again.');
+    return;
+  }
+  if (!payload.not_member && !payload.member_id) {
+    alert('Select the member on file, or choose Not member.');
+    return;
+  }
+  if (!payload.not_member && payload.member_id && !ANN_SPOUSE_CONTINUE_STATUSES.has(payload.spouse_continue_status)) {
+    alert('Answer whether the spouse will continue (Yes, No, or No spouse).');
+    document.getElementById('annSpouseContinueYes')?.focus();
+    return;
+  }
+  if (payload.not_member && collecting) {
+    alert('Not member announcements cannot collect dues.');
+    return;
+  }
+  if (!annLetterUserEdited) {
+    payload.announcement_text = null;
+  } else {
+    payload.announcement_text = captureAnnLetterHtml() || null;
+  }
+  try {
+    const res = collecting
+      ? await apiPut(`apply/announcement/events/${payload.event_number}`, payload)
+      : await apiPut('apply/announcement/memorial', payload);
+    const createdMsg = collecting && res?.event?.created
+      ? ` #${payload.event_number} (${formatAnnDeceasedDisplay(payload)}) was added to the deceased list.`
+      : '';
+    showAdminToast(`Announcement saved.${createdMsg} Public site will show this on refresh.`, 'ok');
+    await fetchAnnouncementIntakeData();
+    renderAnnouncementView();
+  } catch (e) {
+    alert(e.message || 'Could not save announcement.');
+  }
+}
+
+function renderAnnSavedVenuePicker(prefix, serviceType) {
+  if (!serviceType || !['church', 'funeral'].includes(serviceType)) return '';
+  const venues = ANN_SERVICE_VENUES[serviceType] || [];
+  const opts = venues.map((v, i) => `<option value="${i}">${esc(v.venue)}</option>`).join('');
+  return `
+        <div class="ann-answer-row ann-venue-pick-row">
+          <label class="ann-answer-q" for="${prefix}VenuePick">Drop down name of service place</label>
+          <select class="field-input ann-answer-input" id="${prefix}VenuePick" onchange="applyAnnSavedVenue('${prefix}', '${serviceType}')">
+            <option value="">Choose one</option>
+            ${opts}
+          </select>
+        </div>`;
+}
+
+function applyAnnSavedVenue(prefix, serviceType) {
+  const sel = document.getElementById(`${prefix}VenuePick`);
+  const idx = Number(sel?.value);
+  if (!Number.isFinite(idx) || idx < 0) return;
+  const v = (ANN_SERVICE_VENUES[serviceType] || [])[idx];
+  if (!v) return;
+  const venueEl = document.getElementById(`${prefix}Venue`);
+  const addressEl = document.getElementById(`${prefix}Address`);
+  if (venueEl) venueEl.value = v.venue || '';
+  if (addressEl) addressEl.value = v.address || '';
+  syncAnnPreviewFromFormSteps();
+}
+
+function renderAnnServiceSection(prefix, stepNum, question, block, serviceType) {
+  const b = block || { enabled: false, venue: '', address: '', datetime: '' };
+  const on = !!b.enabled;
+  return `
+    <div class="ann-intake-section">
+      <h3 class="ann-intake-question">${stepNum}. ${esc(question)}</h3>
+      <input type="hidden" id="${prefix}Enabled" value="${on ? '1' : '0'}">
+      <div class="ann-yesno-btns" role="group" aria-label="${esc(question)}">
+        <button type="button" id="${prefix}Yes" class="ann-yesno-btn yes${on ? ' active' : ''}" onclick="setAnnServiceEnabled('${prefix}', true)">Yes</button>
+        <button type="button" id="${prefix}No" class="ann-yesno-btn no${on ? '' : ' active'}" onclick="setAnnServiceEnabled('${prefix}', false)">No</button>
+      </div>
+      <div id="${prefix}Fields" class="ann-answer-panel"${on ? '' : ' style="display:none"'}>
+        ${renderAnnSavedVenuePicker(prefix, serviceType)}
+        <div class="ann-answer-row">
+          <label class="ann-answer-q" for="${prefix}Venue">Venue</label>
+          <input class="field-input ann-answer-input" id="${prefix}Venue" value="${esc(b.venue)}" placeholder="Church or venue name" oninput="syncAnnPreviewFromFormSteps()">
+        </div>
+        <div class="ann-answer-row">
+          <label class="ann-answer-q" for="${prefix}Address">Address</label>
+          <input class="field-input ann-answer-input" id="${prefix}Address" value="${esc(b.address)}" placeholder="Street, city, CA zip" oninput="syncAnnPreviewFromFormSteps()">
+        </div>
+        <div class="ann-answer-row">
+          <label class="ann-answer-q" for="${prefix}Datetime">Date &amp; time</label>
+          <input class="field-input ann-answer-input" id="${prefix}Datetime" value="${esc(b.datetime)}" placeholder="Thursday, April 23 at 10:00 AM" oninput="syncAnnPreviewFromFormSteps()">
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderAnnouncementView(options = {}) {
+  const syncLetterFromForm = options.syncLetterFromForm === true;
+  if (!annIntake) annIntake = emptyAnnIntake();
+  if (syncLetterFromForm) {
+    annLetterUserEdited = false;
+    annIntake.announcement_text = '';
+  }
+  if (annIntake.collect_dues === true) assignAnnEventNumberIfCollecting();
+  const fund = ANNOUNCEMENT_FUND || {};
+  const balanceText = fund.available_balance != null
+    ? `$${Number(fund.available_balance).toLocaleString(undefined, { maximumFractionDigits: 0 })} available`
+    : (fund.balance_error ? 'Balance unavailable' : 'Balance unavailable');
+
+  const eventAutoLabel = formatAnnEventAutoLabel(annIntake);
+
+  const rel = annIntake.deceased_relationship || '';
+  const collectYes = annIntake.collect_dues === true;
+  const collectNo = annIntake.collect_dues === false;
+  const collectUnset = annIntake.collect_dues == null;
+  const guestStep = collectYes ? 3 : 2;
+  const churchStep = collectYes ? 4 : 3;
+  const funeralStep = collectYes ? 5 : 4;
+  const showSpouseContinue = !annIntake.not_member && annIntake.member_id;
+  const memberOnFileLabel = showSpouseContinue ? annPrimaryMemberLabel(annIntake.member_id) : '';
+  const spouseStatus = normalizeAnnSpouseContinueStatus(annIntake) || '';
+  const spouseContinueYes = spouseStatus === 'yes';
+  const spouseContinueNo = spouseStatus === 'no';
+  const spouseContinueNone = spouseStatus === 'no_spouse';
+
+  document.getElementById('mainArea').innerHTML = `
+    ${trackerHeaderHtml(getStats())}
+    ${adminReadOnlyBannerHtml()}
+    <div class="ann-fund-banner ann-collect-first${collectUnset ? ' ann-collect-unset ann-collect-prompt' : ''}" id="annCollectBanner">
+      ${collectUnset ? '<div class="ann-collect-start-badge">Start here</div>' : ''}
+      <h2 class="ann-collect-heading">Will there be a collection? <span class="ann-required-mark">*</span></h2>
+      <div class="ann-fund-balance">${balanceText} in payout fund</div>
+      <div class="ann-collect-row">
+        <input type="hidden" id="annCollectDues" value="${collectYes ? '1' : collectNo ? '0' : ''}">
+        <div class="ann-yesno-btns${collectUnset ? ' ann-yesno-btns-prompt' : ' ann-yesno-btns-sm'}" role="group" aria-label="Will there be a collection?">
+          <button type="button" id="annCollectYes" class="ann-yesno-btn yes${collectYes ? ' active' : ''}"${annIntake.not_member ? ' disabled title="Not member — no collection"' : ''} onclick="setAnnCollectDues(true)">Yes</button>
+          <button type="button" id="annCollectNo" class="ann-yesno-btn no${collectNo ? ' active' : ''}" onclick="setAnnCollectDues(false)">No</button>
+        </div>
+      </div>
+      ${collectUnset ? '<p class="ann-collect-hint ann-collect-hint-prominent">Choose <strong>Yes</strong> or <strong>No</strong> first — the rest of the form unlocks after that.</p>' : ''}
+    </div>
+    <div class="ann-intake-layout${collectUnset ? ' ann-intake-locked' : ''}" id="annIntakeLayout">
+      ${collectUnset ? '<div class="ann-intake-lock-overlay" aria-hidden="true"><span>Select collection above to continue</span></div>' : ''}
+      <div class="ann-intake-form" id="annIntakeForm"${collectUnset ? ' inert' : ''}>
+
+        <div class="ann-intake-block ann-intake-block-first">
+          <h3 class="ann-intake-question">1. Name of the person who passed away <span class="ann-required-mark">*</span></h3>
+          <input type="hidden" id="annDeceasedRel" value="${esc(rel)}">
+          <div class="ann-name-row ann-name-row-titled">
+            <div class="ann-name-col ann-name-col-title">
+              <label class="ann-answer-q" for="annDeceasedTitle">Title <span class="ann-required-mark">*</span></label>
+              <select class="field-input ann-answer-input" id="annDeceasedTitle" required
+                onchange="updateAnnouncementPreview()">
+                ${renderAnnDeceasedTitleOptions(annIntake.deceased_title)}
+              </select>
+            </div>
+            <div class="ann-name-col">
+              <label class="ann-answer-q" for="annDeceasedName">Deceased name <span class="ann-required-mark">*</span></label>
+              <input class="field-input ann-answer-input" id="annDeceasedName" value="${esc(annIntake.deceased_name)}" autocomplete="off" required
+                placeholder="Full name" oninput="onAnnDeceasedNameInput()">
+            </div>
+            <div class="ann-name-col">
+              <label class="ann-answer-q" for="annDeceasedNote">Note</label>
+              <input class="field-input ann-answer-input" id="annDeceasedNote" value="${esc(annIntake.deceased_note || '')}"
+                placeholder="e.g. spouse of John Doe, daughter of…" oninput="updateAnnouncementPreview()">
+            </div>
+          </div>
+          <div class="ann-name-field">
+            <div id="annNameMatches" class="ann-name-matches"></div>
+          </div>
+          <div id="annMatchStatus" class="ann-match-status"></div>
+          <div class="ann-family-pick">
+            <label class="ann-answer-q" for="annPrimaryMember">Member on file</label>
+            <p class="ann-intake-hint">Choose Not Member if the deceased is not a member.</p>
+            <select class="field-input ann-answer-input" id="annPrimaryMember" onchange="onAnnPrimaryMemberChange()">
+              ${renderAnnPrimaryMemberOptions(annIntake.member_id, annIntake.not_member === true)}
+            </select>
+            <div class="ann-spouse-continue-block" id="annSpouseContinueBlock"${showSpouseContinue ? '' : ' hidden'}>
+              <div class="ann-selected-member-label">${esc(memberOnFileLabel)}</div>
+              <div class="ann-spouse-continue-row">
+                <span class="ann-answer-q">Will the spouse continue? <span class="ann-required-mark">*</span></span>
+                <input type="hidden" id="annSpouseContinue" value="${esc(spouseStatus)}">
+                <div class="ann-yesno-btns ann-yesno-btns-sm" role="group" aria-label="Will the spouse continue?">
+                  <button type="button" id="annSpouseContinueYes" class="ann-yesno-btn yes${spouseContinueYes ? ' active' : ''}" onclick="setAnnSpouseContinueStatus('yes')">Yes</button>
+                  <button type="button" id="annSpouseContinueNo" class="ann-yesno-btn no${spouseContinueNo ? ' active' : ''}" onclick="setAnnSpouseContinueStatus('no')">No</button>
+                  <button type="button" id="annSpouseContinueNone" class="ann-yesno-btn alt${spouseContinueNone ? ' active' : ''}" onclick="setAnnSpouseContinueStatus('no_spouse')">No spouse</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="ann-intake-block" id="annEventBlock"${collectYes ? '' : ' hidden'}>
+          <h3 class="ann-intake-question">2. PayPal funeral event</h3>
+          <p class="ann-intake-hint">Next event number for member invoices — linked to the member on file and deceased name above.</p>
+          <input type="hidden" id="annEventNumber" value="${annIntake.event_number || ANN_NEXT_EVENT_NUMBER || ''}">
+          <div class="ann-event-auto-label" id="annEventAutoLabel">${esc(eventAutoLabel)}</div>
+          <p class="ann-intake-hint ann-event-auto-note">Saving creates this event in the deceased list. PayPal invoices for all members are sent separately when bulk invoicing is run.</p>
+        </div>
+
+        ${renderAnnServiceSection('annGuest', guestStep, 'Will there be accepting guest before the service?', annIntake.guest_reception)}
+        ${renderAnnServiceSection('annChurch', churchStep, 'Will there be a church / prayer service?', annIntake.church_service, 'church')}
+        ${renderAnnServiceSection('annFuneral', funeralStep, 'Will there be a funeral / burial service?', annIntake.funeral_service, 'funeral')}
+
+        <div class="ann-intake-actions">
+          ${writeActionBtn('class="btn primary" onclick="saveAnnouncementIntake()"', 'Save announcement')}
+          <a class="btn" href="/#announcement" target="_blank" rel="noopener">View public page ↗</a>
+        </div>
+      </div>
+      <div class="ann-preview-panel"${collectUnset ? ' inert' : ''}>
+        <div class="ann-preview-title">Announcement letter</div>
+        <p class="ann-intake-hint">Built from the form. Click inside the letter to add or change lines — links and formatting stay intact. <strong>Reset from form</strong> undoes your edits. <strong>Save announcement</strong> publishes.</p>
+        <div class="ann-preview-header">
+          <div class="ann-preview-title ann-preview-subtitle">Preview <span class="ann-preview-mode-tag" id="annPreviewModeTag"${annLetterUserEdited ? '' : ' hidden'}>Edited</span></div>
+          ${writeActionBtn('type="button" class="btn ann-preview-layout-btn" onclick="useAnnFormattedLayout()"', 'Reset from form')}
+        </div>
+        <div id="annPreviewBody">${renderAnnouncementPreviewHtml(annIntake, { userEdited: annLetterUserEdited })}</div>
+      </div>
+    </div>`;
+  applyAnnPreviewEditState();
+}
+
 function renderEventsView() {
   const stats = getStats();
   const events = getEventSummaryRows();
@@ -2824,6 +3746,19 @@ function memberDisplayNames(m) {
   return { paypal, household };
 }
 
+function compareMembersByMemberNumber(a, b) {
+  const na = a.member_number != null && a.member_number !== '' ? Number(a.member_number) : NaN;
+  const nb = b.member_number != null && b.member_number !== '' ? Number(b.member_number) : NaN;
+  if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
+  if (Number.isFinite(na) && !Number.isFinite(nb)) return -1;
+  if (!Number.isFinite(na) && Number.isFinite(nb)) return 1;
+  return (Number(a.id) || 0) - (Number(b.id) || 0);
+}
+
+function sortMembersInPlace(list) {
+  return list.sort(compareMembersByMemberNumber);
+}
+
 function getMemberFiltered() {
   return MEMBERS.filter(m => {
     if (memberFilter === 'active' && m.status !== 'Active') return false;
@@ -2839,7 +3774,7 @@ function getMemberFiltered() {
     return true;
   }).sort((a, b) => {
     if (memberSort === 'name_asc') return memberDisplayNames(a).paypal.localeCompare(memberDisplayNames(b).paypal);
-    return (a.member_number || a.id) - (b.member_number || b.id);
+    return compareMembersByMemberNumber(a, b);
   });
 }
 
@@ -3605,7 +4540,7 @@ function openNewPayoutModal(prefillEvent) {
   evSel.innerHTML = '<option value="">— Select event —</option>' +
     events.map(e => `<option value="${esc(e)}"${prefillEvent === e ? ' selected' : ''}>${esc(e)}</option>`).join('');
   memSel.innerHTML = '<option value="">— Optional —</option>' +
-    MEMBERS.map(m => {
+    sortMembersInPlace([...MEMBERS]).map(m => {
       const names = memberDisplayNames(m);
       return `<option value="${m.id}">#${esc(m.member_number || m.id)} ${esc(names.paypal)}</option>`;
     }).join('');
@@ -4454,12 +5389,18 @@ function renderDemoQaResetButtonHtml() {
 }
 
 function renderMonitorHealthDashboardPanel(d) {
-  const healthCards = (d.health || []).map(h => `
+  const healthCards = (d.health || []).map(h => {
+    const testEmailBtn = h.id === 'sendgrid' && h.status === 'pass' && d.demo?.email_full
+      ? `<button type="button" class="btn secondary mh-step-btn mh-health-action" onclick="monitorHealthTestNotify()">Send test email</button>`
+      : '';
+    return `
     <div class="mh-health-card mh-health-${esc(h.status)}">
       <div class="mh-health-label">${esc(h.label)}</div>
       <div class="mh-health-status"><span class="tracker-status ${qaCheckStatusClass(h.status)}"><span class="tracker-status-dot"></span>${esc(qaCheckStatusLabel(h.status))}</span></div>
       <div class="mh-health-detail">${esc(h.detail || '')}</div>
-    </div>`).join('');
+      ${testEmailBtn}
+    </div>`;
+  }).join('');
 
   const pipe = d.pipeline || {};
   return `
@@ -4507,6 +5448,10 @@ function renderMonitorHealthTestPanel(d) {
       if (step.action === 'reset' || step.id === 'ONB-08') {
         if (d.demo?.enabled) {
           actions.push(`<button type="button" class="btn secondary mh-step-btn" onclick="monitorHealthResetDemo()">Reset demo cycle</button>`);
+        }
+      } else if (step.action === 'test_notify' || step.id === 'NTF-01') {
+        if (d.demo?.email_full) {
+          actions.push(`<button type="button" class="btn primary mh-step-btn" onclick="monitorHealthTestNotify()">Send test email</button>`);
         }
       } else if (step.link && step.mode !== 'planned' && step.can_test !== false) {
         actions.push(`<a class="btn primary mh-step-btn" href="${esc(step.link)}" target="_blank" rel="noopener">${esc(step.link_label || 'Open')}</a>`);
@@ -4568,6 +5513,19 @@ async function monitorHealthResetDemo() {
   }
 }
 
+async function monitorHealthTestNotify() {
+  const to = MONITOR_HEALTH?.demo?.email_full || 'the QA inbox';
+  if (!confirm(`Send a test email to ${to}?`)) return;
+  try {
+    const res = await apiPost('apply/demo-qa/test-notify', {});
+    showAdminToast(res.message || 'Test email sent.', 'ok');
+    await fetchMonitorHealth();
+    renderCurrentMonitorHealthView();
+  } catch (e) {
+    alert(e.message || 'Test email failed.');
+  }
+}
+
 async function monitorHealthSyncPayPal() {
   try {
     await syncPayPalInvoices();
@@ -4582,7 +5540,8 @@ function applyAdminRouteFromUrl() {
   let hash = (location.hash || '').replace(/^#/, '').trim();
   if (hash === 'monitor-health' || hash === 'system-health') hash = 'health-dashboard';
   if (!hash) return;
-  const valid = ['members', 'invoices', 'applications', 'receipts', 'messages', 'events', 'payouts', 'board-access', 'health-dashboard', 'qa-testing', 'activity'];
+  const valid = ['members', 'invoices', 'applications', 'receipts', 'messages', 'events', 'payouts', 'health-dashboard', 'qa-testing'];
+  if (adminIsSuperAdmin()) valid.push('board-access', 'activity');
   if (valid.includes(hash)) switchView(hash);
 }
 
@@ -4761,8 +5720,12 @@ function syncPayoutModalWriteAccess() {
 }
 
 function render() {
+  if ((currentView === 'board-access' || currentView === 'activity') && !adminIsSuperAdmin()) {
+    currentView = 'members';
+  }
   updateSidebar();
   if (currentView === 'events') renderEventsView();
+  else if (currentView === 'announcement') renderAnnouncementView();
   else if (currentView === 'members') renderMembersView();
   else if (currentView === 'applications') renderApplicationsView();
   else if (currentView === 'receipts') renderReceiptsView();
