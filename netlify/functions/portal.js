@@ -669,11 +669,30 @@ const FIELD_LABELS = {
 async function fetchMemberRow(id) {
   const db = getDb();
   const result = await db.query(
-    `SELECT id, member_number, first_name, last_name, full_name, paypal_name, email, mobile, home_phone, address, status, joined_date, created_at, updated_at, notes
+    `SELECT id, member_number, first_name, last_name, full_name, paypal_name, email, mobile, home_phone, address, status, joined_date, created_at, updated_at, notes, application_drive_url
      FROM members WHERE id = $1 LIMIT 1`,
     [id]
   );
   return result.rows[0] || null;
+}
+
+async function beneficiaryImportPending(db, memberId, member) {
+  if (!member) return false;
+  const ben = await db.query(
+    `SELECT 1 FROM beneficiaries WHERE member_id = $1 AND is_primary = true LIMIT 1`,
+    [memberId]
+  );
+  if (ben.rows.length) return false;
+
+  if (String(member.application_drive_url || '').trim()) return true;
+
+  const app = await db.query(
+    `SELECT id FROM membership_applications WHERE member_id = $1 LIMIT 1`,
+    [memberId]
+  );
+  if (app.rows.length) return true;
+
+  return member.member_number != null && String(member.status || '').toLowerCase() === 'active';
 }
 
 async function getMemberProfile(memberId) {
@@ -711,6 +730,7 @@ async function getMemberProfile(memberId) {
     member: buildMemberPayload(member),
     beneficiary: ben.rows[0] || null,
     pending_beneficiary_change: pendingBeneficiaryChange,
+    beneficiary_import_pending: await beneficiaryImportPending(db, memberId, member),
   };
 }
 

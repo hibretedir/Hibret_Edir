@@ -5,15 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Hibret Edir Association — Member Portal</title>
 <link rel="stylesheet" href="/css/hibret.css?v=portal3">
-<link rel="stylesheet" href="/css/compat.css?v=portal5">
-<link rel="stylesheet" href="/css/app-theme.css?v=portal19">
+<link rel="stylesheet" href="/css/compat.css?v=portal8">
+<link rel="stylesheet" href="/css/app-theme.css?v=portal24">
 </head>
 <body class="app-portal">
+
+<div class="portal-auth-lang" id="portalAuthLang" aria-label="Language">
+  <button class="lang-btn active" id="lb-en" type="button" onclick="setLang('en')">EN</button>
+  <button class="lang-btn" id="lb-am" type="button" onclick="setLang('am')">አማ</button>
+</div>
 
 <!-- ========== SCREEN: PHONE ========== -->
 <div id="sPhone" class="auth-wrap">
   <div class="auth-bg"></div>
-  <div class="auth-card">
+  <div class="auth-card" id="phoneAuthCard">
     <div class="auth-logo">
       <img src="/logo.png" alt="Hibret Edir Logo">
       <div class="auth-logo-text">
@@ -24,28 +29,6 @@
     </div>
     <h1 class="auth-title">Welcome</h1>
     <p class="auth-sub">Enter your mobile number to sign in<span class="amh">ሞባይል ቁጥርዎን ያስገቡ</span></p>
-    <div class="error-msg" id="phoneErr"></div>
-    <div id="phoneHelpPanel" class="phone-help-panel" style="display:none">
-      <p class="phone-help-intro">Send a message to the board — we'll help you get signed in.</p>
-      <div class="form-msg" id="phoneHelpMsg"></div>
-      <div class="form-group">
-        <label class="form-label">Your name</label>
-        <input type="text" class="form-input" id="phoneHelpName" placeholder="First and last name">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Mobile (you entered)</label>
-        <input type="tel" class="form-input" id="phoneHelpPhone" readonly tabindex="-1">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Email <span class="form-optional">(optional)</span></label>
-        <input type="email" class="form-input" id="phoneHelpEmail" placeholder="your@email.com">
-      </div>
-      <div class="form-group">
-        <label class="form-label">Message</label>
-        <textarea class="form-input" id="phoneHelpMessage" rows="3" placeholder="Tell us how we can help"></textarea>
-      </div>
-      <button type="button" class="btn-main" onclick="submitPhoneHelp()">Send to Board →</button>
-    </div>
     <div class="form-group">
       <label class="form-label">Mobile Phone <span class="amh">ሞባይል</span></label>
       <div class="phone-wrap">
@@ -55,13 +38,33 @@
           oninput="fmtPhone(this)" onkeydown="if(event.key==='Enter')goPhone()">
       </div>
     </div>
+    <div class="error-msg" id="phoneErr"></div>
+    <div id="phoneHelpPanel" class="phone-help-panel" style="display:none">
+      <p class="phone-help-intro">Send a message to the board — we'll help you get signed in.</p>
+      <div class="form-msg" id="phoneHelpMsg"></div>
+      <div class="phone-help-grid">
+        <div class="form-group">
+          <label class="form-label">Your name</label>
+          <input type="text" class="form-input" id="phoneHelpName" placeholder="First and last name">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Email <span class="form-optional">(optional)</span></label>
+          <input type="email" class="form-input" id="phoneHelpEmail" placeholder="your@email.com">
+        </div>
+        <div class="form-group form-group--full">
+          <label class="form-label">Mobile (you entered)</label>
+          <input type="tel" class="form-input" id="phoneHelpPhone" readonly tabindex="-1">
+        </div>
+        <div class="form-group form-group--full">
+          <label class="form-label">Message</label>
+          <textarea class="form-input" id="phoneHelpMessage" rows="3" placeholder="Tell us how we can help"></textarea>
+        </div>
+      </div>
+      <button type="button" class="btn-main" onclick="submitPhoneHelp()">Send to Board →</button>
+    </div>
     <button class="btn-main" onclick="goPhone()">Continue →</button>
     <button class="btn-link" type="button" onclick="openPinResetRequest()">Forgot PIN? Request a reset</button>
     <button class="btn-link" onclick="location.href='/#apply'">Not a member? Join waiting list</button>
-    <div class="lang-toggle">
-      <button class="lang-btn active" id="lb-en" onclick="setLang('en')">EN</button>
-      <button class="lang-btn" id="lb-am" onclick="setLang('am')">አማ</button>
-    </div>
   </div>
 </div>
 
@@ -164,6 +167,10 @@
         </span>
       </a>
       <div class="portal-nav-right">
+        <div class="portal-lang-row" aria-label="Language">
+          <button class="lang-btn active" id="portal-lb-en" type="button" onclick="setLang('en')">EN</button>
+          <button class="lang-btn" id="portal-lb-am" type="button" onclick="setLang('am')">አማ</button>
+        </div>
         <button class="portal-notif-btn" onclick="tab('notifications')" aria-label="Notifications">
           <span class="notif-bell">🔔</span>
           <span class="notif-dot" id="notifDot"></span>
@@ -315,8 +322,7 @@
         <h3>🙏 My Beneficiary</h3>
         <p>The person who will receive the $15,000 Edir payout on your behalf.</p>
         <div class="ben-empty" id="benEmpty">
-          <p>No beneficiary on file. Please add one to protect your family.</p>
-          <button class="btn-outline" onclick="openBenEdit()">Add Beneficiary</button>
+          <p>Loading beneficiary…</p>
         </div>
         <div id="benShow" style="display:none"></div>
       </div>
@@ -356,9 +362,9 @@
         <label>Your name</label>
         <input type="text" class="form-input" id="contactPortalName" readonly>
         <label style="margin-top:12px">Mobile</label>
-        <input type="tel" class="form-input" id="contactPortalPhone" placeholder="(xxx) xxx-xxxx">
+        <input type="tel" class="form-input" id="contactPortalPhone" placeholder="(xxx) xxx-xxxx" autocomplete="off" readonly tabindex="-1">
         <label style="margin-top:12px">Email</label>
-        <input type="email" class="form-input" id="contactPortalEmail" placeholder="your@email.com">
+        <input type="email" class="form-input" id="contactPortalEmail" placeholder="your@email.com" autocomplete="off" readonly tabindex="-1">
         <label style="margin-top:12px">Message <span class="req">*</span></label>
         <textarea class="form-input" id="contactPortalMessage" rows="4" placeholder="How can we help you?" style="margin-bottom:0;resize:vertical;min-height:96px"></textarea>
         <button type="button" class="btn primary" style="width:100%;margin-top:16px" onclick="submitPortalContact()">Send Message</button>
@@ -484,7 +490,7 @@ const MY_INVOICES = [];
 const MY_ACTIVITY = [];
 const MY_BOARD_MESSAGES = [];
 let EDAR_EVENTS = [];
-let me = null, myPhone = '', myBeneficiary = null, pendingBeneficiaryChange = null, profEditKey = '', selMeth = null, uploadedFile = null, curTab = 'home';
+let me = null, myPhone = '', myBeneficiary = null, pendingBeneficiaryChange = null, beneficiaryImportPending = false, profEditKey = '', selMeth = null, uploadedFile = null, curTab = 'home';
 let notifReadAt = 0;
 
 function getStoredToken(){
@@ -584,6 +590,7 @@ async function fetchMemberProfile() {
     }
     myBeneficiary = data.beneficiary || null;
     pendingBeneficiaryChange = data.pending_beneficiary_change || null;
+    beneficiaryImportPending = !!data.beneficiary_import_pending;
     return data;
   } catch (error) {
     console.warn('Failed to fetch member profile:', error);
@@ -776,9 +783,18 @@ function fmtPhone(inp){
 function normPhone(p){return p.replace(/\D/g,'').slice(-10)}
 function hidePhoneHelp(){
   const panel=document.getElementById('phoneHelpPanel');
+  const card=document.getElementById('phoneAuthCard');
   if(panel) panel.style.display='none';
+  if(card) card.classList.remove('phone-help-open');
   const msg=document.getElementById('phoneHelpMsg');
   if(msg){ msg.textContent=''; msg.className='form-msg'; msg.style.display='none'; }
+}
+
+function scrollAuthNotice(el){
+  if(!el) return;
+  requestAnimationFrame(()=>{
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
 }
 
 function showPhoneHelp(phone){
@@ -786,14 +802,17 @@ function showPhoneHelp(phone){
   err.textContent="We couldn't find that number in our records.";
   err.classList.add('show');
   const panel=document.getElementById('phoneHelpPanel');
+  const card=document.getElementById('phoneAuthCard');
   if(panel) panel.style.display='block';
+  if(card) card.classList.add('phone-help-open');
   const phoneEl=document.getElementById('phoneHelpPhone');
   if(phoneEl) phoneEl.value=phone;
   const msgEl=document.getElementById('phoneHelpMessage');
   if(msgEl && !msgEl.value.trim()){
     msgEl.value=`I tried to sign in to the member portal but my phone number was not found. Please help me access my account.\n\nPhone entered: ${phone}`;
   }
-  setTimeout(()=>document.getElementById('phoneHelpName')?.focus(),100);
+  scrollAuthNotice(err);
+  setTimeout(()=>document.getElementById('phoneHelpName')?.focus(),350);
 }
 
 function showPhoneHelpMsg(text, ok){
@@ -802,6 +821,7 @@ function showPhoneHelpMsg(text, ok){
   el.textContent=text||'';
   el.className='form-msg'+(text ? (ok ? ' ok' : ' err') : '');
   el.style.display=text ? 'block' : 'none';
+  if(text) scrollAuthNotice(el);
 }
 
 async function submitPhoneHelp(){
@@ -827,7 +847,7 @@ async function goPhone(){
   const p=document.getElementById('phoneInp').value;
   const err=document.getElementById('phoneErr');
   hidePhoneHelp();
-  if(normPhone(p).length<10){err.textContent='Please enter a valid 10-digit phone number.';err.classList.add('show');return;}
+  if(normPhone(p).length<10){err.textContent='Please enter a valid 10-digit phone number.';err.classList.add('show');scrollAuthNotice(err);return;}
   err.classList.remove('show');
   myPhone=p;
 
@@ -856,6 +876,7 @@ async function goPhone(){
     console.error('Auth phone lookup failed:', error);
     err.textContent = 'Unable to verify your phone number right now. Please try again later.';
     err.classList.add('show');
+    scrollAuthNotice(err);
   }
 }
 
@@ -928,6 +949,7 @@ async function doCreate(){
 // LOGIN
 async function loginOK(){
   if(!me) return;
+  document.body.classList.add('portal-logged-in');
   document.getElementById('portalApp').style.display='flex';
   ['sPhone','sPin','sCreate'].forEach(s=>document.getElementById(s).style.display='none');
   await refreshPortalData();
@@ -1128,8 +1150,10 @@ function fillContactForm(){
   const fullName=[me.first, me.last].filter(Boolean).join(' ').trim() || me.full_name || 'Member';
   const memberNum=me.memberNumber || me.member_number || me.id;
   if(nameEl) nameEl.value=memberNum ? `${fullName} (#${memberNum})` : fullName;
-  if(phoneEl && !phoneEl.value) phoneEl.value=me.mobile || me.home || '';
-  if(emailEl && !emailEl.value) emailEl.value=me.email || '';
+  // Always sync from logged-in member — stale values or browser autofill can otherwise
+  // show a different member's name with someone else's phone/email.
+  if(phoneEl) phoneEl.value=me.mobile || me.home || '';
+  if(emailEl) emailEl.value=me.email || '';
 }
 
 function showContactPortalMsg(text, ok){
@@ -1383,6 +1407,15 @@ function renderBeneficiary(){
   if(!myBeneficiary||!myBeneficiary.name){
     empty.style.display='block';
     show.style.display='none';
+    if(beneficiaryImportPending){
+      empty.innerHTML=`
+        <p class="ben-import-pending">Your beneficiary is on file with the board from your membership application. It will appear here once your application has been entered into the portal.</p>
+        <button class="btn-outline" type="button" onclick="tab('contact')">Questions? Contact the Board</button>`;
+    } else {
+      empty.innerHTML=`
+        <p>No beneficiary on file. Please add one to protect your family.</p>
+        <button class="btn-outline" type="button" onclick="openBenEdit()">Add Beneficiary</button>`;
+    }
     return;
   }
   empty.style.display='none';
@@ -1498,7 +1531,15 @@ document.querySelectorAll('.modal-ov').forEach(o=>o.addEventListener('click',e=>
 // SIGN OUT
 function doSignOut(){
   me=null;myPhone='';
+  myBeneficiary=null;
+  pendingBeneficiaryChange=null;
+  beneficiaryImportPending=false;
+  document.body.classList.remove('portal-logged-in');
   clearToken();
+  ['contactPortalName','contactPortalPhone','contactPortalEmail','contactPortalMessage'].forEach((id)=>{
+    const el=document.getElementById(id);
+    if(el) el.value='';
+  });
   document.getElementById('portalApp').style.display='none';
   document.getElementById('phoneInp').value='';
   show('sPhone');
@@ -1509,8 +1550,20 @@ function setLang(l){
   const lang=l==='am'?'am':'en';
   document.documentElement.lang=lang;
   document.body.classList.toggle('lang-am',lang==='am');
-  document.getElementById('lb-en').classList.toggle('active',lang==='en');
-  document.getElementById('lb-am').classList.toggle('active',lang==='am');
+  ['lb-en','portal-lb-en'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){
+      el.classList.toggle('active',lang==='en');
+      el.classList.toggle('on',lang==='en');
+    }
+  });
+  ['lb-am','portal-lb-am'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){
+      el.classList.toggle('active',lang==='am');
+      el.classList.toggle('on',lang==='am');
+    }
+  });
   localStorage.setItem('hlang',lang);
 }
 

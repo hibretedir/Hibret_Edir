@@ -60,20 +60,40 @@ function jwtSecret() {
   return process.env.JWT_SECRET || 'hibret-local-dev-secret';
 }
 
+const QA_TEST_EMAIL = 'hibretedirtest@gmail.com';
+
+function rankMemberForPortalAuth(member) {
+  let score = 0;
+  if (member.member_number != null) score += 1000;
+  const status = String(member.status || '').toLowerCase();
+  if (status === 'active') score += 100;
+  const email = String(member.email || '').trim().toLowerCase();
+  if (email === QA_TEST_EMAIL) score -= 500;
+  if (String(member.full_name || '').toLowerCase().includes('qa test')) score -= 500;
+  // Stable tie-break: prefer the oldest real row when scores match.
+  score -= Number(member.id || 0) / 1e6;
+  return score;
+}
+
+function pickBestMemberMatch(rows) {
+  if (!rows?.length) return null;
+  if (rows.length === 1) return rows[0];
+  return rows.slice().sort((a, b) => rankMemberForPortalAuth(b) - rankMemberForPortalAuth(a))[0];
+}
+
 async function findMemberInDb({ phone, email }) {
   const db = getDb();
   const result = await db.query(
     `SELECT id, member_number, first_name, last_name, full_name, paypal_name, email, mobile, home_phone, address, status, pin_hash, joined_date
      FROM members
      WHERE ($1::text IS NOT NULL AND (
-       regexp_replace(mobile, '\\D', '', 'g') = regexp_replace($1, '\\D', '', 'g')
-       OR regexp_replace(home_phone, '\\D', '', 'g') = regexp_replace($1, '\\D', '', 'g')
+       RIGHT(regexp_replace(COALESCE(mobile, ''), '\\D', '', 'g'), 10) = RIGHT(regexp_replace($1, '\\D', '', 'g'), 10)
+       OR RIGHT(regexp_replace(COALESCE(home_phone, ''), '\\D', '', 'g'), 10) = RIGHT(regexp_replace($1, '\\D', '', 'g'), 10)
      ))
-     OR ($2::text IS NOT NULL AND LOWER(email) = LOWER($2))
-     LIMIT 1`,
+     OR ($2::text IS NOT NULL AND LOWER(email) = LOWER($2))`,
     [phone || null, email || null]
   );
-  return result.rows[0] || null;
+  return pickBestMemberMatch(result.rows);
 }
 
 async function findMember({ phone, email }) {
@@ -318,12 +338,34 @@ function parsePinResetPath(path) {
   return { id: parts[1] ? Number(parts[1]) : null, action: parts[2] || null };
 }
 
+function isQaTestMember(member) {
+  const email = String(member.email || '').trim().toLowerCase();
+  if (email === QA_TEST_EMAIL) return true;
+  return String(member.full_name || '').toLowerCase().includes('qa test');
+}
+
+function portalFirstName(member) {
+  const first = String(member.first_name || '').trim();
+  if (!isQaTestMember(member) && first) return first;
+  const primary = String(member.full_name || '').split('/')[0].trim();
+  const fromFull = primary.split(/\s+/).filter(Boolean)[0] || '';
+  return fromFull || first || 'Member';
+}
+
+function portalLastName(member) {
+  const last = String(member.last_name || '').trim();
+  if (!isQaTestMember(member) && last) return last;
+  const primary = String(member.full_name || '').split('/')[0].trim();
+  const parts = primary.split(/\s+/).filter(Boolean);
+  return parts.length > 1 ? parts.slice(1).join(' ') : last;
+}
+
 function buildMemberPayload(member) {
   return {
     id: member.id,
     memberNumber: member.member_number,
-    first: member.first_name,
-    last: member.last_name,
+    first: portalFirstName(member),
+    last: portalLastName(member),
     full_name: member.full_name || `${member.first_name || ''} ${member.last_name || ''}`.trim(),
     paypal_name: member.paypal_name,
     email: member.email,

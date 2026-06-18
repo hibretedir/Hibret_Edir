@@ -23,11 +23,39 @@
 .auth-logo-text .sub, .auth-sub { text-align: center; color: var(--text-muted); font-size: 14px; margin-bottom: 20px; }
 
 /* Portal login — compact card (overrides defaults above) */
+body.app-portal .auth-wrap {
+  align-items: flex-start;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-top: max(48px, calc(env(safe-area-inset-top, 0px) + 40px));
+}
 body.app-portal .auth-wrap .auth-card,
 body.app-portal .auth-wrap .confirm-wrap {
-  max-width: 280px;
-  padding: 16px 14px 18px;
+  max-width: min(480px, 96vw);
+  width: 100%;
+  padding: 16px 18px 18px;
   box-shadow: 0 12px 36px rgba(0, 0, 0, 0.18);
+}
+body.app-portal .auth-wrap .auth-card.phone-help-open {
+  max-width: min(560px, 98vw);
+}
+
+@media (max-width: 520px) {
+  body.app-portal .auth-wrap {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  body.app-portal .auth-wrap .auth-card,
+  body.app-portal .auth-wrap .confirm-wrap {
+    max-width: none;
+    width: 100%;
+    padding: 18px 16px 20px;
+  }
+  body.app-portal .auth-wrap .auth-card.phone-help-open {
+    max-width: none;
+    width: 100%;
+  }
 }
 body.app-portal .auth-wrap .auth-logo {
   margin-bottom: 8px;

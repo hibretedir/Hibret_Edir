@@ -1141,6 +1141,28 @@ body.app-admin.tracker {
   overflow-y: auto;
 }
 
+/* Member detail modal — room for full invoice list on desktop */
+#memberModal .modal-member {
+  display: flex;
+  flex-direction: column;
+  max-width: min(1120px, 96vw);
+  max-height: 92vh;
+  overflow: hidden;
+}
+
+#memberModal .modal-member .modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+@media (min-width: 901px) {
+  #memberModal .member-inv-table-wrap {
+    max-height: none;
+    overflow: visible;
+  }
+}
+
 .tracker-table tbody tr.member-inv-highlight,
 .tracker-table tbody tr.wl-eligible-row {
   background: rgba(245, 158, 11, 0.12);

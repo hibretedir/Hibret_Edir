@@ -40,10 +40,22 @@ function pinKey(member) {
   return String(member.member_number || member.id || normPhone(member.mobile));
 }
 
+function rankSnapshotMember(m) {
+  let score = 0;
+  if (m.member_number != null) score += 1000;
+  if (String(m.status || '').toLowerCase() === 'active') score += 100;
+  const em = String(m.email || '').trim().toLowerCase();
+  if (em === 'hibretedirtest@gmail.com') score -= 500;
+  if (String(m.full_name || '').toLowerCase().includes('qa test')) score -= 500;
+  score -= Number(m.id || m.member_number || 0) / 1e6;
+  return score;
+}
+
 function findSnapshotMember({ phone, email }) {
   const digits = normPhone(phone);
   const emailLower = email ? String(email).trim().toLowerCase() : '';
   const pins = loadDevPins();
+  const matches = [];
 
   for (const m of loadSnapshotMembers()) {
     const mobile = normPhone(m.mobile);
@@ -52,13 +64,15 @@ function findSnapshotMember({ phone, email }) {
     const emailMatch = emailLower && m.email && m.email.toLowerCase() === emailLower;
     if (!phoneMatch && !emailMatch) continue;
     const key = pinKey(m);
-    return {
+    matches.push({
       ...m,
       pin_hash: pins[key] || null,
       joined_date: null,
-    };
+    });
   }
-  return null;
+  if (!matches.length) return null;
+  matches.sort((a, b) => rankSnapshotMember(b) - rankSnapshotMember(a));
+  return matches[0];
 }
 
 async function saveSnapshotPin(member, pinOrHash, isHash = false) {
