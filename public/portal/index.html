@@ -5,20 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Hibret Edir Association — Member Portal</title>
 <link rel="stylesheet" href="/css/hibret.css?v=portal3">
-<link rel="stylesheet" href="/css/compat.css?v=portal8">
-<link rel="stylesheet" href="/css/app-theme.css?v=portal24">
+<link rel="stylesheet" href="/css/compat.css?v=portal9">
+<link rel="stylesheet" href="/css/app-theme.css?v=portal28">
 </head>
 <body class="app-portal">
-
-<div class="portal-auth-lang" id="portalAuthLang" aria-label="Language">
-  <button class="lang-btn active" id="lb-en" type="button" onclick="setLang('en')">EN</button>
-  <button class="lang-btn" id="lb-am" type="button" onclick="setLang('am')">አማ</button>
-</div>
 
 <!-- ========== SCREEN: PHONE ========== -->
 <div id="sPhone" class="auth-wrap">
   <div class="auth-bg"></div>
   <div class="auth-card" id="phoneAuthCard">
+    <div class="auth-card-lang" aria-label="Language">
+      <button class="lang-btn active" type="button" data-lang="en" onclick="setLang('en')">EN</button>
+      <button class="lang-btn" type="button" data-lang="am" onclick="setLang('am')">አማ</button>
+    </div>
     <div class="auth-logo">
       <img src="/logo.png" alt="Hibret Edir Logo">
       <div class="auth-logo-text">
@@ -72,6 +71,10 @@
 <div id="sPin" class="auth-wrap" style="display:none">
   <div class="auth-bg"></div>
   <div class="auth-card">
+    <div class="auth-card-lang" aria-label="Language">
+      <button class="lang-btn active" type="button" data-lang="en" onclick="setLang('en')">EN</button>
+      <button class="lang-btn" type="button" data-lang="am" onclick="setLang('am')">አማ</button>
+    </div>
     <div class="auth-logo">
       <img src="/logo.png" alt="Hibret Edir Logo">
       <div class="auth-logo-text"><div class="name">Hibret Edir Association</div><div class="sub">Member Portal</div></div>
@@ -96,6 +99,10 @@
 <div id="sPinReset" class="auth-wrap" style="display:none">
   <div class="auth-bg"></div>
   <div class="auth-card">
+    <div class="auth-card-lang" aria-label="Language">
+      <button class="lang-btn active" type="button" data-lang="en" onclick="setLang('en')">EN</button>
+      <button class="lang-btn" type="button" data-lang="am" onclick="setLang('am')">አማ</button>
+    </div>
     <div class="auth-logo">
       <img src="/logo.png" alt="Hibret Edir Logo">
       <div class="auth-logo-text"><div class="name">Hibret Edir Association</div><div class="sub">PIN Reset Request</div></div>
@@ -125,6 +132,10 @@
 <div id="sCreate" class="auth-wrap" style="display:none">
   <div class="auth-bg"></div>
   <div class="auth-card">
+    <div class="auth-card-lang" aria-label="Language">
+      <button class="lang-btn active" type="button" data-lang="en" onclick="setLang('en')">EN</button>
+      <button class="lang-btn" type="button" data-lang="am" onclick="setLang('am')">አማ</button>
+    </div>
     <div class="auth-logo">
       <img src="/logo.png" alt="Hibret Edir Logo">
       <div class="auth-logo-text"><div class="name">Hibret Edir Association</div><div class="sub">First Time Setup</div></div>
@@ -163,7 +174,7 @@
         <img src="/logo.png" alt="" class="portal-nav-logo">
         <span class="portal-nav-brand-text">
           <span class="portal-nav-name">Hibret Edir Association</span>
-          <span class="portal-nav-site-link">Back to Main Site →</span>
+          <span class="portal-nav-site-link"><span class="en">Back to Main Site →</span><span class="am">ወደ ዋና ጣቢያ →</span></span>
         </span>
       </a>
       <div class="portal-nav-right">
@@ -182,19 +193,21 @@
 
   <nav class="portal-tabs" aria-label="Portal sections">
     <button class="bnav active" id="bn-home" data-accent="green" onclick="tab('home')">
-      <div class="bnav-ic">H</div><div class="bnav-lbl">Home</div>
+      <div class="bnav-ic">H</div><div class="bnav-lbl"><span class="en">Home</span><span class="am">መነሻ</span></div>
     </button>
     <button class="bnav" id="bn-invoices" data-accent="gold" onclick="tab('invoices')">
-      <div class="bnav-ic">$</div><div class="bnav-lbl">Invoices</div>
+      <div class="bnav-ic">$</div><div class="bnav-lbl"><span class="en">Invoices</span><span class="am">ክፍያዎች</span></div>
       <span class="bnav-badge" id="invBadge"></span>
     </button>
     <button class="bnav" id="bn-upload" data-accent="red" onclick="tab('upload')">
-      <div class="bnav-ic">↑</div><div class="bnav-lbl">Receipt</div>
+      <div class="bnav-ic">↑</div><div class="bnav-lbl"><span class="en">Receipt</span><span class="am">ደረሰኝ</span></div>
     </button>
     <button class="bnav" id="bn-profile" data-accent="green" onclick="tab('profile')">
-      <div class="bnav-ic">Me</div><div class="bnav-lbl">Profile</div>
+      <div class="bnav-ic">Me</div><div class="bnav-lbl"><span class="en">Profile</span><span class="am">መገለጫ</span></div>
     </button>
   </nav>
+
+  <div id="portalLoadBar" class="portal-load-bar" aria-hidden="true"></div>
 
   <div class="portal-content">
 
@@ -209,58 +222,58 @@
           <img src="/logo.png" alt="" class="greeting-logo">
         </div>
         <div class="greeting-stats">
-          <div class="gs gs-accent-green"><div class="gs-val" id="gsPaid">0</div><div class="gs-label">Deaths Paid</div></div>
-          <div class="gs gs-accent-gold" id="gsOwedCard" role="button" tabindex="0" aria-label="View outstanding invoices" onclick="goOutstandingInvoices()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goOutstandingInvoices()}"><div class="gs-val" id="gsOwed">0</div><div class="gs-label">Outstanding</div></div>
-          <div class="gs gs-accent-red" id="gsAmtCard" role="button" tabindex="0" aria-label="View amount due" onclick="goOutstandingInvoices()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goOutstandingInvoices()}"><div class="gs-val" id="gsAmt">$0</div><div class="gs-label">Amount Due</div></div>
+          <div class="gs gs-accent-green"><div class="gs-val" id="gsPaid">0</div><div class="gs-label"><span class="en">Deaths Paid</span><span class="am">የተከፈሉ</span></div></div>
+          <div class="gs gs-accent-gold" id="gsOwedCard" role="button" tabindex="0" aria-label="View outstanding invoices" onclick="goOutstandingInvoices()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goOutstandingInvoices()}"><div class="gs-val" id="gsOwed">0</div><div class="gs-label"><span class="en">Outstanding</span><span class="am">ያልተከፈሉ</span></div></div>
+          <div class="gs gs-accent-red" id="gsAmtCard" role="button" tabindex="0" aria-label="View amount due" onclick="goOutstandingInvoices()" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();goOutstandingInvoices()}"><div class="gs-val" id="gsAmt">$0</div><div class="gs-label"><span class="en">Amount Due</span><span class="am">የሚከፈል</span></div></div>
         </div>
       </div>
-      <div class="sec-hd"><h2>Outstanding Invoices</h2><button class="see-all" onclick="tab('invoices')">See All</button></div>
+      <div class="sec-hd"><h2><span class="en">Outstanding Invoices</span><span class="am">ያልተከፈሉ ክፍያዎች</span></h2><button class="see-all" onclick="tab('invoices')"><span class="en">See All</span><span class="am">ሁሉንም</span></button></div>
       <div id="homeInvs"></div>
-      <div class="sec-hd" style="margin-top:24px"><h2>Quick Actions</h2></div>
+      <div class="sec-hd" style="margin-top:24px"><h2><span class="en">Quick Actions</span><span class="am">ፈጣን እርምጃዎች</span></h2></div>
       <div class="qa-grid">
         <button class="qa-btn qa-accent-green" onclick="tab('upload')">
           <div class="qa-icon">↑</div>
-          <div class="qa-title">Upload Receipt</div>
-          <div class="qa-sub">Zelle or BofA</div>
+          <div class="qa-title"><span class="en">Upload Receipt</span><span class="am">ደረሰኝ ስቀል</span></div>
+          <div class="qa-sub"><span class="en">Zelle or BofA</span><span class="am">ዘለ ወይም ባንክ</span></div>
         </button>
         <button class="qa-btn qa-accent-gold" onclick="tab('profile')">
           <div class="qa-icon">Me</div>
-          <div class="qa-title">My Profile</div>
-          <div class="qa-sub">Update your info</div>
+          <div class="qa-title"><span class="en">My Profile</span><span class="am">መገለጫዬ</span></div>
+          <div class="qa-sub"><span class="en">Update your info</span><span class="am">መረጃ አዘምን</span></div>
         </button>
         <button class="qa-btn qa-accent-red" onclick="tab('invoices')">
           <div class="qa-icon">$</div>
-          <div class="qa-title">All Invoices</div>
-          <div class="qa-sub">Full history</div>
+          <div class="qa-title"><span class="en">All Invoices</span><span class="am">ሁሉም ክፍያዎች</span></div>
+          <div class="qa-sub"><span class="en">Full history</span><span class="am">ሙሉ ታሪክ</span></div>
         </button>
         <button class="qa-btn qa-accent-green" onclick="tab('contact')">
           <div class="qa-icon">✉</div>
-          <div class="qa-title">Contact Us</div>
-          <div class="qa-sub">Message the board</div>
+          <div class="qa-title"><span class="en">Contact Us</span><span class="am">አግኙን</span></div>
+          <div class="qa-sub"><span class="en">Message the board</span><span class="am">ለቦርዱ መልዕክት</span></div>
         </button>
         <button class="qa-btn qa-accent-gold" onclick="tab('boardmessages')">
           <div class="qa-icon">📬</div>
-          <div class="qa-title">Messages from the Board</div>
-          <div class="qa-sub">Replies to your messages</div>
+          <div class="qa-title"><span class="en">Messages from the Board</span><span class="am">ከቦርዱ መልዕክቶች</span></div>
+          <div class="qa-sub"><span class="en">Replies to your messages</span><span class="am">ምላሾች</span></div>
         </button>
       </div>
     </div>
 
     <!-- INVOICES -->
     <div class="screen" id="tInvoices">
-      <div class="sec-hd"><h2>All My Invoices</h2></div>
+      <div class="sec-hd"><h2><span class="en">All My Invoices</span><span class="am">ሁሉም ክፍያዎቼ</span></h2></div>
       <div id="allInvs"></div>
     </div>
 
     <!-- UPLOAD -->
     <div class="screen" id="tUpload">
-      <div class="sec-hd"><h2>Upload Receipt</h2></div>
+      <div class="sec-hd"><h2><span class="en">Upload Receipt</span><span class="am">ደረሰኝ ስቀል</span></h2></div>
       <div class="upload-card">
-        <label>Which person are you paying for? <span class="req">*</span></label>
+        <label><span class="en">Which person are you paying for?</span><span class="am">ለማን ነው የሚከፍሉት?</span> <span class="req">*</span></label>
         <select class="form-select" id="evSel" required><option value="">Select person…</option></select>
       </div>
       <div class="upload-card">
-        <label>Payment Method <span class="req">*</span></label>
+        <label><span class="en">Payment Method</span><span class="am">የክፍያ ዘዴ</span> <span class="req">*</span></label>
         <div class="method-grid">
           <div class="method-opt" id="mZelle" onclick="selMethod('Zelle')">
             <div class="method-opt-icon">Z</div>
@@ -268,14 +281,14 @@
           </div>
           <div class="method-opt" id="mBofA" onclick="selMethod('BofA')">
             <div class="method-opt-icon">B</div>
-            <div class="method-opt-label">Direct Deposit</div>
+            <div class="method-opt-label"><span class="en">Direct Deposit</span><span class="am">ባንክ ገቢ</span></div>
           </div>
         </div>
       </div>
       <div class="upload-card">
-        <label>Receipt photo <span class="req">*</span></label>
+        <label><span class="en">Receipt photo</span><span class="am">የደረሰኝ ፎቶ</span> <span class="req">*</span></label>
         <div class="receipt-upload-actions">
-          <button type="button" class="receipt-upload-btn" id="receiptFileBtn">Upload file</button>
+          <button type="button" class="receipt-upload-btn" id="receiptFileBtn"><span class="en">Upload file</span><span class="am">ፋይል ስቀል</span></button>
         </div>
         <input type="file" id="receiptFileInput" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf" hidden required>
         <div class="drop-zone" id="dropZ"
@@ -283,8 +296,8 @@
           ondragleave="this.classList.remove('over')"
           ondrop="doDrop(event)">
           <div class="drop-icon">+</div>
-          <div class="drop-title">Or drag a receipt here</div>
-          <div class="drop-sub">JPG, PNG, or PDF · max 5 MB</div>
+          <div class="drop-title"><span class="en">Or drag a receipt here</span><span class="am">ወይም ደረሰኝ እዚህ ይጎትቱ</span></div>
+          <div class="drop-sub"><span class="en">JPG, PNG, or PDF · max 5 MB</span><span class="am">JPG, PNG, PDF · ከፍተኛ 5 MB</span></div>
         </div>
         <div class="preview-box" id="prevBox" style="display:none">
           <div class="preview-toolbar">
@@ -292,7 +305,7 @@
               <span class="preview-file-label">Selected file</span>
               <span class="preview-filename" id="previewFileName"></span>
             </div>
-            <button type="button" class="receipt-remove-btn" onclick="rmFile()">Remove file</button>
+            <button type="button" class="receipt-remove-btn" onclick="rmFile()"><span class="en">Remove file</span><span class="am">ፋይል አስወግድ</span></button>
           </div>
           <img id="prevImg" class="preview-img-el" alt="Receipt preview">
           <div class="preview-file-box" id="prevFile">
@@ -302,10 +315,10 @@
         </div>
       </div>
       <div class="upload-card">
-        <label>Notes (optional)</label>
+        <label><span class="en">Notes (optional)</span><span class="am">ማስታወሻ (አማራጭ)</span></label>
         <textarea class="form-input" id="upNotes" rows="3" placeholder="e.g. Sent via Zelle on June 3rd" style="margin-bottom:0;resize:vertical;min-height:72px"></textarea>
       </div>
-      <button class="btn-main" onclick="doUpload()" style="margin-top:4px">📤 Submit Receipt</button>
+      <button class="btn-main" onclick="doUpload()" style="margin-top:4px">📤 <span class="en">Submit Receipt</span><span class="am">ደረሰኝ ላክ</span></button>
     </div>
 
     <!-- PROFILE -->
@@ -314,25 +327,25 @@
         <div class="profile-hd">
           <div class="profile-av" id="profAv">?</div>
           <div class="profile-nm" id="profNm">Member</div>
-          <div class="profile-since">Hibret Edir Member</div>
+          <div class="profile-since"><span class="en">Hibret Edir Member</span><span class="am">ሕብረት እድር አባል</span></div>
         </div>
         <div id="profFields"></div>
       </div>
       <div class="ben-card">
-        <h3>🙏 My Beneficiary</h3>
-        <p>The person who will receive the $15,000 Edir payout on your behalf.</p>
+        <h3>🙏 <span class="en">My Beneficiary</span><span class="am">ተጠቃሚዬ</span></h3>
+        <p><span class="en">The person who will receive the $15,000 Edir payout on your behalf.</span><span class="am">በስምዎ $15,000 የእድር ክፍያ የሚቀበለው ሰው።</span></p>
         <div class="ben-empty" id="benEmpty">
           <p>Loading beneficiary…</p>
         </div>
         <div id="benShow" style="display:none"></div>
       </div>
       <div class="settings-card">
-        <h3>Account Settings</h3>
+        <h3><span class="en">Account Settings</span><span class="am">የመለያ ቅንብሮች</span></h3>
         <button class="setting-row" onclick="openModal('cpModal')">
-          <span>🔐</span><span>Change PIN</span><span class="arrow">›</span>
+          <span>🔐</span><span><span class="en">Change PIN</span><span class="am">PIN ቀይር</span></span><span class="arrow">›</span>
         </button>
         <button class="setting-row danger" onclick="doSignOut()">
-          <span>🚪</span><span>Sign Out</span>
+          <span>🚪</span><span><span class="en">Sign Out</span><span class="am">ውጣ</span></span>
         </button>
       </div>
     </div>
@@ -340,45 +353,45 @@
     <!-- BOARD MESSAGES -->
     <div class="screen" id="tBoardmessages">
       <div class="sec-hd">
-        <h2>Messages from the Board</h2>
-        <button class="see-all" onclick="tab('home')">← Home</button>
+        <h2><span class="en">Messages from the Board</span><span class="am">ከቦርዱ መልዕክቶች</span></h2>
+        <button class="see-all" onclick="tab('home')"><span class="en">← Home</span><span class="am">← መነሻ</span></button>
       </div>
       <div class="settings-card board-messages-card" id="boardMessagesCard">
-        <p class="board-msg-intro">Replies to your Contact Us messages appear here.</p>
+        <p class="board-msg-intro"><span class="en">Replies to your Contact Us messages appear here.</span><span class="am">ለመልዕክቶችዎ የቦርዱ ምላሾች እዚህ ይታያሉ።</span></p>
         <div id="boardMessagesList"></div>
       </div>
-      <button type="button" class="btn-outline" style="width:100%;margin-top:8px" onclick="tab('contact')">Send a new message</button>
+      <button type="button" class="btn-outline" style="width:100%;margin-top:8px" onclick="tab('contact')"><span class="en">Send a new message</span><span class="am">አዲስ መልዕክት ላክ</span></button>
     </div>
 
     <!-- CONTACT -->
     <div class="screen" id="tContact">
       <div class="sec-hd">
-        <h2>Contact Us</h2>
-        <button class="see-all" onclick="tab('home')">← Home</button>
+        <h2><span class="en">Contact Us</span><span class="am">አግኙን</span></h2>
+        <button class="see-all" onclick="tab('home')"><span class="en">← Home</span><span class="am">← መነሻ</span></button>
       </div>
       <div class="upload-card">
-        <p class="contact-intro">Send a message to the board. It appears in Admin → Messages and is emailed to the board.</p>
+        <p class="contact-intro"><span class="en">Send a message to the board. It appears in Admin → Messages and is emailed to the board.</span><span class="am">ለቦርዱ መልዕክት ይላኩ። በአስተዳደር → መልዕክቶች ውስጥ ይታያል።</span></p>
         <div class="form-msg" id="contactPortalMsg"></div>
-        <label>Your name</label>
+        <label><span class="en">Your name</span><span class="am">ስምዎ</span></label>
         <input type="text" class="form-input" id="contactPortalName" readonly>
-        <label style="margin-top:12px">Mobile</label>
+        <label style="margin-top:12px"><span class="en">Mobile</span><span class="am">ሞባይል</span></label>
         <input type="tel" class="form-input" id="contactPortalPhone" placeholder="(xxx) xxx-xxxx" autocomplete="off" readonly tabindex="-1">
-        <label style="margin-top:12px">Email</label>
+        <label style="margin-top:12px"><span class="en">Email</span><span class="am">ኢሜይል</span></label>
         <input type="email" class="form-input" id="contactPortalEmail" placeholder="your@email.com" autocomplete="off" readonly tabindex="-1">
-        <label style="margin-top:12px">Message <span class="req">*</span></label>
+        <label style="margin-top:12px"><span class="en">Message</span><span class="am">መልዕክት</span> <span class="req">*</span></label>
         <textarea class="form-input" id="contactPortalMessage" rows="4" placeholder="How can we help you?" style="margin-bottom:0;resize:vertical;min-height:96px"></textarea>
-        <button type="button" class="btn primary" style="width:100%;margin-top:16px" onclick="submitPortalContact()">Send Message</button>
-        <p class="contact-fine">Or call <a href="tel:4245475594">(424) 547-5594</a></p>
+        <button type="button" class="btn primary" style="width:100%;margin-top:16px" onclick="submitPortalContact()"><span class="en">Send Message</span><span class="am">መልዕክት ላክ</span></button>
+        <p class="contact-fine"><span class="en">Or call</span><span class="am">ወይም ይደውሉ</span> <a href="tel:4245475594">(424) 547-5594</a></p>
       </div>
     </div>
 
     <!-- NOTIFICATIONS -->
     <div class="screen" id="tNotifications">
       <div class="sec-hd">
-        <h2>Notifications</h2>
+        <h2><span class="en">Notifications</span><span class="am">ማሳወቂያዎች</span></h2>
         <div class="sec-hd-actions">
-          <button class="see-all" onclick="markRead()">Mark read</button>
-          <button class="see-all" onclick="tab('home')">← Home</button>
+          <button class="see-all" onclick="markRead()"><span class="en">Mark read</span><span class="am">እንደ ተነበበ ምልክት</span></button>
+          <button class="see-all" onclick="tab('home')"><span class="en">← Home</span><span class="am">← መነሻ</span></button>
         </div>
       </div>
       <div id="notifList"></div>
@@ -492,6 +505,87 @@ const MY_BOARD_MESSAGES = [];
 let EDAR_EVENTS = [];
 let me = null, myPhone = '', myBeneficiary = null, pendingBeneficiaryChange = null, beneficiaryImportPending = false, profEditKey = '', selMeth = null, uploadedFile = null, curTab = 'home';
 let notifReadAt = 0;
+const PORTAL_INVOICE_LIMIT = 150;
+const PORTAL_CACHE_TTL_MS = 60000;
+let portalRefreshToken = 0;
+let portalLoadingCount = 0;
+const portalFetchTimes = {
+  member: 0,
+  profile: 0,
+  invoices: 0,
+  activity: 0,
+  messages: 0,
+  events: 0,
+};
+const PORTAL_TAB_NEEDS = {
+  home: ['invoices'],
+  invoices: ['invoices'],
+  profile: ['profile'],
+  upload: ['events'],
+  notifications: ['activity', 'invoices', 'messages'],
+  boardmessages: ['messages'],
+  contact: [],
+};
+
+function portalLang(){
+  return document.body.classList.contains('lang-am') ? 'am' : 'en';
+}
+
+const PORTAL_I18N = {
+  hello: { en: n => `Hello, ${n}! 👋`, am: n => `ሰላም ${n}! 👋` },
+  memberStatus: { en: (s, n) => `${s} Member · #${n}`, am: (s, n) => `${s} አባል · #${n}` },
+  statusActive: { en: 'Active', am: 'ንቁ' },
+  statusInactive: { en: 'Inactive', am: 'እንቅስቃሴ የለውም' },
+  notOnFile: { en: 'Not on file', am: 'በፋይል ላይ የለም' },
+  edit: { en: 'Edit', am: 'አስተካክል' },
+  mobile: { en: 'Mobile', am: 'ሞባይል' },
+  homePhone: { en: 'Home Phone', am: 'የቤት ስልክ' },
+  email: { en: 'Email', am: 'ኢሜይል' },
+  address: { en: 'Address', am: 'አድራሻ' },
+  caughtUpTitle: { en: "You're all caught up!", am: 'ሁሉም ነገር ተሟልቷል!' },
+  caughtUpBody: {
+    en: 'No outstanding invoices right now. Thank you for staying current with your Edir contributions — your support means everything to grieving families.',
+    am: 'አሁን ያልተከፈሉ ክፍያዎች የሉም። ለጋራ ድጋፍዎ እናመሰግናለን።',
+  },
+  noInvoicesTitle: { en: 'No Invoices Yet', am: 'እስካሁን ምንም ክፍያ የለም' },
+  noInvoicesBody: { en: 'Your invoice history will appear here.', am: 'የክፍያ ታሪክዎ እዚህ ይታያል።' },
+  selectPerson: { en: 'Select person…', am: 'ሰው ይምረጡ…' },
+  noEvents: { en: 'No events on file', am: 'ምንም ዝግጅት የለም' },
+  benImportPending: {
+    en: 'Your beneficiary is on file with the board from your membership application. It will appear here once your application has been entered into the portal.',
+    am: 'ተጠቃሚዎ በአባልነት ማመልከቻዎ ላይ ተመዝግቧል። ቦርዱ ወደ ፖርታል ካስገባ በኋላ እዚህ ይታያል።',
+  },
+  benContactBtn: { en: 'Questions? Contact the Board', am: 'ጥያቄ አለዎት? ቦርዱን ያግኙ' },
+  benNone: { en: 'No beneficiary on file. Please add one to protect your family.', am: 'ተጠቃሚ አልተመዘገበም። ቤተሰብዎን ለመጠበቅ ይጨምሩ።' },
+  addBeneficiary: { en: 'Add Beneficiary', am: 'ተጠቃሚ ጨምር' },
+  loadingBeneficiary: { en: 'Loading beneficiary…', am: 'ተጠቃሚ በመጫን ላይ…' },
+  noNotifsTitle: { en: 'No Notifications', am: 'ምንም ማሳወቂያ የለም' },
+  noNotifsBody: { en: 'You are all caught up.', am: 'ሁሉም ነገር ተሟልቷል።' },
+  noMessages: {
+    en: 'No messages yet. Use <strong>Contact Us</strong> on the home screen to reach the board.',
+    am: 'እስካሁን ምንም መልዕክት የለም። ቦርዱን ለማግኘት በመነሻ ላይ <strong>አግኙን</strong> ይጠቀሙ።',
+  },
+  contactPlaceholder: { en: 'How can we help you?', am: 'እንዴት ልንረዳዎ እንችላለን?' },
+  addressPlaceholder: { en: 'Street, City, State ZIP', am: 'መንገድ፣ ከተማ፣ ክልል ZIP' },
+  benPending: { en: 'Beneficiary change pending board approval', am: 'የተጠቃሚ ለውጥ የቦርድ ፈቃድ በመጠባበቅ ላይ' },
+  beneficiary: { en: 'Beneficiary', am: 'ተጠቃሚ' },
+  editField: { en: l => `Edit ${l}`, am: l => `${l} አስተካክል` },
+};
+
+function pt(key, ...args){
+  const item = PORTAL_I18N[key];
+  if(!item) return key;
+  const lang = portalLang();
+  const v = item[lang] ?? item.en;
+  return typeof v === 'function' ? v(...args) : v;
+}
+
+function memberStatusLabel(status){
+  const low = String(status || '').trim().toLowerCase();
+  if(low === 'active') return pt('statusActive');
+  if(low === 'inactive') return pt('statusInactive');
+  return String(status || '').trim();
+}
 
 function getStoredToken(){
   return localStorage.getItem(TOKEN_KEY);
@@ -528,7 +622,7 @@ async function apiFetch(url, init = {}) {
   return payload;
 }
 
-function buildUrl(path, params = {}) {
+function buildUrl(path, params = {}, options = {}) {
   if (path.startsWith('/')) {
     path = path.slice(1);
   }
@@ -538,8 +632,48 @@ function buildUrl(path, params = {}) {
       url.searchParams.set(key, value);
     }
   });
-  url.searchParams.set('_', String(Date.now()));
+  if (options.bustCache) {
+    url.searchParams.set('_', String(Date.now()));
+  }
   return url.toString();
+}
+
+function isPortalCacheFresh(key) {
+  const loadedAt = portalFetchTimes[key] || 0;
+  return loadedAt > 0 && (Date.now() - loadedAt) < PORTAL_CACHE_TTL_MS;
+}
+
+function invalidatePortalCache(...keys) {
+  if (!keys.length) {
+    Object.keys(portalFetchTimes).forEach((key) => {
+      portalFetchTimes[key] = 0;
+    });
+    return;
+  }
+  keys.forEach((key) => {
+    portalFetchTimes[key] = 0;
+  });
+}
+
+function setPortalLoading(active) {
+  portalLoadingCount += active ? 1 : -1;
+  if (portalLoadingCount < 0) portalLoadingCount = 0;
+  const bar = document.getElementById('portalLoadBar');
+  if (bar) {
+    bar.classList.toggle('active', portalLoadingCount > 0);
+    bar.setAttribute('aria-hidden', portalLoadingCount > 0 ? 'false' : 'true');
+  }
+}
+
+function markPortalFetched(key) {
+  portalFetchTimes[key] = Date.now();
+}
+
+function queuePortalFetch(key, task) {
+  return task().then((result) => {
+    markPortalFetched(key);
+    return result;
+  });
 }
 
 async function apiGet(path, params = {}) {
@@ -547,7 +681,7 @@ async function apiGet(path, params = {}) {
 }
 
 async function apiPost(path, body = {}) {
-  return apiFetch(buildUrl(path), {
+  return apiFetch(buildUrl(path, {}, { bustCache: true }), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
@@ -555,7 +689,7 @@ async function apiPost(path, body = {}) {
 }
 
 async function apiPatch(path, body = {}) {
-  return apiFetch(buildUrl(path), {
+  return apiFetch(buildUrl(path, {}, { bustCache: true }), {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
@@ -563,7 +697,7 @@ async function apiPatch(path, body = {}) {
 }
 
 async function apiPut(path, body = {}) {
-  return apiFetch(buildUrl(path), {
+  return apiFetch(buildUrl(path, {}, { bustCache: true }), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
@@ -573,7 +707,7 @@ async function apiPut(path, body = {}) {
 async function fetchMemberActivity() {
   if (!getStoredToken()) return [];
   try {
-    const data = await apiGet('portal/activity', { limit: 100 });
+    const data = await queuePortalFetch('activity', () => apiGet('portal/activity', { limit: 100 }));
     MY_ACTIVITY.splice(0, MY_ACTIVITY.length, ...(data.activity || []));
   } catch (error) {
     console.warn('Failed to fetch activity:', error);
@@ -584,7 +718,7 @@ async function fetchMemberActivity() {
 async function fetchMemberProfile() {
   if (!getStoredToken()) return null;
   try {
-    const data = await apiGet('portal/profile');
+    const data = await queuePortalFetch('profile', () => apiGet('portal/profile'));
     if (data.member) {
       me = data.member;
     }
@@ -603,13 +737,14 @@ async function fetchCurrentMember() {
     return null;
   }
   try {
-    const result = await apiGet('auth/me');
+    const result = await queuePortalFetch('member', () => apiGet('auth/me'));
     if (result.member) {
       me = result.member;
       return me;
     }
   } catch (error) {
     clearToken();
+    invalidatePortalCache();
     console.warn('Stored session invalid, clearing token:', error);
   }
   return null;
@@ -625,7 +760,7 @@ async function loadStoredSession() {
 async function fetchEdirEvents() {
   if (!getStoredToken()) return [];
   try {
-    const data = await apiGet('portal/events');
+    const data = await queuePortalFetch('events', () => apiGet('portal/events'));
     EDAR_EVENTS = Array.isArray(data.events) ? data.events : [];
   } catch (error) {
     console.warn('Failed to fetch Edir events:', error);
@@ -639,7 +774,10 @@ async function fetchMemberInvoices() {
     return [];
   }
   try {
-    const data = await apiGet('portal/invoices', { memberId: me.id, limit: 2500 });
+    const data = await queuePortalFetch('invoices', () => apiGet('portal/invoices', {
+      memberId: me.id,
+      limit: PORTAL_INVOICE_LIMIT,
+    }));
     if (Array.isArray(data.invoices)) {
       MY_INVOICES.splice(0, MY_INVOICES.length, ...data.invoices);
     }
@@ -651,7 +789,7 @@ async function fetchMemberInvoices() {
 
 async function fetchMemberBoardMessages() {
   try {
-    const data = await apiGet('portal/messages');
+    const data = await queuePortalFetch('messages', () => apiGet('portal/messages'));
     MY_BOARD_MESSAGES.splice(0, MY_BOARD_MESSAGES.length, ...(data.messages || []));
   } catch (error) {
     console.warn('Failed to fetch board messages:', error);
@@ -660,16 +798,68 @@ async function fetchMemberBoardMessages() {
   return MY_BOARD_MESSAGES;
 }
 
-async function refreshPortalData() {
+async function ensureTabData(tabName, { force = false } = {}) {
   if (!getStoredToken()) return;
-  await fetchCurrentMember();
-  await Promise.all([
-    fetchMemberProfile(),
-    fetchMemberInvoices(),
-    fetchMemberActivity(),
-    fetchMemberBoardMessages(),
-    fetchEdirEvents(),
-  ]);
+  const needs = PORTAL_TAB_NEEDS[tabName] || [];
+  const tasks = [];
+
+  if (!me && (force || !isPortalCacheFresh('member'))) {
+    tasks.push(fetchCurrentMember());
+  }
+
+  for (const key of needs) {
+    if (!force && isPortalCacheFresh(key)) continue;
+    if (key === 'profile') tasks.push(fetchMemberProfile());
+    else if (key === 'invoices') tasks.push(fetchMemberInvoices());
+    else if (key === 'activity') tasks.push(fetchMemberActivity());
+    else if (key === 'messages') tasks.push(fetchMemberBoardMessages());
+    else if (key === 'events') tasks.push(fetchEdirEvents());
+  }
+
+  if (tasks.length) {
+    await Promise.all(tasks);
+  }
+}
+
+async function refreshPortalData(opts = {}) {
+  if (!getStoredToken()) return;
+  const force = !!opts.force;
+  const scope = opts.scope || 'core';
+
+  if (force || !isPortalCacheFresh('member')) {
+    await fetchCurrentMember();
+  }
+
+  const tasks = [];
+  const wantProfile = scope === 'full' || scope === 'core';
+  const wantInvoices = scope === 'full' || scope === 'core';
+  const wantEvents = scope === 'full' || scope === 'core';
+  const wantActivity = scope === 'full';
+  const wantMessages = scope === 'full';
+
+  if (wantProfile && (force || !isPortalCacheFresh('profile'))) tasks.push(fetchMemberProfile());
+  if (wantInvoices && (force || !isPortalCacheFresh('invoices'))) tasks.push(fetchMemberInvoices());
+  if (wantEvents && (force || !isPortalCacheFresh('events'))) tasks.push(fetchEdirEvents());
+  if (wantActivity && (force || !isPortalCacheFresh('activity'))) tasks.push(fetchMemberActivity());
+  if (wantMessages && (force || !isPortalCacheFresh('messages'))) tasks.push(fetchMemberBoardMessages());
+
+  if (tasks.length) {
+    await Promise.all(tasks);
+  }
+}
+
+async function syncTabData(tabName, { force = false, background = false } = {}) {
+  const token = ++portalRefreshToken;
+  if (background) setPortalLoading(true);
+  try {
+    await ensureTabData(tabName, { force });
+    if (token !== portalRefreshToken) return;
+    renderPortal();
+  } catch (error) {
+    console.warn('Portal tab sync failed:', error);
+  } finally {
+    if (background) setPortalLoading(false);
+  }
 }
 
 function isInvoiceCancelled(inv) {
@@ -767,7 +957,8 @@ async function submitPinResetRequest(){
 function backPortal(){
   document.getElementById('sConfirm').style.display='none';
   document.getElementById('portalApp').style.display='flex';
-  refreshPortalData().then(()=>{
+  invalidatePortalCache('invoices', 'activity');
+  refreshPortalData({ scope: 'core', force: true }).then(()=>{
     renderPortal();
     tab('home', { skipRefresh: true });
   });
@@ -781,6 +972,27 @@ function fmtPhone(inp){
   inp.value=v;
 }
 function normPhone(p){return p.replace(/\D/g,'').slice(-10)}
+
+function isLegacyDateInAddressField(value){
+  const s=String(value||'').trim();
+  if(!s) return false;
+  return /^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}:\d{2})?/.test(s);
+}
+
+function profileFieldDisplay(key, raw){
+  const v=String(raw||'').trim();
+  if(!v) return pt('notOnFile');
+  if(key==='address' && isLegacyDateInAddressField(v)) return pt('notOnFile');
+  return v;
+}
+
+function profileFieldEditValue(key, raw){
+  const v=String(raw||'').trim();
+  if(!v || v==='Not on file') return '';
+  if(key==='address' && isLegacyDateInAddressField(v)) return '';
+  return v;
+}
+
 function hidePhoneHelp(){
   const panel=document.getElementById('phoneHelpPanel');
   const card=document.getElementById('phoneAuthCard');
@@ -952,10 +1164,15 @@ async function loginOK(){
   document.body.classList.add('portal-logged-in');
   document.getElementById('portalApp').style.display='flex';
   ['sPhone','sPin','sCreate'].forEach(s=>document.getElementById(s).style.display='none');
-  await refreshPortalData();
-  renderPortal();
-  tab('home', { skipRefresh: true });
-  openPortalDeepLink();
+  setPortalLoading(true);
+  try {
+    await refreshPortalData({ scope: 'core', force: true });
+    renderPortal();
+    tab('home', { skipRefresh: true });
+    openPortalDeepLink();
+  } finally {
+    setPortalLoading(false);
+  }
 }
 
 // RENDER
@@ -963,8 +1180,8 @@ function renderPortal(){
   const m=me;
   const init=(m.first[0]||'?')+(m.last[0]||'');
   document.getElementById('avBtn').textContent=init;
-  document.getElementById('gName').textContent='Hello, '+m.first+'! 👋';
-  document.getElementById('gStatus').textContent=m.status+' Member · #'+(m.memberNumber||m.id);
+  document.getElementById('gName').textContent=pt('hello', m.first);
+  document.getElementById('gStatus').textContent=pt('memberStatus', memberStatusLabel(m.status), m.memberNumber||m.id);
   document.getElementById('profAv').textContent=init;
   document.getElementById('profNm').textContent=m.first+' '+m.last;
 
@@ -1000,9 +1217,8 @@ function renderPortal(){
     homeEl.innerHTML=`<div class="empty-state empty-state-paid">
       <img src="/logo.png" alt="" class="empty-state-logo">
       <div class="empty-state-badge">✓</div>
-      <h3>You're all caught up!</h3>
-      <p>No outstanding invoices right now. Thank you for staying current with your Edir contributions — your support means everything to grieving families.</p>
-      <p class="empty-state-am">ምንም ክፍያ የለም። ለጋራ ድጋፍዎ እናመሰግናለን።</p>
+      <h3>${pt('caughtUpTitle')}</h3>
+      <p>${pt('caughtUpBody')}</p>
     </div>`;
   } else {
     homeEl.innerHTML=renderInvs(unpaid.slice(0,3));
@@ -1011,17 +1227,17 @@ function renderPortal(){
   // All invoices
   const allEl=document.getElementById('allInvs');
   if(myInvs.length===0){
-    allEl.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><h3>No Invoices Yet</h3><p>Your invoice history will appear here.</p></div>';
+    allEl.innerHTML=`<div class="empty-state"><div class="empty-icon">📋</div><h3>${pt('noInvoicesTitle')}</h3><p>${pt('noInvoicesBody')}</p></div>`;
   } else {
     allEl.innerHTML=renderInvs(myInvs);
   }
 
   // Profile fields
   const fields=[
-    {ico:'📱',lbl:'Mobile',key:'mobile',val:m.mobile||'Not on file',editable:true},
-    {ico:'🏠',lbl:'Home Phone',key:'home',val:m.home||'Not on file',editable:true},
-    {ico:'✉️',lbl:'Email',key:'email',val:m.email||'Not on file',editable:true},
-    {ico:'📍',lbl:'Address',key:'address',val:m.address||'Not on file',editable:true},
+    {ico:'📱',lbl:pt('mobile'),key:'mobile',val:profileFieldDisplay('mobile',m.mobile),editable:true},
+    {ico:'🏠',lbl:pt('homePhone'),key:'home',val:profileFieldDisplay('home',m.home),editable:true},
+    {ico:'✉️',lbl:pt('email'),key:'email',val:profileFieldDisplay('email',m.email),editable:true},
+    {ico:'📍',lbl:pt('address'),key:'address',val:profileFieldDisplay('address',m.address),editable:true},
   ];
   document.getElementById('profFields').innerHTML=fields.map(f=>`
     <div class="pf-row">
@@ -1029,7 +1245,7 @@ function renderPortal(){
         <div class="pf-ico">${f.ico}</div>
         <div><div class="pf-lbl">${f.lbl}</div><div class="pf-val">${f.val}</div></div>
       </div>
-      ${f.editable ? `<button class="pf-edit-btn" onclick="openProfEdit('${f.key}','${f.lbl.replace(/'/g,"\\'")}')">Edit</button>` : ''}
+      ${f.editable ? `<button class="pf-edit-btn" onclick="openProfEdit('${f.key}','${f.lbl.replace(/'/g,"\\'")}')">${pt('edit')}</button>` : ''}
     </div>`).join('');
 
   renderBeneficiary();
@@ -1037,7 +1253,7 @@ function renderPortal(){
 
   // Upload dropdown — all Edir deceased / memorial events
   const sel=document.getElementById('evSel');
-  sel.innerHTML='<option value="">Select person…</option>';
+  sel.innerHTML=`<option value="">${pt('selectPerson')}</option>`;
   const eventNames=[...new Set(EDAR_EVENTS.map(e=>formatDeceasedName(e)).filter(Boolean))];
   eventNames.forEach(name=>{
     const o=document.createElement('option');
@@ -1048,7 +1264,7 @@ function renderPortal(){
   if(eventNames.length===0){
     const o=document.createElement('option');
     o.value='';
-    o.textContent='No events on file';
+    o.textContent=pt('noEvents');
     o.disabled=true;
     sel.appendChild(o);
   }
@@ -1193,16 +1409,12 @@ async function submitPortalContact(){
 }
 
 // TABS
-async function tab(t,opts){
+function tab(t,opts){
   opts=opts||{};
   if(t==='contact') fillContactForm();
   if(t==='upload'){
     resetReceiptPaymentMethod();
     if(!opts.keepReceiptPrefill) resetReceiptPersonSelect();
-  }
-  if(!opts.skipRefresh && ['home','invoices','notifications','profile','upload','boardmessages'].includes(t)){
-    await refreshPortalData();
-    renderPortal();
   }
   curTab=t;
   const screens=['home','invoices','upload','profile','notifications','contact','boardmessages'];
@@ -1213,6 +1425,10 @@ async function tab(t,opts){
     if(bn) bn.classList.toggle('active',x===t);
   });
   window.scrollTo(0,0);
+  renderPortal();
+  if(!opts.skipRefresh){
+    syncTabData(t, { background: true });
+  }
 }
 
 // UPLOAD
@@ -1349,7 +1565,7 @@ function renderBoardMessages() {
   const el = document.getElementById('boardMessagesList');
   if (!el) return;
   if (!MY_BOARD_MESSAGES.length) {
-    el.innerHTML = '<p class="board-msg-empty">No messages yet. Use <strong>Contact Us</strong> on the home screen to reach the board.</p>';
+    el.innerHTML = `<p class="board-msg-empty">${pt('noMessages')}</p>`;
     return;
   }
   el.innerHTML = MY_BOARD_MESSAGES.map(m => {
@@ -1386,7 +1602,7 @@ function renderNotifs(){
     </div>` : '';
   const liveNotifs = buildLiveNotifications();
   if(!liveNotifs.length && !MY_ACTIVITY.length){
-    el.innerHTML='<div class="empty-state"><div class="empty-icon">•</div><h3>No Notifications</h3><p>You are all caught up.</p></div>';
+    el.innerHTML=`<div class="empty-state"><div class="empty-icon">•</div><h3>${pt('noNotifsTitle')}</h3><p>${pt('noNotifsBody')}</p></div>`;
     return;
   }
   el.innerHTML=activityHtml + liveNotifs.map(n=>`
@@ -1409,12 +1625,12 @@ function renderBeneficiary(){
     show.style.display='none';
     if(beneficiaryImportPending){
       empty.innerHTML=`
-        <p class="ben-import-pending">Your beneficiary is on file with the board from your membership application. It will appear here once your application has been entered into the portal.</p>
-        <button class="btn-outline" type="button" onclick="tab('contact')">Questions? Contact the Board</button>`;
+        <p class="ben-import-pending">${pt('benImportPending')}</p>
+        <button class="btn-outline" type="button" onclick="tab('contact')">${pt('benContactBtn')}</button>`;
     } else {
       empty.innerHTML=`
-        <p>No beneficiary on file. Please add one to protect your family.</p>
-        <button class="btn-outline" type="button" onclick="openBenEdit()">Add Beneficiary</button>`;
+        <p>${pt('benNone')}</p>
+        <button class="btn-outline" type="button" onclick="openBenEdit()">${pt('addBeneficiary')}</button>`;
     }
     return;
   }
@@ -1423,22 +1639,23 @@ function renderBeneficiary(){
   show.innerHTML=`
     <div class="pf-row" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px">
       <div class="pf-left"><div class="pf-ico">🙏</div>
-      <div><div class="pf-lbl">${myBeneficiary.relationship||'Beneficiary'}</div><div class="pf-val">${myBeneficiary.name}</div><div style="font-size:12px;color:var(--gray);margin-top:2px">${myBeneficiary.phone||''}</div></div></div>
-      <button class="pf-edit-btn" onclick="openBenEdit()">Edit</button>
+      <div><div class="pf-lbl">${myBeneficiary.relationship||pt('beneficiary')}</div><div class="pf-val">${myBeneficiary.name}</div><div style="font-size:12px;color:var(--gray);margin-top:2px">${myBeneficiary.phone||''}</div></div></div>
+      <button class="pf-edit-btn" onclick="openBenEdit()">${pt('edit')}</button>
     </div>
-    ${pendingBeneficiaryChange ? `<div class="ben-pending-banner">⏳ Beneficiary change pending board approval${pendingBeneficiaryChange.payload?.name ? `: <strong>${pendingBeneficiaryChange.payload.name}</strong>` : ''}</div>` : ''}`;
+    ${pendingBeneficiaryChange ? `<div class="ben-pending-banner">⏳ ${pt('benPending')}${pendingBeneficiaryChange.payload?.name ? `: <strong>${pendingBeneficiaryChange.payload.name}</strong>` : ''}</div>` : ''}`;
 }
 
 function openProfEdit(key, label){
   profEditKey = key;
   const cur = me && me[key];
-  const displayVal = (cur && cur !== 'Not on file') ? cur : '';
-  document.getElementById('profEditTitle').textContent = 'Edit ' + label;
+  const displayVal = profileFieldEditValue(key, cur);
+  document.getElementById('profEditTitle').textContent = pt('editField', label);
   document.getElementById('profEditLbl').textContent = label;
   const inp = document.getElementById('profEditVal');
   inp.type = key === 'email' ? 'email' : (key === 'mobile' || key === 'home' ? 'tel' : 'text');
   inp.value = displayVal;
-  inp.placeholder = key === 'address' ? 'Street, City, State ZIP' : label;
+  inp.placeholder = key === 'address' ? pt('addressPlaceholder') : label;
+  inp.setAttribute('autocomplete', key === 'address' ? 'street-address' : 'off');
   document.getElementById('profEditErr').classList.remove('show');
   openModal('profEditModal');
 }
@@ -1457,6 +1674,7 @@ async function saveProfField(){
     payload[profEditKey] = val;
     const result = await apiPatch('portal/profile', payload);
     if (result.member) me = result.member;
+    markPortalFetched('profile');
     closeModal('profEditModal');
     renderPortal();
     await fetchMemberActivity();
@@ -1534,6 +1752,11 @@ function doSignOut(){
   myBeneficiary=null;
   pendingBeneficiaryChange=null;
   beneficiaryImportPending=false;
+  invalidatePortalCache();
+  MY_INVOICES.splice(0, MY_INVOICES.length);
+  MY_ACTIVITY.splice(0, MY_ACTIVITY.length);
+  MY_BOARD_MESSAGES.splice(0, MY_BOARD_MESSAGES.length);
+  EDAR_EVENTS = [];
   document.body.classList.remove('portal-logged-in');
   clearToken();
   ['contactPortalName','contactPortalPhone','contactPortalEmail','contactPortalMessage'].forEach((id)=>{
@@ -1548,23 +1771,37 @@ function doSignOut(){
 // LANGUAGE
 function setLang(l){
   const lang=l==='am'?'am':'en';
+  const isEn=lang==='en';
   document.documentElement.lang=lang;
   document.body.classList.toggle('lang-am',lang==='am');
-  ['lb-en','portal-lb-en'].forEach(id=>{
+  document.querySelectorAll('.auth-card-lang .lang-btn[data-lang="en"]').forEach(el=>{
+    el.classList.toggle('active',isEn);
+    el.classList.toggle('on',isEn);
+  });
+  document.querySelectorAll('.auth-card-lang .lang-btn[data-lang="am"]').forEach(el=>{
+    el.classList.toggle('active',!isEn);
+    el.classList.toggle('on',!isEn);
+  });
+  ['portal-lb-en'].forEach(id=>{
     const el=document.getElementById(id);
     if(el){
-      el.classList.toggle('active',lang==='en');
-      el.classList.toggle('on',lang==='en');
+      el.classList.toggle('active',isEn);
+      el.classList.toggle('on',isEn);
     }
   });
-  ['lb-am','portal-lb-am'].forEach(id=>{
+  ['portal-lb-am'].forEach(id=>{
     const el=document.getElementById(id);
     if(el){
-      el.classList.toggle('active',lang==='am');
-      el.classList.toggle('on',lang==='am');
+      el.classList.toggle('active',!isEn);
+      el.classList.toggle('on',!isEn);
     }
   });
   localStorage.setItem('hlang',lang);
+  const contactMsg = document.getElementById('contactPortalMessage');
+  if(contactMsg) contactMsg.placeholder = pt('contactPlaceholder');
+  if(me && document.getElementById('portalApp')?.style.display !== 'none'){
+    renderPortal();
+  }
 }
 
 const storedLang=localStorage.getItem('hlang');
@@ -1596,7 +1833,8 @@ window.addEventListener('hashchange',openPortalDeepLink);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   if (!me || document.getElementById('portalApp')?.style.display === 'none') return;
-  refreshPortalData().then(renderPortal).catch(() => {});
+  if (isPortalCacheFresh('invoices') && isPortalCacheFresh('profile')) return;
+  syncTabData(curTab || 'home', { background: true });
 });
 </script>
 </body>

@@ -140,17 +140,20 @@ body.app-portal .auth-wrap .pin-input.filled {
 .app-portal .portal-nav-brand {
   text-decoration: none;
   color: inherit;
-  border: 1px solid rgba(252, 221, 9, 0.28);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  padding: 4px 10px 4px 4px;
-  background: rgba(252, 221, 9, 0.08);
+  padding: 2px 8px 2px 2px;
+  background: transparent;
+  flex-shrink: 1;
+  min-width: 0;
+  max-height: calc(var(--nav-h) - 10px);
   transition: border-color 0.15s, background 0.15s;
 }
 
 .app-portal .portal-nav-brand:hover,
 .app-portal .portal-nav-brand:focus-visible {
-  border-color: rgba(252, 221, 9, 0.55);
-  background: rgba(252, 221, 9, 0.14);
+  border-color: rgba(252, 221, 9, 0.45);
+  background: rgba(252, 221, 9, 0.1);
   outline: none;
 }
 
@@ -159,6 +162,22 @@ body.app-portal .auth-wrap .pin-input.filled {
   flex-direction: column;
   align-items: flex-start;
   min-width: 0;
+  line-height: 1.15;
+}
+
+.app-portal .portal-nav-logo {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+}
+
+.app-portal .portal-nav-name {
+  font-size: 13px;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .app-portal .portal-nav-site-link {
@@ -700,41 +719,78 @@ body.app-portal:not(.lang-am) .auth-wrap .amh {
 .app-portal .portal-nav {
   background: linear-gradient(90deg, #044d1a, #056b24, #044d1a);
   border-bottom: 1px solid rgba(252, 221, 9, 0.25);
+  overflow: hidden;
+}
+
+.app-portal .portal-nav-inner {
+  overflow: hidden;
+}
+
+.app-portal .portal-load-bar {
+  height: 2px;
+  max-width: 600px;
+  margin: 0 auto;
+  width: 100%;
+  flex-shrink: 0;
+  background: transparent;
+}
+
+.app-portal .portal-load-bar.active {
+  background: var(--gold);
+  animation: portal-load-pulse 1s ease-in-out infinite;
+}
+
+@keyframes portal-load-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
 }
 
 .app-portal .portal-nav-name { color: #fff; }
 
-.app-portal .portal-auth-lang {
-  position: fixed;
-  top: max(10px, env(safe-area-inset-top, 0px));
-  right: max(12px, env(safe-area-inset-right, 0px));
-  z-index: 120;
+.app-portal .auth-card,
+.app-portal .confirm-wrap {
+  position: relative;
+}
+
+.app-portal .auth-card-lang {
   display: flex;
+  justify-content: flex-end;
   gap: 4px;
+  margin: 0 0 10px;
 }
 
-body.portal-logged-in .portal-auth-lang {
-  display: none;
-}
-
-.app-portal .portal-auth-lang .lang-btn {
-  padding: 6px 11px;
-  border: 1px solid rgba(255, 255, 255, 0.28);
+.app-portal .auth-card-lang .lang-btn {
+  padding: 5px 10px;
+  border: 1px solid rgba(252, 221, 9, 0.35);
   border-radius: 20px;
-  background: rgba(0, 0, 0, 0.25);
-  color: rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.2);
+  color: rgba(238, 244, 238, 0.9);
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
   line-height: 1.2;
-  backdrop-filter: blur(6px);
 }
 
-.app-portal .portal-auth-lang .lang-btn.active,
-.app-portal .portal-auth-lang .lang-btn.on {
+.app-portal .auth-card-lang .lang-btn.active,
+.app-portal .auth-card-lang .lang-btn.on {
   background: var(--gold);
   border-color: var(--gold);
   color: #1a1a1a;
+}
+
+.app-portal .portal-content .am,
+.app-portal .portal-nav .am,
+.app-portal .bnav-lbl .am,
+.app-portal .qa-title .am,
+.app-portal .qa-sub .am,
+.app-portal .gs-label .am,
+.app-portal .sec-hd .am,
+.app-portal .see-all .am,
+.app-portal .setting-row .am,
+.app-portal .upload-card .am,
+.app-portal .btn-main .am,
+.app-portal .ben-card .am {
+  font-family: var(--font-am);
 }
 
 .app-portal .portal-lang-row {

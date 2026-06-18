@@ -85,6 +85,17 @@ async function resolveAdminActor(adminPayload) {
   return buildActorFromAdmin(adminPayload, result.rows[0]);
 }
 
+function isLegacyDateInAddressField(value) {
+  const s = String(value || '').trim();
+  if (!s) return false;
+  return /^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}:\d{2})?/.test(s);
+}
+
+function normalizePortalAddress(value) {
+  if (isLegacyDateInAddressField(value)) return '';
+  return String(value || '').trim();
+}
+
 function buildMemberPayload(member) {
   return {
     id: member.id,
@@ -97,7 +108,7 @@ function buildMemberPayload(member) {
     email: member.email,
     mobile: member.mobile,
     home: member.home_phone,
-    address: member.address,
+    address: normalizePortalAddress(member.address),
     status: member.status,
     joined_date: member.joined_date,
     notes: member.notes != null ? member.notes : '',

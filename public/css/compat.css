@@ -28,7 +28,7 @@ body.app-portal .auth-wrap {
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding-top: max(48px, calc(env(safe-area-inset-top, 0px) + 40px));
+  padding-top: max(16px, env(safe-area-inset-top, 0px));
 }
 body.app-portal .auth-wrap .auth-card,
 body.app-portal .auth-wrap .confirm-wrap {
