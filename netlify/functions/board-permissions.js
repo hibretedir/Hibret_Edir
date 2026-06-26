@@ -20,6 +20,7 @@ const BOARD_PERMISSION_DEFS = [
   { key: 'pin_reset_approve', label: 'PIN reset approval', desc: 'Approve or reject forgot-PIN requests' },
   { key: 'beneficiary', label: 'Beneficiary approval', desc: 'Approve beneficiary change requests' },
   { key: 'messages', label: 'Contact messages', desc: 'Reply to public contact form messages' },
+  { key: 'follow_up', label: 'Payment follow-up', desc: 'Assign members and follow up on unpaid invoices' },
   { key: 'payout_manage', label: 'Manage payout cases', desc: 'Open and edit payout paperwork' },
   { key: 'payout_approve', label: 'Approve payouts', desc: 'Board-approve $15,000 payout cases' },
   { key: 'payout_mark_paid', label: 'Mark payout paid', desc: 'Record a payout as disbursed' },
@@ -53,6 +54,7 @@ function defaultInvitePerms() {
     board_notes: true,
     sync_paypal: true,
     messages: true,
+    follow_up: true,
   };
 }
 
@@ -116,6 +118,7 @@ function legacyRowToPerms(row) {
     pin_reset_approve: ops || full,
     beneficiary: ops || full,
     messages: ops || full,
+    follow_up: notes || full || ops,
     payout_manage: full,
     payout_approve: payout || full,
     payout_mark_paid: payout || full,
@@ -223,7 +226,26 @@ async function loadBoardMemberAccess(db, adminPayload) {
       is_active: true,
     });
   }
-  if (!adminPayload.adminId) {
+
+  let adminId = adminPayload.adminId;
+  if (!adminId && adminPayload.email) {
+    const emailLookup = await db.query(
+      `SELECT bm.id FROM board_members bm
+       WHERE bm.is_active = TRUE
+         AND (
+           LOWER(bm.email) = LOWER($1)
+           OR EXISTS (
+             SELECT 1 FROM board_member_emails bme
+             WHERE bme.board_member_id = bm.id AND LOWER(bme.email) = LOWER($1)
+           )
+         )
+       LIMIT 1`,
+      [String(adminPayload.email).trim()]
+    );
+    adminId = emailLookup.rows[0]?.id || null;
+  }
+
+  if (!adminId) {
     return deriveBoardAccess({
       is_active: true,
       board_perms: { board_notes: true },

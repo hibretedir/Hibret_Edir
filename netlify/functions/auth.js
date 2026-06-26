@@ -380,6 +380,7 @@ function buildMemberPayload(member) {
 function buildAdminPayload(admin) {
   return {
     id: admin.id,
+    adminId: admin.id,
     email: admin.email,
     role: admin.role,
     is_active: admin.is_active,
@@ -488,6 +489,7 @@ async function issueAdminToken(admin) {
   return jwt.sign(
     {
       adminId: admin.id,
+      email: admin.email,
       role: 'admin',
       isSuperAdmin: !!admin.is_super_admin,
     },
@@ -1083,7 +1085,16 @@ exports.handler = async (event, context) => {
       } catch (tokenError) {
         return jsonResponse(401, { error: 'Invalid or expired token' });
       }
-      if (payload.role !== 'admin' || !payload.adminId) {
+      if (payload.role !== 'admin') {
+        return jsonResponse(403, { error: 'Forbidden' });
+      }
+
+      let adminId = payload.adminId;
+      if (!adminId && payload.email) {
+        const byEmail = await findAdmin({ email: payload.email });
+        adminId = byEmail?.id || null;
+      }
+      if (!adminId) {
         return jsonResponse(403, { error: 'Forbidden' });
       }
 
@@ -1096,7 +1107,7 @@ exports.handler = async (event, context) => {
          FROM board_members
          WHERE id = $1
          LIMIT 1`,
-        [payload.adminId]
+        [adminId]
       );
       const admin = result.rows[0];
       if (!admin) {

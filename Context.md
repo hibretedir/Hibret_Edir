@@ -1,9 +1,9 @@
 # Hibret Edir — Agent Context & Handoff
 
-**Last updated:** June 17, 2026 (Access Management, board permissions, CRM spouse field)  
+**Last updated:** June 17, 2026 (member portal mobile perf, UX, auth fixes — deploy `21e1514`)  
 **Purpose:** Onboard a new Cursor agent quickly. Read this file first, then `HIBRET_EDIR_PROJECT_HANDOFF (1).md` for deeper business rules and by-laws.
 
-**Current focus (next agent):** **Twilio SMS** — buy number, set `TWILIO_*` on Netlify, `npm run test:notify -- --send`. Then **production smoke-test** (invite email + SMS). **Netlify deploy** — push after Access Management + permissions work (June 17). **Database:** local `.env` `DATABASE_URL` points at **Render Postgres** — `npm run db:migrate` from your laptop **is** production DB ops. Set **`BOARD_SUPER_ADMIN_EMAILS`** on Netlify. SendGrid is **done** — see **`docs/notifications-setup.md`**. QA playbook: **`docs/system-validation-playbook.md`**.
+**Current focus (next agent):** **Twilio SMS** — buy number, set `TWILIO_*` on Netlify, `npm run test:notify -- --send`. Then **production smoke-test** (invite email + SMS). **Database:** local `.env` `DATABASE_URL` points at **Render Postgres** — `npm run db:migrate` from your laptop **is** production DB ops. Set **`BOARD_SUPER_ADMIN_EMAILS`** on Netlify. SendGrid is **done** — see **`docs/notifications-setup.md`**. QA playbook: **`docs/system-validation-playbook.md`**. **Local mobile testing:** `npm run dev` → phone browser `http://<PC-LAN-IP>:8888/portal/` (no push needed for layout/tap testing).
 
 ---
 
@@ -107,7 +107,8 @@ hibretedir/
 │   ├── seed_waiting_list_public.py
 │   ├── set_event_announcement.js  # CLI backfill prayer/burial/payment on events.notes (legacy; prefer Admin → Announce)
 │   ├── fix_board_permissions_regression.js  # One-off repair if board_perms regressed
-│   ├── sync_board_member_names.js # Link board logins → CRM member_number; email aliases (never writes CRM)
+│   ├── fix_qa_phone_collision.js  # Move QA test members off a real member's phone (prod DB one-off)
+│   ├── sync_board_member_names.js # Link board logins → CRM member_number; member_number roster only (no hardcoded emails)
 │   ├── build_invoice_snapshot.py
 │   ├── build_members_snapshot.py
 │   └── test_notifications.js      # npm run test:notify — verify SendGrid/Twilio config
@@ -151,6 +152,16 @@ npm run sync:paypal  # Full PayPal → DB sync from terminal
 - Board admin locally: `ADMIN_AUTH_ENABLED` **off by default**.
 - **Restart `npm run dev`** after adding new function routes or API endpoints.
 
+### Mobile preview on desktop / real phone (no deploy)
+
+| Method | How |
+|--------|-----|
+| **Browser DevTools** | `localhost:8888/portal/` → F12 → device toolbar (Ctrl+Shift+M) → pick iPhone/Pixel width |
+| **Real phone, same Wi‑Fi** | Find PC LAN IP → `http://192.168.x.x:8888/portal/` — exercises real taps, keyboard, scroll |
+| **When to push** | Production Netlify behavior, board review, or CI — not for every CSS/tab check |
+
+Hard-refresh after CSS/JS changes (`Ctrl+Shift+R` on desktop; pull-to-refresh on phone).
+
 ---
 
 ## 4. Environment variables
@@ -174,7 +185,7 @@ See `.env.example`. Critical ones:
 | `PUBLIC_SITE_URL` | Short invite/apply links in emails (use `http://localhost:8888` locally; production URL on Netlify) |
 | `MEMBER_CAP` | Default 200; use **`201`** for QA = **200 production slots + 1 reserved validation slot** (slot 201 is QA-only — real waiting-list invites use cap 200) |
 | `DEMO_QA_ENABLED` | `true` to enable System Health QA + **Reset demo cycle** |
-| `DEMO_QA_EMAIL` / `DEMO_QA_PHONE` / `DEMO_QA_NAME` | Dedicated test identity (never a real member) |
+| `DEMO_QA_EMAIL` / `DEMO_QA_PHONE` / `DEMO_QA_NAME` | Dedicated test identity (never a real member). **`DEMO_QA_PHONE` must not match any real member** — use `3105550199` after June 2026 collision fix |
 | `REGISTRATION_FEE` | `200` production; `1` for live PayPal QA smoke test |
 | `ANNOUNCEMENT_FUND_THRESHOLD` | Optional — auto-suggest no collection when PayPal balance ≥ this (default 50000) |
 
@@ -274,7 +285,7 @@ Base URL: `/.netlify/functions/<name>`
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/config` | — | `{ adminAuthRequired, memberAuthRequired }` |
-| POST | `/check-phone` | — | Member lookup |
+| POST | `/check-phone` | — | Member lookup; `rankMemberForPortalAuth()` prefers active real members over QA test rows when phones collide |
 | POST | `/create-pin` | — | Set bcrypt PIN |
 | POST | `/verify-pin` | — | Returns member JWT |
 | POST | `/request-pin-reset` | — | Creates `pin_reset_requests` row |
@@ -326,7 +337,7 @@ Base URL: `/.netlify/functions/<name>`
 
 **Membership onboarding (live):** invite → apply → board review (3 checks) → **Approve & Send Invoice** → PayPal registration fee → **member created automatically on PayPal paid** (sync or completion job). **Mark Registration Paid** / **Approve & Add to CRM** = fallback for Zelle/BofA. See **`docs/membership-onboarding-workflow.md`** and **`docs/system-validation-playbook.md`**.
 
-**QA test identity (local, June 2026):** `hibretedirtest@gmail.com` · `3103867475` · `Hibret Edir QA Test` · `REGISTRATION_FEE=1` · `MEMBER_CAP=201`. Full cycle validated locally (waiting list → invite → apply → approve → PayPal $1 → sync → active member). Reset: `npm run demo:reset:apply` or Admin **Reset demo cycle**.
+**QA test identity (local, June 2026):** `hibretedirtest@gmail.com` · **`3105550199`** (was `3103867475` — collided with Behailu #52; fixed via `fix_qa_phone_collision.js`) · `Hibret Edir QA Test` · `REGISTRATION_FEE=1` · `MEMBER_CAP=201`. Set matching `DEMO_QA_PHONE` on Netlify. Full cycle validated locally (waiting list → invite → apply → approve → PayPal $1 → sync → active member). Reset: `npm run demo:reset:apply` or Admin **Reset demo cycle**.
 
 ### PayPal sync
 
@@ -379,9 +390,16 @@ Placeholders show `—` until API loads. Regenerate static JSON: `python scripts
 
 - Invoices from DB with recipient-name matching + event dedupe
 - **Deaths Paid** = count of **paid event invoices** (unique events)
-- Notifications built from live unpaid invoices + activity (no mock array)
-- `refreshPortalData()` on tab switch and `visibilitychange`
-- Receipt upload, profile, beneficiary change request, PIN reset
+- Notifications built from live unpaid invoices + board message replies + activity (no mock array)
+- **Instant tab switches (June 17)** — Home / Invoices / Profile / etc. render from in-memory cache immediately; background fetch only when tab data is missing or stale (60s TTL). Lazy-load: activity + board messages only when Notifications / Board Messages opened; events when Upload opened. Invoice fetch capped at **150** per request (was 2500). Thin gold loading bar under nav during background refresh.
+- **Bilingual logged-in UI (June 17)** — `PORTAL_I18N` + `pt()` helper; EN/አማ toggle updates portal screens (not auth-only)
+- **Auth UX** — language toggle inside auth card; wider login card on mobile; phone-help panel; error auto-scroll
+- **Profile** — legacy CRM rows may have join **dates** in `address` column; `portal.js` `normalizePortalAddress()` + portal UI show “Not on file” instead of a date
+- **Beneficiary** — `beneficiary_import_pending` for paper members until board imports digital record
+- **Contact Us** — phone/email always synced from logged-in `me` (readonly); cleared on sign-out
+- **Portal auth** — `rankMemberForPortalAuth()` in `auth.js` / `member-snapshot.js` prefers real members over QA test rows when phones collide
+- Receipt upload, profile edit, beneficiary change request, PIN reset
+- Nav brand link (logo + “Back to Main Site”) — no persistent gold border bleeding into tab bar (`app-theme.css` portal28)
 
 ### Board Admin Page (`public/admin/index.html`)
 
@@ -510,6 +528,18 @@ Auth, portal, admin CRM, applications, waiting list, notifications, audit, payou
 - [x] **CRM board import** — Yonas Tesema & Misrak B. Demessie added as member **#232** (`misrak1940@gmail.com`); waiting list #12 → Added as Member
 - [x] **Schema migrate** — user ran `npm run db:migrate` locally June 16 after push
 
+### June 2026 — Member portal mobile perf & UX (June 17, `21e1514`)
+
+- [x] **Instant tabs** — no full API refresh on every tap; 60s client cache; lazy per-tab loads
+- [x] **Smaller invoice payload** — portal fetch limit 150 (server default 500)
+- [x] **Logged-in Amharic** — `PORTAL_I18N` across home, invoices, profile, notifications, contact
+- [x] **Auth fixes** — phone lookup priority (`rankMemberForPortalAuth`); QA phone moved off Behailu #52; contact form always uses session member
+- [x] **Profile address** — hide legacy date strings stored in CRM `address` column
+- [x] **Beneficiary import pending** — friendly message for paper-application members
+- [x] **Nav UI** — brand border overlap with tab bar fixed; loading bar for background sync
+- [x] **Netlify secrets scan** — `sync_board_member_names.js` roster keyed by `member_number` only (no hardcoded super-admin email)
+- [x] **Deploy** — `428182a`, `6a26f50`, `21e1514` on `main`
+
 ### June 2026 — Access Management & board permissions (June 17)
 
 - [x] **Access Management UI** — Master-detail layout; board names by CRM `#` + `display_name` (not email); access tier presets
@@ -595,6 +625,18 @@ From by-laws / handoff:
 ---
 
 ## 12. Recent session changelog
+
+### June 17, 2026 — Member portal mobile performance & UX (`21e1514`)
+
+- **Problem:** Every tab tap fired ~6 Netlify function calls (member, profile, invoices×2500, activity, messages, events) — very slow on real phones over cellular.
+- **Fix:** `tab()` switches UI instantly from cache; `ensureTabData()` / `syncTabData()` background-fetch only what each tab needs; 60s TTL; GET requests no longer cache-busted; invoice limit 150.
+- **Auth:** QA test members shared phone with Behailu #52 → wrong “Hi Hibret” login; `rankMemberForPortalAuth()` + `fix_qa_phone_collision.js` → QA phone `3105550199`.
+- **i18n:** Amharic toggle now updates logged-in portal (was auth screens only).
+- **Profile:** CRM `address` sometimes holds `2018-11-01` join dates — normalized server-side + empty in UI.
+- **Contact form:** Always overwrites phone/email from `me` (fixed wrong contact info when testing as another member).
+- **CSS:** Nav brand gold border no longer overlaps Home/Invoices tab row.
+- **Local workflow:** Test mobile via `http://<LAN-IP>:8888/portal/` — avoid push-for-every-tweak.
+- **Deploy:** Pushed `main` June 17.
 
 ### June 17, 2026 — Access Management, permissions, CRM spouse
 
@@ -734,6 +776,10 @@ From by-laws / handoff:
 | Access Management name changed CRM | Should not happen — `display_name` is board-only; CRM names in Members CRM tab |
 | Board login with alternate email fails | Run `sync_board_member_names.js --apply`; check `board_member_emails` |
 | Same-day waiting list order wrong | Run `python scripts/fix_waiting_list_order.py --apply` with registration order file in `data/` |
+| Portal slow on mobile / every tap waits | Fixed June 17 — hard-refresh; if old build, confirm `21e1514` deployed; tabs should be instant with brief bar only on first Notifications open |
+| Portal login shows wrong member name | Phone collision — set `DEMO_QA_PHONE=3105550199`; run `fix_qa_phone_collision.js` on DB if QA still shares a real phone |
+| Profile address shows a date | Legacy CRM data in `address` — `normalizePortalAddress()` in `portal.js`; field editable to real address |
+| Netlify build failed secrets scan | Hardcoded emails in scripts — use env vars / member_number roster (`sync_board_member_names.js` fixed June 17) |
 
 ---
 
@@ -758,12 +804,12 @@ From by-laws / handoff:
 
 ## 15. Next agent priorities (June 17, 2026)
 
-1. **Netlify deploy** — Push June 17 Access Management + permissions; confirm `BOARD_SUPER_ADMIN_EMAILS` and `ADMIN_AUTH_ENABLED=true` on Netlify; board members re-login after deploy.
-2. **Twilio SMS** — Buy US SMS number; add `TWILIO_*` to Netlify; `npm run test:notify -- --send`.
-3. **Production smoke-test** — Board login with alias email; Restricted advisor (Tsehaye); super-admin Access Management.
-4. **EVT-06** — Admin create event + bulk PayPal invoices to all active members.
-5. **EVT-08** — Payment reminders.
+1. **Twilio SMS** — Buy US SMS number; add `TWILIO_*` to Netlify; set `DEMO_QA_PHONE=3105550199`; `npm run test:notify -- --send`.
+2. **Production smoke-test** — Portal on real phone (post-`21e1514`): instant tabs, EN/አማ toggle, login as known member; board login with alias email; Restricted advisor (Tsehaye); super-admin Access Management.
+3. **EVT-06** — Admin create event + bulk PayPal invoices to all active members.
+4. **EVT-08** — Payment reminders.
+5. **Optional portal** — Extend Amharic to dynamic invoice card strings; one-off script to clear date-like `address` values in CRM for legacy members.
 
-**Done this cycle:** Access Management UI, 17 granular perms, Restricted tier, board/CRM name separation, spouse column, `board_member_emails`. `db:migrate` run June 17.
+**Done this cycle:** Access Management + 17 granular perms; member portal mobile perf (instant tabs, lazy load); portal i18n; auth phone collision fix; profile address normalization; nav overlap fix; secrets-scan-safe board sync script. Deployed `21e1514`.
 
-**Do not regress:** Board `display_name` must never UPDATE `members`; sync script must not overwrite non-empty `display_name` without `--force-names`; Security views super-admin only; Restricted scope limits to Members CRM; Meridian showcase; waiting list order; current announcement uses `event_number`.
+**Do not regress:** Portal tabs must stay instant (no full `refreshPortalData()` on every tap); `DEMO_QA_PHONE` must not match a real member; Board `display_name` must never UPDATE `members`; sync script must not overwrite non-empty `display_name` without `--force-names`; Security views super-admin only; Restricted scope limits to Members CRM; Meridian showcase; waiting list order; current announcement uses `event_number`.

@@ -481,5 +481,33 @@ CREATE TABLE IF NOT EXISTS pin_reset_requests (
 
 CREATE INDEX IF NOT EXISTS idx_pin_reset_requests_status ON pin_reset_requests(status, created_at DESC);
 
+-- Permanent board ↔ member follow-up portfolios (one board member per member).
+CREATE TABLE IF NOT EXISTS member_board_assignments (
+  id SERIAL PRIMARY KEY,
+  member_id INTEGER NOT NULL UNIQUE REFERENCES members(id) ON DELETE CASCADE,
+  board_member_id INTEGER NOT NULL REFERENCES board_members(id) ON DELETE CASCADE,
+  assigned_by_board_member_id INTEGER REFERENCES board_members(id) ON DELETE SET NULL,
+  assigned_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_member_board_assignments_board ON member_board_assignments(board_member_id);
+
+-- Grant follow_up to active board logins except Restricted (CRM-only) advisors.
+UPDATE board_members bm
+SET board_perms = board_perms || '{"follow_up": true}'::jsonb
+WHERE bm.is_active = TRUE
+  AND bm.is_super_admin = FALSE
+  AND COALESCE(bm.board_perms->>'follow_up', '') IS DISTINCT FROM 'true'
+  AND (
+    bm.perm_notes = TRUE
+    OR bm.perm_full_access = TRUE
+    OR bm.perm_approve_operations = TRUE
+    OR bm.perm_approve_payout = TRUE
+    OR EXISTS (
+      SELECT 1 FROM jsonb_each(COALESCE(bm.board_perms, '{}'::jsonb)) e
+      WHERE e.value = 'true'::jsonb AND e.key <> 'view_members_crm'
+    )
+  );
+
 -- Migration (existing databases):
 -- CREATE TABLE IF NOT EXISTS member_change_requests (...);  -- see full definition above
