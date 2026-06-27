@@ -1716,6 +1716,12 @@ body.tracker .btn.primary {
 }
 
 @media (max-width: 900px) {
+  :root {
+    --admin-top-h: 68px;
+    --admin-section-h: 44px;
+    --admin-tabs-h: 42px;
+  }
+
   .tracker-shell {
     flex-direction: column;
   }
@@ -1725,7 +1731,7 @@ body.tracker .btn.primary {
   }
 
   .tracker-main {
-    padding-top: 62px;
+    padding-top: calc(var(--admin-top-h) + env(safe-area-inset-top, 0px));
     overflow-x: visible;
   }
 
@@ -1740,8 +1746,12 @@ body.tracker .btn.primary {
     justify-content: flex-start;
     gap: 10px;
     text-align: left;
-    padding: 10px 52px 10px 12px;
-    min-height: 56px;
+    box-sizing: border-box;
+    height: calc(var(--admin-top-h) + env(safe-area-inset-top, 0px));
+    min-height: calc(var(--admin-top-h) + env(safe-area-inset-top, 0px));
+    max-height: calc(var(--admin-top-h) + env(safe-area-inset-top, 0px));
+    padding: calc(8px + env(safe-area-inset-top, 0px)) 52px 8px 12px;
+    overflow: hidden;
     background: #0c1220;
     border-bottom: 1px solid var(--tk-border);
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
@@ -1988,27 +1998,304 @@ body.tracker .btn.primary {
     min-width: 560px;
   }
 
-  .tracker-toolbar {
+  /* Sticky backdrop removed — it was hiding stats/balances while scrolling */
+
+  #mainArea > .tracker-header {
     position: sticky;
-    top: 108px;
-    z-index: 110;
-    background: var(--tk-bg);
-    padding: 12px 0 14px;
+    top: calc(var(--admin-top-h) + env(safe-area-inset-top, 0px));
+    z-index: 115;
+    background: #0c1220;
+    margin: 0 -12px;
+    padding: 10px 12px 10px;
+    border-bottom: 1px solid var(--tk-border);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.22);
+    gap: 4px;
+  }
+
+  /* Invoices: taller header (balances + sync) scrolls; tabs stick under logo */
+  #mainArea > .tracker-header:has(.tracker-header-right) {
+    position: relative;
+    top: auto;
+    z-index: auto;
+    box-shadow: none;
+  }
+
+  #mainArea > .tracker-header .tracker-title {
+    font-size: 16px;
+    line-height: 1.2;
+  }
+
+  #mainArea > .tracker-header .tracker-subtitle {
+    font-size: 10px;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  #mainArea > .tracker-header .tracker-header-right {
+    display: block;
+    width: 100%;
+    text-align: left;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--tk-border);
+  }
+
+  #mainArea > .tracker-header .tracker-report-meta {
+    font-size: 10px;
+    margin-bottom: 8px;
+  }
+
+  #mainArea > .tracker-header .tracker-sync-btn {
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
+    min-height: 40px;
+    text-align: center;
+  }
+
+  #mainArea > .tracker-header .tracker-header-balances {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    justify-content: stretch;
+    margin-top: 0;
+  }
+
+  #mainArea > .tracker-header .tracker-balance-block {
+    text-align: left;
+    min-width: 0;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 8px;
+    border: 1px solid var(--tk-border);
+  }
+
+  #mainArea > .tracker-header .tracker-total-outstanding,
+  #mainArea > .tracker-header .tracker-total-paypal {
+    font-size: 20px;
+  }
+
+  #mainArea > .tracker-header .tracker-total-label {
+    font-size: 9px;
+    margin-top: 4px;
+  }
+
+  #mainArea > .tracker-header:has(.tracker-header-right) ~ .tracker-stats {
+    margin-bottom: 18px;
+  }
+
+  /* Single sticky block — tabs + search scroll together, no gap bleed */
+  .admin-sticky-dock {
+    position: sticky;
+    top: calc(var(--admin-top-h) + env(safe-area-inset-top, 0px));
+    z-index: 114;
+    background: #0c1220;
+    margin: 0 -12px 18px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--tk-border);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  }
+
+  #mainArea > .tracker-header:not(:has(.tracker-header-right)) ~ .admin-sticky-dock {
+    top: calc(var(--admin-top-h) + env(safe-area-inset-top, 0px) + var(--admin-section-h));
+  }
+
+  /* Invoices only: balances header scrolls away; dock sits under logo */
+  #mainArea > .tracker-header:has(.tracker-header-right) ~ .tracker-stats ~ .admin-sticky-dock {
+    top: calc(var(--admin-top-h) + env(safe-area-inset-top, 0px));
+  }
+
+  .admin-sticky-dock .tracker-tabs,
+  .admin-sticky-dock .follow-up-subtabs,
+  .admin-sticky-dock .tracker-subtabs {
+    position: static;
+    top: auto;
+    z-index: auto;
+    margin: 0 -12px;
+    padding: 0 12px;
+    background: transparent;
+    border-bottom: 1px solid var(--tk-border);
+    box-shadow: none;
+  }
+
+  .admin-sticky-dock .tracker-tabs:last-child,
+  .admin-sticky-dock .follow-up-subtabs:last-child {
+    border-bottom: 1px solid var(--tk-border);
+  }
+
+  .admin-sticky-dock .tracker-toolbar {
+    position: static;
+    top: auto;
+    z-index: auto;
+    margin: 0;
+    padding: 10px 0 12px;
+    background: transparent;
+    border-bottom: none;
+    box-shadow: none;
+  }
+
+  .admin-sticky-dock .tracker-banner,
+  .admin-sticky-dock .follow-up-banner {
+    margin: 0 -12px;
+    padding: 8px 12px;
+    border: none;
+    border-top: 1px solid var(--tk-border);
+    border-radius: 0;
+    background: rgba(255, 255, 255, 0.03);
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  .admin-sticky-dock .tracker-receipts-toolbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 8px !important;
+  }
+
+  .admin-sticky-dock .tracker-receipts-toolbar .tracker-mark-btn {
+    width: 100%;
+    min-height: 36px;
+  }
+
+  #mainArea > .tracker-tabs:not(.tracker-subtabs),
+  #mainArea > .follow-up-subtabs {
+    position: sticky;
+    top: calc(var(--admin-top-h) + env(safe-area-inset-top, 0px) + var(--admin-section-h));
+    z-index: 114;
+    background: #0c1220;
     margin: 0 -12px;
     padding-left: 12px;
     padding-right: 12px;
     border-bottom: 1px solid var(--tk-border);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+  }
+
+  #mainArea > .follow-up-subtabs {
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  #mainArea > .tracker-tabs.tracker-subtabs {
+    position: sticky;
+    top: calc(var(--admin-top-h) + env(safe-area-inset-top, 0px) + var(--admin-section-h) + var(--admin-tabs-h));
+    z-index: 113;
+    background: #0c1220;
+    margin: 0 -12px;
+    padding-left: 12px;
+    padding-right: 12px;
+    border-bottom: 1px solid var(--tk-border);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  }
+
+  #mainArea > .tracker-toolbar {
+    position: sticky;
+    top: calc(var(--admin-top-h) + env(safe-area-inset-top, 0px) + var(--admin-section-h));
+    z-index: 112;
+    background: #0c1220;
+    padding: 10px 12px 12px;
+    margin: 0 -12px;
+    border-bottom: 1px solid var(--tk-border);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   }
 
-  .follow-up-subtabs {
-    position: sticky;
-    top: 62px;
-    z-index: 105;
+  #mainArea > .tracker-tabs:not(.tracker-subtabs) ~ .tracker-toolbar,
+  #mainArea > .follow-up-subtabs ~ .tracker-banner + .tracker-toolbar,
+  #mainArea > .follow-up-subtabs ~ .tracker-toolbar {
+    top: calc(var(--admin-top-h) + env(safe-area-inset-top, 0px) + var(--admin-section-h) + var(--admin-tabs-h));
+  }
+
+  #mainArea > .tracker-tabs:not(.tracker-subtabs) ~ .tracker-tabs.tracker-subtabs ~ .tracker-toolbar {
+    top: calc(var(--admin-top-h) + env(safe-area-inset-top, 0px) + var(--admin-section-h) + var(--admin-tabs-h) * 2);
+  }
+
+  #mainArea > .tracker-header:has(.tracker-header-right) ~ .tracker-tabs,
+  #mainArea > .tracker-header:has(.tracker-header-right) ~ .tracker-toolbar {
+    top: calc(var(--admin-top-h) + env(safe-area-inset-top, 0px));
+  }
+
+  .admin-mobile-list {
+    margin-top: 2px;
+  }
+
+  #mainArea > .tracker-header {
+    margin-bottom: 8px;
+  }
+
+  #mainArea > .tracker-stats {
+    margin-bottom: 18px;
+  }
+
+  .tracker-mark-btn--block {
+    width: 100%;
+    min-height: 40px;
+  }
+
+  .tracker-stats {
+    display: flex;
+    overflow-x: auto;
+    gap: 0;
+    margin: 0 -12px 8px;
+    padding: 0 12px;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    position: relative;
+    z-index: 1;
     background: var(--tk-bg);
-    padding-bottom: 4px;
-    margin-bottom: 10px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border-bottom: 1px solid var(--tk-border);
+  }
+
+  .tracker-stats::-webkit-scrollbar {
+    display: none;
+  }
+
+  .tracker-stat {
+    flex: 0 0 46%;
+    min-width: 130px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--tk-border);
+    border-bottom: none;
+    padding: 12px 10px;
+  }
+
+  .tracker-stat-lbl {
+    font-size: 10px;
+    line-height: 1.3;
+    margin-bottom: 4px;
+  }
+
+  .tracker-stat-val {
+    font-size: 22px;
+  }
+
+  .tracker-tabs .tracker-tab {
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+
+  .tracker-banner,
+  .tracker-intro-banner,
+  .follow-up-banner {
+    font-size: 12px;
+    line-height: 1.45;
+    padding: 10px 12px;
+  }
+
+  .tracker-events-grid {
+    grid-template-columns: 1fr;
+    padding: 12px 0;
+  }
+
+  .ann-intake-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .tracker-table-wrap {
+    overflow-x: visible;
+    border: none;
+    background: transparent;
   }
 
   .tracker-search {
@@ -2043,14 +2330,9 @@ body.tracker .btn.primary {
     color: var(--tk-orange);
   }
 
-  .tracker-stats {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .tracker-stat {
-    border-bottom: 1px solid var(--tk-border);
-  }
   .tracker-header {
     flex-direction: column;
+    padding: 10px 0;
   }
   .tracker-header-right {
     text-align: left;
@@ -2068,14 +2350,8 @@ body.tracker .btn.primary {
   .tracker-app {
     padding: 0 10px calc(68px + env(safe-area-inset-bottom, 0));
   }
-  .tracker-stats {
-    grid-template-columns: 1fr 1fr;
-  }
   .tracker-stat-val {
     font-size: 22px;
-  }
-  .tracker-total-outstanding {
-    font-size: 26px;
   }
 }
 
@@ -2579,7 +2855,20 @@ body.tracker .btn.primary {
   }
 
   .board-access-member-list {
-    max-height: 220px;
+    max-height: min(42vh, 280px);
+  }
+
+  .board-access-detail-panel {
+    min-height: 0;
+  }
+
+  .board-access-invite-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .board-access-invite-row .btn {
+    width: 100%;
   }
 }
 
@@ -4036,21 +4325,170 @@ body.tracker .btn.primary {
     font-size: 12px;
   }
 
-  #mainArea .tracker-table:not(.follow-up-table):not(.follow-up-mine-table):not(.follow-up-inv-detail-table) thead th:nth-child(3),
-  #mainArea .tracker-table:not(.follow-up-table):not(.follow-up-mine-table):not(.follow-up-inv-detail-table) tbody td:nth-child(3),
-  #mainArea .tracker-table:not(.follow-up-table):not(.follow-up-mine-table):not(.follow-up-inv-detail-table) thead th:nth-child(4),
-  #mainArea .tracker-table:not(.follow-up-table):not(.follow-up-mine-table):not(.follow-up-inv-detail-table) tbody td:nth-child(4) {
+  #mainArea .admin-mobile-table,
+  #mainArea .tracker-table.admin-mobile-table {
+    min-width: 0 !important;
+    font-size: 12px;
+    border: none;
+    background: transparent;
+  }
+
+  .admin-mobile-table thead,
+  .follow-up-assign-table thead,
+  .follow-up-mine-table thead,
+  .follow-up-mine-paid-table thead {
     display: none;
   }
 
-  #mainArea .tracker-table:not(.follow-up-table):not(.follow-up-mine-table) {
-    min-width: 0 !important;
-    font-size: 12px;
+  .admin-mobile-table tbody,
+  .follow-up-assign-table tbody,
+  .follow-up-mine-table tbody,
+  .follow-up-mine-paid-table tbody {
+    display: block;
   }
 
-  #mainArea .tracker-table:not(.follow-up-table):not(.follow-up-mine-table) thead th,
-  #mainArea .tracker-table:not(.follow-up-table):not(.follow-up-mine-table) tbody td {
-    padding: 10px 8px;
+  .admin-mobile-card,
+  .follow-up-mobile-card {
+    display: block;
+    border: 1px solid var(--tk-border);
+    border-radius: 12px;
+    margin-bottom: 12px;
+    background: var(--tk-bg2);
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+  }
+
+  .admin-mobile-card > td,
+  .follow-up-mobile-card > td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 14px;
+    border: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 0;
+  }
+
+  .admin-mobile-card > td:last-child,
+  .follow-up-mobile-card > td:last-child {
+    border-bottom: none;
+  }
+
+  .admin-mobile-card > td[data-label]:not([data-label=""])::before,
+  .follow-up-mobile-card > td[data-label]:not([data-label=""])::before {
+    content: attr(data-label);
+    flex: 0 0 72px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--tk-muted);
+  }
+
+  .admin-mobile-card > td.admin-m-col-head,
+  .follow-up-mobile-card > td.follow-up-col-member {
+    display: block;
+    padding: 14px 14px 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .admin-mobile-card > td.admin-m-col-head::before,
+  .follow-up-mobile-card > td.follow-up-col-member::before {
+    display: none;
+  }
+
+  .admin-mobile-card > td.admin-m-col-head .tracker-member-name,
+  .follow-up-mobile-card > td.follow-up-col-member .tracker-member-name {
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1.25;
+  }
+
+  .admin-mobile-card > td.admin-m-col-action {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 14px 10px;
+    gap: 10px;
+  }
+
+  .admin-mobile-card > td.admin-m-col-stack {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 6px 14px 10px;
+  }
+
+  .admin-mobile-card > td.admin-m-col-action::before,
+  .admin-mobile-card > td.admin-m-col-stack::before {
+    align-self: center;
+    flex: 0 0 auto;
+  }
+
+  .admin-mobile-card > td.admin-m-col-action .tracker-mark-btn,
+  .admin-mobile-card > td.admin-m-col-action .btn {
+    width: auto;
+    min-height: 0;
+    padding: 6px 14px;
+    font-size: 12px;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  .admin-mobile-card > td.admin-m-col-stack .tracker-mark-btn {
+    width: 100%;
+    min-height: 34px;
+    text-align: center;
+  }
+
+  .admin-mobile-table tr.tracker-event-row {
+    display: block;
+    margin: 22px 0 10px;
+    padding-top: 6px;
+    border: none;
+    background: transparent;
+  }
+
+  .admin-mobile-table tr.tracker-event-row > td {
+    display: block;
+    padding: 0;
+    border: none;
+  }
+
+  .admin-mobile-table tr.msg-detail-row {
+    display: none;
+  }
+
+  .admin-m-col-head .msg-preview {
+    display: block;
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--tk-muted);
+    line-height: 1.45;
+  }
+
+  .tracker-receipts-toolbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+
+  .tracker-receipts-toolbar .tracker-mark-btn {
+    width: 100%;
+    min-height: 40px;
+  }
+
+  .payout-workflow-banner + div .tracker-mark-btn,
+  #mainArea > div > .tracker-mark-btn:only-child {
+    width: 100%;
+    min-height: 40px;
+  }
+
+  .wl-invite-btn-compact {
+    width: 100%;
   }
 
   .tracker-phone-cell {

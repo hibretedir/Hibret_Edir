@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/css/admin-tracker.css?v=admin49">
+<link rel="stylesheet" href="/css/admin-tracker.css?v=admin53">
 <link rel="stylesheet" href="/css/admin-tracker-mh.css?v=1">
 </head>
 <body class="app-admin tracker">
@@ -2399,6 +2399,10 @@ function trackerTabsHtml(stats) {
   }).join('')}</nav>`;
 }
 
+function adminStickyDockHtml(content) {
+  return `<div class="admin-sticky-dock">${content}</div>`;
+}
+
 function updateSidebar() {
   const stats = getStats();
   const activeMembers = MEMBERS.filter(m => m.status === 'Active').length;
@@ -2777,17 +2781,17 @@ function renderWaitingListRow(w, muted) {
   const canInvite = adminCanInviteWaitingList() && isWlQueueAwaiting(w.status) && w.eligible_for_invite;
   const canReject = adminCanRemoveWaitingList() && !['Added as Member', 'Rejected'].includes(w.status);
   const statusLabel = w.eligible_for_invite ? 'Ready to Invite' : w.status;
-  return `<tr class="data-row${w.eligible_for_invite ? ' wl-eligible-row' : ''}${muted ? ' wl-added-row' : ''}">
-    <td><span class="tracker-inv-num">#${w.display_rank ?? w.pending_rank ?? w.queue_position ?? w.id}</span></td>
-    <td><div class="tracker-member-name">${esc(w.full_name || '—')}</div><div class="tracker-member-email">${esc(w.email || '—')}</div></td>
-    <td>${esc(w.phone || '—')}</td>
-    <td><span class="tracker-date">${esc(fmtDate(w.applied_at))}</span></td>
-    <td><span class="tracker-status ${statusClass}"><span class="tracker-status-dot"></span>${esc(statusLabel)}</span></td>
-    <td class="wl-invite-cell">${canInvite
+  return `<tr class="data-row admin-mobile-card${w.eligible_for_invite ? ' wl-eligible-row' : ''}${muted ? ' wl-added-row' : ''}">
+    <td data-label="#"><span class="tracker-inv-num">#${w.display_rank ?? w.pending_rank ?? w.queue_position ?? w.id}</span></td>
+    <td class="admin-m-col-head"><div class="tracker-member-name">${esc(w.full_name || '—')}</div><div class="tracker-member-email">${esc(w.email || '—')}</div></td>
+    <td data-label="Phone">${esc(w.phone || '—')}</td>
+    <td data-label="Applied"><span class="tracker-date">${esc(fmtDate(w.applied_at))}</span></td>
+    <td data-label="Status"><span class="tracker-status ${statusClass}"><span class="tracker-status-dot"></span>${esc(statusLabel)}</span></td>
+    <td class="admin-m-col-action wl-invite-cell" data-label="Invite">${canInvite
       ? `<button type="button" class="wl-invite-btn wl-invite-btn-compact" onclick="inviteWaitingListEntry(${w.id})">Send Invitation →</button>`
       : w.status === 'Invited to Apply' ? '<span class="tracker-mark-done">Invited</span>'
       : isWlQueueAwaiting(w.status) ? '<span class="tracker-mark-done" style="opacity:.55">Waiting for slot</span>' : '—'}</td>
-    <td>${canReject
+    <td class="admin-m-col-action" data-label="Remove">${canReject
       ? `<button type="button" class="tracker-mark-btn" style="opacity:.85" onclick="rejectWaitingListEntry(${w.id})">Remove</button>`
       : '—'}</td>
   </tr>`;
@@ -2802,7 +2806,7 @@ function renderWaitingListTableHtml(filtered) {
 
   let html = '';
   if (main.length) {
-    html += `<table class="tracker-table">${tableHead}<tbody>${main.map(w => renderWaitingListRow(w, false)).join('')}</tbody></table>`;
+    html += `<table class="tracker-table admin-mobile-table">${tableHead}<tbody>${main.map(w => renderWaitingListRow(w, false)).join('')}</tbody></table>`;
   } else if (!added.length) {
     html += '<div class="tracker-empty">No waiting list entries in this filter.</div>';
   }
@@ -2813,7 +2817,7 @@ function renderWaitingListTableHtml(filtered) {
       Already added as members <span class="wl-added-toggle-count">(${added.length})</span>
     </button>`;
     if (wlShowAdded) {
-      html += `<div class="wl-added-section"><table class="tracker-table">${tableHead}<tbody>${added.map(w => renderWaitingListRow(w, true)).join('')}</tbody></table></div>`;
+      html += `<div class="wl-added-section"><table class="tracker-table admin-mobile-table">${tableHead}<tbody>${added.map(w => renderWaitingListRow(w, true)).join('')}</tbody></table></div>`;
     }
   }
 
@@ -2923,17 +2927,17 @@ function renderInvTableRows(filtered, limit) {
       }
       lastEventKey = eventKey;
     }
-    html += `<tr class="data-row${clickable ? ' data-row-clickable' : ''}"${clickable ? ` onclick="openMemberUnpaidFromInvoice(${inv.invoice_num})" role="button" tabindex="0" onkeydown="if(event.key==='Enter')openMemberUnpaidFromInvoice(${inv.invoice_num})"` : ''}>
-      <td>
+    html += `<tr class="data-row admin-mobile-card${clickable ? ' data-row-clickable' : ''}"${clickable ? ` onclick="openMemberUnpaidFromInvoice(${inv.invoice_num})" role="button" tabindex="0" onkeydown="if(event.key==='Enter')openMemberUnpaidFromInvoice(${inv.invoice_num})"` : ''}>
+      <td class="admin-m-col-head">
         <div class="tracker-member-name">${esc(inv.name)}</div>
         <div class="tracker-member-email${noEmail ? ' missing' : ''}">${noEmail ? '⚠ no email on file' : esc(inv.email)}</div>
       </td>
-      <td><span class="tracker-inv-num">#${esc(inv.invoice_num)}</span></td>
-      <td>${invoiceDeceasedCellHtml(inv)}</td>
-      <td><span class="tracker-date">${esc(fmtDate(inv.date))}</span></td>
-      <td><span class="tracker-amount${paid ? ' paid' : ''}${cancelled ? ' cancelled' : ''}">${fmtMoney(inv.amount_due)}</span></td>
-      <td>${invoiceStatusCellHtml(inv, { clickable })}</td>
-      <td>${cancelled
+      <td data-label="Invoice"><span class="tracker-inv-num">#${esc(inv.invoice_num)}</span></td>
+      <td data-label="Deceased">${invoiceDeceasedCellHtml(inv)}</td>
+      <td data-label="Sent"><span class="tracker-date">${esc(fmtDate(inv.date))}</span></td>
+      <td data-label="Due"><span class="tracker-amount${paid ? ' paid' : ''}${cancelled ? ' cancelled' : ''}">${fmtMoney(inv.amount_due)}</span></td>
+      <td data-label="Status">${invoiceStatusCellHtml(inv, { clickable })}</td>
+      <td class="admin-m-col-action" data-label="Action">${cancelled
         ? '<span class="tracker-cancelled-label">Member cancelled</span>'
         : paid
           ? `${inv.paid_note
@@ -2953,7 +2957,7 @@ function renderInvoicesTableHtml(filtered) {
   if (!filtered.length) return '<div class="tracker-empty">No invoices match your filters</div>';
   const showMore = filtered.length > invoiceDisplayLimit;
   const moreCount = filtered.length - invoiceDisplayLimit;
-  return `<table class="tracker-table">
+  return `<table class="tracker-table admin-mobile-table">
         <thead><tr>
           <th>Member</th><th>Invoice #</th><th>Paying for (Deceased)</th><th>Date Sent</th><th>Amount Due</th><th>Status</th><th>Action</th>
         </tr></thead>
@@ -2986,6 +2990,7 @@ function renderInvoicesView() {
     ${banner}
     ${trackerHeaderHtml(stats)}
     ${trackerStatsHtml(stats)}
+    ${adminStickyDockHtml(`
     ${trackerTabsHtml(stats)}
     <div class="tracker-toolbar">
       <div class="tracker-search tracker-search-prominent">
@@ -3003,8 +3008,8 @@ function renderInvoicesView() {
         <option value="date_desc"${invSort === 'date_desc' ? ' selected' : ''}>Date (Newest)</option>
       </select>
       <div class="tracker-results">${filtered.length} result${filtered.length !== 1 ? 's' : ''}</div>
-    </div>
-    <div class="tracker-table-wrap">
+    </div>`)}
+    <div class="tracker-table-wrap admin-mobile-list">
       ${renderInvoicesTableHtml(filtered)}
     </div>`;
 }
@@ -3919,8 +3924,8 @@ function renderEventsView() {
   document.getElementById('mainArea').innerHTML = `
     ${trackerHeaderHtml(stats)}
     ${trackerStatsHtml(stats)}
-    ${trackerTabsHtml(stats)}
-    <div class="tracker-events-grid">${cards || '<div class="tracker-empty">No events</div>'}</div>`;
+    ${adminStickyDockHtml(trackerTabsHtml(stats))}
+    <div class="tracker-events-grid admin-mobile-list">${cards || '<div class="tracker-empty">No events</div>'}</div>`;
 }
 
 function getMemberData(m) {
@@ -3992,17 +3997,17 @@ function renderMembersTableHtml(filtered) {
     const names = memberDisplayNames(m);
     const spouse = memberSpouseName(m);
     const lateCount = countLateInvoicesForMember(m);
-    return `<tr class="data-row data-row-clickable" onclick="openMemberDetail(${m.id})" role="button" tabindex="0" onkeydown="if(event.key==='Enter')openMemberDetail(${m.id})">
-      <td><span class="tracker-inv-num">#${esc(m.member_number || m.id)}</span></td>
-      <td><div class="tracker-member-name">${esc(names.paypal)}</div>${lateCount ? `<button type="button" class="tracker-late-member-link" onclick="event.stopPropagation();openMemberUnpaidInvoices(${m.id})">${lateCount} late invoice${lateCount !== 1 ? 's' : ''} — view unpaid</button>` : ''}</td>
-      <td><div class="tracker-member-name tracker-member-spouse">${spouse ? esc(spouse) : '<span class="tracker-member-empty">—</span>'}</div></td>
-      <td>${esc(d.email || '—')}</td>
-      <td class="tracker-phone-cell">${adminPhoneCell(d.mobile || d.home)}</td>
-      <td><span class="tracker-status ${m.status === 'Active' ? 'paid' : 'unpaid'}">${esc(m.status)}</span></td>
-      <td><button type="button" class="tracker-mark-btn" onclick="event.stopPropagation();openMemberDetail(${m.id})">View / Edit</button></td>
+    return `<tr class="data-row data-row-clickable admin-mobile-card" onclick="openMemberDetail(${m.id})" role="button" tabindex="0" onkeydown="if(event.key==='Enter')openMemberDetail(${m.id})">
+      <td data-label="#"><span class="tracker-inv-num">#${esc(m.member_number || m.id)}</span></td>
+      <td class="admin-m-col-head"><div class="tracker-member-name">${esc(names.paypal)}</div>${lateCount ? `<button type="button" class="tracker-late-member-link" onclick="event.stopPropagation();openMemberUnpaidInvoices(${m.id})">${lateCount} late invoice${lateCount !== 1 ? 's' : ''} — view unpaid</button>` : ''}</td>
+      <td data-label="Spouse"><div class="tracker-member-name tracker-member-spouse">${spouse ? esc(spouse) : '<span class="tracker-member-empty">—</span>'}</div></td>
+      <td data-label="Email">${esc(d.email || '—')}</td>
+      <td class="tracker-phone-cell" data-label="Phone">${adminPhoneCell(d.mobile || d.home)}</td>
+      <td data-label="Status"><span class="tracker-status ${m.status === 'Active' ? 'paid' : 'unpaid'}">${esc(m.status)}</span></td>
+      <td class="admin-m-col-action" data-label="Action"><button type="button" class="tracker-mark-btn" onclick="event.stopPropagation();openMemberDetail(${m.id})">View / Edit</button></td>
     </tr>`;
   }).join('') : '';
-  return filtered.length ? `<table class="tracker-table">
+  return filtered.length ? `<table class="tracker-table admin-mobile-table">
         <thead><tr><th>#</th><th>Member</th><th>Spouse</th><th>Email</th><th>Phone</th><th>Status</th><th>Action</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>` : '<div class="tracker-empty">No members loaded yet</div>';
@@ -4024,6 +4029,7 @@ function renderMembersView() {
   document.getElementById('mainArea').innerHTML = `
     ${trackerHeaderHtml(stats)}
     ${!MEMBERS.length ? '<div class="tracker-banner">Member list loads from the database. Run npm run seed with DATABASE_URL to import members.</div>' : ''}
+    ${adminStickyDockHtml(`
     <div class="tracker-toolbar">
       <div class="tracker-search tracker-search-prominent">
         <label class="tracker-search-label" for="memberSearchBox">Search</label>
@@ -4037,8 +4043,8 @@ function renderMembersView() {
         <option value="late"${memberFilter === 'late' ? ' selected' : ''}>Late payers</option>
       </select>
       <div class="tracker-results">${filtered.length} member${filtered.length !== 1 ? 's' : ''}</div>
-    </div>
-    <div class="tracker-table-wrap">
+    </div>`)}
+    <div class="tracker-table-wrap admin-mobile-list">
       ${renderMembersTableHtml(filtered)}
     </div>`;
 }
@@ -4084,17 +4090,17 @@ function renderApplicationsTableHtml(filtered) {
     const typeBadge = isMarkPaid
       ? '<span class="tracker-event-badge mark-paid-badge">Mark Paid</span>'
       : isBen ? '<span class="tracker-event-badge">Beneficiary</span>' : '<span class="tracker-event-badge">Membership</span>';
-    return `<tr class="data-row data-row-clickable" onclick='openApplicationReview(${JSON.stringify(a.id)})' role="button" tabindex="0" onkeydown="if(event.key==='Enter')openApplicationReview(${JSON.stringify(a.id)})">
-      <td><div class="tracker-member-name">${esc(a.member_full_name)}</div><div class="tracker-member-email">${esc(a.email || a.waiting_list?.email || '—')}</div></td>
-      <td>${typeBadge}</td>
-      <td>${secondCol}</td>
-      <td><span class="tracker-date">${esc(fmtDate(a.submitted_at))}</span></td>
-      <td><span class="tracker-status ${statusClass}"><span class="tracker-status-dot"></span>${esc(a.status)}</span></td>
-      <td><span class="tracker-inv-num">${isMarkPaid ? esc(a.requested_by || 'Board') : isBen ? (a.is_new_beneficiary ? 'New' : 'Update') : `${done}/3`}</span></td>
-      <td><button type="button" class="tracker-mark-btn" onclick='event.stopPropagation();openApplicationReview(${JSON.stringify(a.id)})'>${a.status === 'Approved' ? 'View' : 'Review'}</button></td>
+    return `<tr class="data-row data-row-clickable admin-mobile-card" onclick='openApplicationReview(${JSON.stringify(a.id)})' role="button" tabindex="0" onkeydown="if(event.key==='Enter')openApplicationReview(${JSON.stringify(a.id)})">
+      <td class="admin-m-col-head"><div class="tracker-member-name">${esc(a.member_full_name)}</div><div class="tracker-member-email">${esc(a.email || a.waiting_list?.email || '—')}</div></td>
+      <td data-label="Type">${typeBadge}</td>
+      <td data-label="Details">${secondCol}</td>
+      <td data-label="Submitted"><span class="tracker-date">${esc(fmtDate(a.submitted_at))}</span></td>
+      <td data-label="Status"><span class="tracker-status ${statusClass}"><span class="tracker-status-dot"></span>${esc(a.status)}</span></td>
+      <td data-label="Review"><span class="tracker-inv-num">${isMarkPaid ? esc(a.requested_by || 'Board') : isBen ? (a.is_new_beneficiary ? 'New' : 'Update') : `${done}/3`}</span></td>
+      <td class="admin-m-col-action" data-label="Action"><button type="button" class="tracker-mark-btn" onclick='event.stopPropagation();openApplicationReview(${JSON.stringify(a.id)})'>${a.status === 'Approved' ? 'View' : 'Review'}</button></td>
     </tr>`;
   }).join('') : '';
-  return filtered.length ? `<table class="tracker-table">
+  return filtered.length ? `<table class="tracker-table admin-mobile-table">
         <thead><tr><th>Member</th><th>Type</th><th>Details</th><th>Submitted</th><th>Status</th><th>Review</th><th>Action</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>` : '<div class="tracker-empty">No items in this filter</div>';
@@ -4148,6 +4154,7 @@ function renderApplicationsView() {
       <div class="tracker-stat"><div class="tracker-stat-lbl">Awaiting Payment</div><div class="tracker-stat-val orange">${awaitingPay}</div></div>
       <div class="tracker-stat"><div class="tracker-stat-lbl">Board Requests</div><div class="tracker-stat-val${opsPending ? ' orange' : ''}">${opsPending}</div></div>
     </div>
+    ${adminStickyDockHtml(`
     <nav class="tracker-tabs">
       <button type="button" class="tracker-tab${appSection === 'waiting-list' ? ' active' : ''}" data-app-section="waiting-list" onclick="switchAppSection('waiting-list')">Waiting List${wlReady ? ` (${wlReady} ready)` : wlPending ? ` (${wlPending})` : ''}</button>
       <button type="button" class="tracker-tab${appSection === 'applications' ? ' active' : ''}" data-app-section="applications" onclick="switchAppSection('applications')">Applications${memPending ? ` (${memPending})` : ''}</button>
@@ -4169,9 +4176,9 @@ function renderApplicationsView() {
       <button type="button" class="tracker-tab${boardOpsFilter === 'approved' ? ' active' : ''}" data-board-ops-filter="approved" onclick="switchBoardOpsFilter('approved')">Approved</button>
       <button type="button" class="tracker-tab${boardOpsFilter === 'rejected' ? ' active' : ''}" data-board-ops-filter="rejected" onclick="switchBoardOpsFilter('rejected')">Rejected${opsRejected ? ` (${opsRejected})` : ''}</button>
       <button type="button" class="tracker-tab${boardOpsFilter === 'all' ? ' active' : ''}" data-board-ops-filter="all" onclick="switchBoardOpsFilter('all')">All</button>
-    </nav>
+    </nav>`)}
     ${appSection === 'waiting-list' ? renderMembershipSlotsBannerHtml() : ''}
-    <div class="tracker-table-wrap" id="applicationsTableWrap">
+    <div class="tracker-table-wrap admin-mobile-list" id="applicationsTableWrap">
       ${appSection === 'waiting-list' ? renderWaitingListTableHtml(wlFiltered) : appSection === 'board-ops' ? renderBoardOpsTableHtml(opsFiltered) : renderApplicationsTableHtml(appFiltered)}
     </div>`;
 }
@@ -4695,16 +4702,16 @@ function renderPayoutsTableHtml(filtered) {
   const rows = filtered.length ? filtered.map(p => {
     const done = payoutChecklistCount(p);
     const approvals = p.board_approvals_count || 0;
-    return `<tr class="data-row data-row-clickable" onclick="openPayoutReview(${p.id})" role="button" tabindex="0" onkeydown="if(event.key==='Enter')openPayoutReview(${p.id})">
-      <td><div class="tracker-member-name">${esc(p.deceased_name)}</div><div class="tracker-member-email">${esc(p.event_label || '—')}</div></td>
-      <td><div class="tracker-member-name">${esc(p.beneficiary_name || '—')}</div><div class="tracker-member-email">${esc(p.member_name || '')}</div></td>
-      <td><span class="tracker-inv-num">${done}/6</span></td>
-      <td><span class="tracker-inv-num">${approvals}/${p.board_approvals_required || 2}</span></td>
-      <td><span class="tracker-status ${payoutStatusClass(p.status)}"><span class="tracker-status-dot"></span>${esc(p.status)}</span></td>
-      <td><button type="button" class="tracker-mark-btn" onclick="event.stopPropagation();openPayoutReview(${p.id})">${p.status === 'Paid Out' ? 'View' : 'Manage'}</button></td>
+    return `<tr class="data-row data-row-clickable admin-mobile-card" onclick="openPayoutReview(${p.id})" role="button" tabindex="0" onkeydown="if(event.key==='Enter')openPayoutReview(${p.id})">
+      <td class="admin-m-col-head"><div class="tracker-member-name">${esc(p.deceased_name)}</div><div class="tracker-member-email">${esc(p.event_label || '—')}</div></td>
+      <td data-label="Beneficiary"><div class="tracker-member-name">${esc(p.beneficiary_name || '—')}</div><div class="tracker-member-email">${esc(p.member_name || '')}</div></td>
+      <td data-label="Docs"><span class="tracker-inv-num">${done}/6</span></td>
+      <td data-label="Approvals"><span class="tracker-inv-num">${approvals}/${p.board_approvals_required || 2}</span></td>
+      <td data-label="Status"><span class="tracker-status ${payoutStatusClass(p.status)}"><span class="tracker-status-dot"></span>${esc(p.status)}</span></td>
+      <td class="admin-m-col-action" data-label="Action"><button type="button" class="tracker-mark-btn" onclick="event.stopPropagation();openPayoutReview(${p.id})">${p.status === 'Paid Out' ? 'View' : 'Manage'}</button></td>
     </tr>`;
   }).join('') : '';
-  return filtered.length ? `<table class="tracker-table">
+  return filtered.length ? `<table class="tracker-table admin-mobile-table">
         <thead><tr><th>Deceased / Event</th><th>Beneficiary / Member</th><th>Docs</th><th>Approvals</th><th>Status</th><th>Action</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>` : `<div class="tracker-empty">${PAYOUTS.length ? 'No cases in this filter' : 'No payout cases yet. Open a case when a member event needs the $15,000 fund.'}</div>`;
@@ -4730,6 +4737,7 @@ function renderPayoutsView() {
       <div class="tracker-stat"><div class="tracker-stat-lbl">Paid Out</div><div class="tracker-stat-val">${PAYOUTS.filter(p => p.status === 'Paid Out').length}</div></div>
       <div class="tracker-stat"><div class="tracker-stat-lbl">Payout Amount</div><div class="tracker-stat-val">$15,000</div></div>
     </div>
+    ${adminStickyDockHtml(`
     <nav class="tracker-tabs">
       <button type="button" class="tracker-tab${payoutFilter === 'open' ? ' active' : ''}" data-payout-filter="open" onclick="switchPayoutFilter('open')">Open</button>
       <button type="button" class="tracker-tab${payoutFilter === 'pending' ? ' active' : ''}" data-payout-filter="pending" onclick="switchPayoutFilter('pending')">Collecting Docs</button>
@@ -4737,15 +4745,15 @@ function renderPayoutsView() {
       <button type="button" class="tracker-tab${payoutFilter === 'paid' ? ' active' : ''}" data-payout-filter="paid" onclick="switchPayoutFilter('paid')">Paid Out</button>
       <button type="button" class="tracker-tab${payoutFilter === 'all' ? ' active' : ''}" data-payout-filter="all" onclick="switchPayoutFilter('all')">All</button>
     </nav>
-    <div class="tracker-banner payout-workflow-banner tracker-intro-banner">
+    <div class="tracker-banner payout-workflow-banner tracker-intro-banner tracker-banner--compact">
       <strong>Payout workflow</strong>
       Collect deceased &amp; beneficiary documents → board confirms checklist → 2 board approvals required (by-laws) → mark $15,000 paid out.
       SSN copies are optional per board policy — confirm legal requirements before collecting.
+    </div>`)}
+    <div class="admin-mobile-list" style="margin-bottom:12px">
+      ${adminCanManagePayouts() ? '<button type="button" class="tracker-mark-btn tracker-mark-btn--block" onclick="openNewPayoutModal()">+ Open Payout Case</button>' : ''}
     </div>
-    <div style="margin-bottom:12px">
-      ${adminCanManagePayouts() ? '<button type="button" class="tracker-mark-btn" onclick="openNewPayoutModal()">+ Open Payout Case</button>' : ''}
-    </div>
-    <div class="tracker-table-wrap">
+    <div class="tracker-table-wrap admin-mobile-list">
       ${renderPayoutsTableHtml(filtered)}
     </div>`;
 }
@@ -5164,18 +5172,18 @@ async function rejectReceiptReview() {
 function renderReceiptsTableHtml(filtered) {
   const rows = filtered.length ? filtered.map(r => {
     const statusClass = r.status === 'Approved' ? 'paid' : r.status === 'Rejected' ? 'unpaid' : 'warn';
-    return `<tr class="data-row data-row-clickable" onclick="openReceiptReview(${r.id})" role="button" tabindex="0" onkeydown="if(event.key==='Enter')openReceiptReview(${r.id})">
-      <td><div class="tracker-member-name">${esc(r.member_name || '—')}</div><div class="tracker-member-email">${r.member_number ? '#' + esc(r.member_number) : esc(r.payment_method || '—')}</div></td>
-      <td><span class="tracker-inv-num">${r.invoice_number ? '#' + esc(r.invoice_number) : '—'}</span></td>
-      <td>${esc(r.deceased_name || '—')}</td>
-      <td>${esc(r.payment_method || '—')}</td>
-      <td>${r.amount != null ? fmtMoney(r.amount) : '—'}</td>
-      <td><span class="tracker-date">${esc(fmtDate(r.submitted_at))}</span></td>
-      <td><span class="tracker-status ${statusClass}"><span class="tracker-status-dot"></span>${esc(r.status)}</span></td>
-      <td><button type="button" class="tracker-mark-btn" onclick="event.stopPropagation();openReceiptReview(${r.id})">${r.status === 'Pending' ? 'Review' : 'View'}</button></td>
+    return `<tr class="data-row data-row-clickable admin-mobile-card" onclick="openReceiptReview(${r.id})" role="button" tabindex="0" onkeydown="if(event.key==='Enter')openReceiptReview(${r.id})">
+      <td class="admin-m-col-head"><div class="tracker-member-name">${esc(r.member_name || '—')}</div><div class="tracker-member-email">${r.member_number ? '#' + esc(r.member_number) : esc(r.payment_method || '—')}</div></td>
+      <td data-label="Invoice"><span class="tracker-inv-num">${r.invoice_number ? '#' + esc(r.invoice_number) : '—'}</span></td>
+      <td data-label="Paying for">${esc(r.deceased_name || '—')}</td>
+      <td data-label="Method">${esc(r.payment_method || '—')}</td>
+      <td data-label="Amount">${r.amount != null ? fmtMoney(r.amount) : '—'}</td>
+      <td data-label="Submitted"><span class="tracker-date">${esc(fmtDate(r.submitted_at))}</span></td>
+      <td data-label="Status"><span class="tracker-status ${statusClass}"><span class="tracker-status-dot"></span>${esc(r.status)}</span></td>
+      <td class="admin-m-col-action" data-label="Action"><button type="button" class="tracker-mark-btn" onclick="event.stopPropagation();openReceiptReview(${r.id})">${r.status === 'Pending' ? 'Review' : 'View'}</button></td>
     </tr>`;
   }).join('') : '';
-  return filtered.length ? `<table class="tracker-table">
+  return filtered.length ? `<table class="tracker-table admin-mobile-table">
         <thead><tr><th>Member</th><th>Invoice</th><th>Paying for</th><th>Method</th><th>Amount</th><th>Submitted</th><th>Status</th><th>Action</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>` : '<div class="tracker-empty">No receipts in this filter</div>';
@@ -5202,17 +5210,18 @@ function renderReceiptsView() {
       <div class="tracker-stat"><div class="tracker-stat-lbl">Rejected</div><div class="tracker-stat-val">${rejected}</div></div>
       <div class="tracker-stat"><div class="tracker-stat-lbl">Total Uploads</div><div class="tracker-stat-val">${RECEIPTS.length}</div></div>
     </div>
+    ${adminStickyDockHtml(`
     <nav class="tracker-tabs">
       <button type="button" class="tracker-tab${receiptFilter === 'pending' ? ' active' : ''}" data-receipt-filter="pending" onclick="switchReceiptFilter('pending')">Pending</button>
       <button type="button" class="tracker-tab${receiptFilter === 'approved' ? ' active' : ''}" data-receipt-filter="approved" onclick="switchReceiptFilter('approved')">Approved</button>
       <button type="button" class="tracker-tab${receiptFilter === 'rejected' ? ' active' : ''}" data-receipt-filter="rejected" onclick="switchReceiptFilter('rejected')">Rejected</button>
       <button type="button" class="tracker-tab${receiptFilter === 'all' ? ' active' : ''}" data-receipt-filter="all" onclick="switchReceiptFilter('all')">All</button>
     </nav>
-    <div class="tracker-banner tracker-receipts-toolbar" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+    <div class="tracker-banner tracker-receipts-toolbar tracker-banner--compact" style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
       <span class="tracker-intro-text">Receipts uploaded by members after Zelle or Bank of America payments. Approving marks the linked invoice as paid.</span>
       <button type="button" class="tracker-mark-btn" onclick="refreshReceipts()">Refresh</button>
-    </div>
-    <div class="tracker-table-wrap">
+    </div>`)}
+    <div class="tracker-table-wrap admin-mobile-list">
       ${renderReceiptsTableHtml(filtered)}
     </div>`;
 }
@@ -5222,22 +5231,22 @@ function renderMessagesBodyHtml() {
     const pinRows = PIN_RESET_REQUESTS.length ? PIN_RESET_REQUESTS.map(r => {
       const statusClass = r.status === 'Approved' ? 'paid' : r.status === 'Rejected' ? 'unpaid' : 'warn';
       const canReview = adminCanApproveReceipts() && r.status === 'Pending';
-      return `<tr class="data-row">
-        <td><div class="tracker-member-name">${esc(r.member_name || '—')}</div><div class="tracker-member-email">${r.member_number ? '#' + esc(r.member_number) : esc(r.phone || '—')}</div></td>
-        <td>${esc(r.phone || '—')}</td>
-        <td>${esc(r.notes || '—')}</td>
-        <td><span class="tracker-date">${esc(fmtDate(r.created_at))}</span></td>
-        <td><span class="tracker-status ${statusClass}"><span class="tracker-status-dot"></span>${esc(r.status)}</span></td>
-        <td>${canReview
+      return `<tr class="data-row admin-mobile-card">
+        <td class="admin-m-col-head"><div class="tracker-member-name">${esc(r.member_name || '—')}</div><div class="tracker-member-email">${r.member_number ? '#' + esc(r.member_number) : esc(r.phone || '—')}</div></td>
+        <td data-label="Phone">${esc(r.phone || '—')}</td>
+        <td data-label="Note">${esc(r.notes || '—')}</td>
+        <td data-label="Requested"><span class="tracker-date">${esc(fmtDate(r.created_at))}</span></td>
+        <td data-label="Status"><span class="tracker-status ${statusClass}"><span class="tracker-status-dot"></span>${esc(r.status)}</span></td>
+        <td class="admin-m-col-stack" data-label="Action">${canReview
           ? `<button type="button" class="tracker-mark-btn" onclick="approvePinResetRequest(${r.id})">Approve</button>
-             <button type="button" class="tracker-mark-btn" style="margin-left:6px;opacity:.85" onclick="rejectPinResetRequest(${r.id})">Decline</button>`
+             <button type="button" class="tracker-mark-btn" style="opacity:.85" onclick="rejectPinResetRequest(${r.id})">Decline</button>`
           : '—'}</td>
       </tr>`;
     }).join('') : '';
     return `
       <div class="tracker-banner">Members submit these from the portal when they forget their PIN. <strong>Approve</strong> clears their PIN so they can create a new one on sign-in.</div>
       <div class="tracker-table-wrap">
-        ${PIN_RESET_REQUESTS.length ? `<table class="tracker-table">
+        ${PIN_RESET_REQUESTS.length ? `<table class="tracker-table admin-mobile-table">
           <thead><tr><th>Member</th><th>Phone</th><th>Note</th><th>Requested</th><th>Status</th><th>Action</th></tr></thead>
           <tbody>${pinRows}</tbody>
         </table>` : '<div class="tracker-empty">No PIN reset requests yet. Run <code>npm run db:migrate</code> if the table is missing.</div>'}
@@ -5254,14 +5263,13 @@ function renderMessagesBodyHtml() {
         ? `<div class="tracker-member-email">Member #${esc(m.member_number || m.member_id)}</div>`
         : '';
       return `
-      <tr class="data-row">
-        <td><div class="tracker-member-name">${esc(m.name || '—')}</div>${memberHint}<div class="tracker-member-email">${esc(m.email || '—')}</div></td>
-        <td>${esc(m.phone || '—')}</td>
-        <td><span class="tracker-status ${srcClass}"><span class="tracker-status-dot"></span>${srcLabel}</span></td>
-        <td><span class="tracker-status ${statusClass}"><span class="tracker-status-dot"></span>${statusLabel}</span></td>
-        <td><div class="msg-preview">${esc(m.message || '').slice(0, 120)}${(m.message || '').length > 120 ? '…' : ''}</div></td>
-        <td><span class="tracker-date">${esc(fmtDate(m.created_at))}</span></td>
-        <td>${adminCanReplyMessages() ? `<button type="button" class="tracker-mark-btn" onclick="openMessageReply(${m.id})">${m.board_reply ? 'Edit reply' : 'Reply'}</button>` : (m.board_reply ? 'Replied' : '—')}</td>
+      <tr class="data-row admin-mobile-card">
+        <td class="admin-m-col-head"><div class="tracker-member-name">${esc(m.name || '—')}</div>${memberHint}<div class="tracker-member-email">${esc(m.email || '—')}</div><div class="msg-preview">${esc(m.message || '').slice(0, 160)}${(m.message || '').length > 160 ? '…' : ''}</div></td>
+        <td data-label="Phone">${esc(m.phone || '—')}</td>
+        <td data-label="Source"><span class="tracker-status ${srcClass}"><span class="tracker-status-dot"></span>${srcLabel}</span></td>
+        <td data-label="Status"><span class="tracker-status ${statusClass}"><span class="tracker-status-dot"></span>${statusLabel}</span></td>
+        <td data-label="Received"><span class="tracker-date">${esc(fmtDate(m.created_at))}</span></td>
+        <td class="admin-m-col-action" data-label="Reply">${adminCanReplyMessages() ? `<button type="button" class="tracker-mark-btn" onclick="openMessageReply(${m.id})">${m.board_reply ? 'Edit reply' : 'Reply'}</button>` : (m.board_reply ? 'Replied' : '—')}</td>
       </tr>
       <tr class="data-row msg-detail-row">
         <td colspan="7"><div class="msg-detail-body">${esc(m.message || '')}${m.board_reply ? `<div class="msg-reply-block"><div class="msg-reply-head"><strong>Board reply</strong><span class="msg-reply-date">(${esc(fmtDate(m.replied_at))})</span></div><div class="msg-reply-text">${esc(m.board_reply)}</div></div>` : ''}</div></td>
@@ -5270,7 +5278,7 @@ function renderMessagesBodyHtml() {
     return `
       <div class="tracker-banner tracker-intro-banner">Messages from the public Contact Us form and the <strong>Member Portal</strong>. Replies appear under Home → Messages from the Board and are optionally emailed.</div>
       <div class="tracker-table-wrap">
-        ${CONTACT_MESSAGES.length ? `<table class="tracker-table">
+        ${CONTACT_MESSAGES.length ? `<table class="tracker-table admin-mobile-table">
           <thead><tr><th>From</th><th>Phone</th><th>Source</th><th>Status</th><th>Message</th><th>Received</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>` : '<div class="tracker-empty">No contact messages yet. Run <code>npm run db:migrate</code> if the inbox table is missing.</div>'}
@@ -5294,11 +5302,12 @@ function renderMessagesView() {
       <div class="tracker-stat"><div class="tracker-stat-lbl">PIN Resets Pending</div><div class="tracker-stat-val orange">${pendingPins}</div></div>
       <div class="tracker-stat"><div class="tracker-stat-lbl">Contact Messages</div><div class="tracker-stat-val">${CONTACT_MESSAGES.length}</div></div>
     </div>
+    ${adminStickyDockHtml(`
     <nav class="tracker-tabs">
       <button type="button" class="tracker-tab${messagesFilter === 'contact' ? ' active' : ''}" data-messages-filter="contact" onclick="switchMessagesFilter('contact')">Contact</button>
       <button type="button" class="tracker-tab${messagesFilter === 'pin-reset' ? ' active' : ''}" data-messages-filter="pin-reset" onclick="switchMessagesFilter('pin-reset')">PIN Reset${pendingPins ? ` (${pendingPins})` : ''}</button>
-    </nav>
-    <div id="messagesBody">${renderMessagesBodyHtml()}</div>`;
+    </nav>`)}
+    <div id="messagesBody" class="admin-mobile-list">${renderMessagesBodyHtml()}</div>`;
 }
 
 async function approvePinResetRequest(id) {
@@ -5432,10 +5441,10 @@ function renderActivityView() {
     const who = esc(a.actor_label || a.actor_type || '—');
     const what = esc(a.summary || a.action || '—');
     const entity = esc(a.entity_type || a.table_name || '');
-    return `<tr class="data-row">
-      <td><span class="tracker-date">${when}</span></td>
-      <td><div class="tracker-member-name">${who}</div><div class="tracker-member-email">${esc(a.actor_type || '')}</div></td>
-      <td><div class="tracker-member-name">${what}</div><div class="tracker-member-email">${entity}</div></td>
+    return `<tr class="data-row admin-mobile-card">
+      <td data-label="When"><span class="tracker-date">${when}</span></td>
+      <td class="admin-m-col-head"><div class="tracker-member-name">${who}</div><div class="tracker-member-email">${esc(a.actor_type || '')}</div></td>
+      <td data-label="Action"><div class="tracker-member-name">${what}</div><div class="tracker-member-email">${entity}</div></td>
     </tr>`;
   }).join('') : '';
 
@@ -5443,7 +5452,7 @@ function renderActivityView() {
     ${trackerHeaderHtml(stats)}
     <div class="tracker-banner tracker-intro-banner">Every board and member change is logged here. Waiting list → application → CRM → invoices stay synced automatically.</div>
     <div class="tracker-table-wrap">
-      ${ACTIVITY.length ? `<table class="tracker-table">
+      ${ACTIVITY.length ? `<table class="tracker-table admin-mobile-table">
         <thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>` : '<div class="tracker-empty">No activity logged yet. Actions appear after profile edits, application reviews, and invoice updates.</div>'}
@@ -6421,11 +6430,11 @@ async function saveFollowUpAssignment(memberId, boardMemberId, selectEl) {
   }
 }
 
-function renderFollowUpAssignmentsPanel() {
+function renderFollowUpAssignmentsControls() {
   const stats = FOLLOW_UP_ROSTER?.stats || {};
   const rows = getFollowUpAssignmentRows();
   return `
-    <div class="tracker-banner follow-up-banner" role="status">
+    <div class="tracker-banner follow-up-banner follow-up-banner--compact" role="status">
       Assign people you know to yourself.
     </div>
     <div class="tracker-toolbar">
@@ -6440,9 +6449,13 @@ function renderFollowUpAssignmentsPanel() {
         <option value="unpaid"${followUpFilter === 'unpaid' ? ' selected' : ''}>Has unpaid invoices</option>
       </select>
       <div class="tracker-results">${rows.length} shown · ${stats.assigned || 0}/${stats.active_members || 0} assigned</div>
-    </div>
-    <div class="tracker-table-wrap tracker-table-wrap--fluid" id="followUpAssignmentsWrap">
-      ${renderFollowUpAssignmentsTableHtml(rows)}
+    </div>`;
+}
+
+function renderFollowUpAssignmentsPanel() {
+  return `
+    <div class="tracker-table-wrap tracker-table-wrap--fluid admin-mobile-list" id="followUpAssignmentsWrap">
+      ${renderFollowUpAssignmentsTableHtml(getFollowUpAssignmentRows())}
     </div>`;
 }
 
@@ -6664,7 +6677,7 @@ function renderFollowUpView() {
     </nav>`;
   document.getElementById('mainArea').innerHTML = `
     ${trackerHeaderHtml(stats)}
-    ${subtabs}
+    ${adminStickyDockHtml(subtabs + (followUpTab === 'assignments' ? renderFollowUpAssignmentsControls() : ''))}
     ${followUpTab === 'assignments' ? renderFollowUpAssignmentsPanel() : renderFollowUpMinePanel()}`;
   updateSidebar();
 }
