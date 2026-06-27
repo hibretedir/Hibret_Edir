@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/css/admin-tracker.css?v=admin47">
+<link rel="stylesheet" href="/css/admin-tracker.css?v=admin48">
 <link rel="stylesheet" href="/css/admin-tracker-mh.css?v=1">
 </head>
 <body class="app-admin tracker">
@@ -3997,7 +3997,7 @@ function renderMembersTableHtml(filtered) {
       <td><div class="tracker-member-name">${esc(names.paypal)}</div>${lateCount ? `<button type="button" class="tracker-late-member-link" onclick="event.stopPropagation();openMemberUnpaidInvoices(${m.id})">${lateCount} late invoice${lateCount !== 1 ? 's' : ''} — view unpaid</button>` : ''}</td>
       <td><div class="tracker-member-name tracker-member-spouse">${spouse ? esc(spouse) : '<span class="tracker-member-empty">—</span>'}</div></td>
       <td>${esc(d.email || '—')}</td>
-      <td>${esc(d.mobile || d.home || '—')}</td>
+      <td class="tracker-phone-cell">${adminPhoneCell(d.mobile || d.home)}</td>
       <td><span class="tracker-status ${m.status === 'Active' ? 'paid' : 'unpaid'}">${esc(m.status)}</span></td>
       <td><button type="button" class="tracker-mark-btn" onclick="event.stopPropagation();openMemberDetail(${m.id})">View / Edit</button></td>
     </tr>`;
@@ -6321,6 +6321,13 @@ function switchFollowUpTab(tab) {
   });
 }
 
+function adminPhoneCell(phone) {
+  const raw = String(phone || '').trim();
+  if (!raw) return '—';
+  const digits = raw.replace(/\D/g, '');
+  return `<a class="tracker-phone-link follow-up-phone-link" href="tel:${esc(digits)}">${esc(raw)}</a>`;
+}
+
 function followUpMemberLabel(m) {
   const primary = [m.first, m.last].filter(Boolean).join(' ').trim() || m.full_name || 'Member';
   const num = m.member_number || m.id;
@@ -6434,7 +6441,7 @@ function renderFollowUpAssignmentsPanel() {
       </select>
       <div class="tracker-results">${rows.length} shown · ${stats.assigned || 0}/${stats.active_members || 0} assigned</div>
     </div>
-    <div class="tracker-table-wrap" id="followUpAssignmentsWrap">
+    <div class="tracker-table-wrap tracker-table-wrap--fluid" id="followUpAssignmentsWrap">
       ${renderFollowUpAssignmentsTableHtml(rows)}
     </div>`;
 }
@@ -6447,11 +6454,11 @@ function renderFollowUpAssignmentsTableHtml(rows) {
     <thead><tr><th>Member</th><th>Phone</th><th>Board contact</th></tr></thead>
     <tbody>${rows.map((row) => {
       const m = row.member;
-      const phone = m.mobile || m.home || '—';
-      return `<tr>
-        <td><div class="tracker-member-name">${esc(followUpMemberLabel(m))}</div></td>
-        <td>${phone !== '—' ? `<a class="follow-up-phone-link" href="tel:${esc(phone.replace(/\D/g, ''))}">${esc(phone)}</a>` : '—'}</td>
-        <td>${renderFollowUpAssignmentCell(row)}</td>
+      const phone = m.mobile || m.home || '';
+      return `<tr class="follow-up-mobile-card">
+        <td data-label="Member" class="follow-up-col-member"><div class="tracker-member-name">${esc(followUpMemberLabel(m))}</div></td>
+        <td data-label="Phone" class="tracker-phone-cell follow-up-col-phone">${adminPhoneCell(phone)}</td>
+        <td data-label="Assign" class="follow-up-col-assign">${renderFollowUpAssignmentCell(row)}</td>
       </tr>`;
     }).join('')}</tbody>
   </table>`;
@@ -6513,7 +6520,7 @@ function renderFollowUpMineUnpaidTable(rows) {
   if (!rows.length) {
     return '<div class="tracker-empty">No members need follow-up right now.</div>';
   }
-  return `<div class="tracker-table-wrap follow-up-mine-table-wrap">
+  return `<div class="tracker-table-wrap follow-up-mine-table-wrap tracker-table-wrap--fluid">
     <table class="tracker-table follow-up-mine-table">
       <thead>
         <tr>
@@ -6541,18 +6548,20 @@ function renderFollowUpMineUnpaidRow(row) {
   const urgent = invoices.some((inv) => inv.days_past_due > 14);
   const rowCls = urgent ? 'follow-up-mine-row-urgent' : late ? 'follow-up-mine-row-late' : '';
   return `
-    <tr class="follow-up-mine-row ${rowCls}${expanded ? ' is-expanded' : ''}" onclick="toggleFollowUpMineExpand(${m.id})">
+    <tr class="follow-up-mine-row follow-up-mobile-card ${rowCls}${expanded ? ' is-expanded' : ''}" onclick="toggleFollowUpMineExpand(${m.id})">
       <td class="follow-up-col-toggle"><span class="follow-up-expand-icon" aria-hidden="true">${expanded ? '▼' : '▶'}</span></td>
-      <td>
+      <td data-label="Member" class="follow-up-col-member">
         <div class="tracker-member-name">${esc(followUpMemberLabel(m))}</div>
         ${m.spouse_name ? `<div class="follow-up-mine-spouse">${esc(m.spouse_name)}</div>` : ''}
       </td>
-      <td>${phone ? `<a class="follow-up-phone-link" href="tel:${esc(phone.replace(/\D/g, ''))}" onclick="event.stopPropagation()">${esc(phone)}</a>` : '—'}</td>
-      <td class="follow-up-col-count"><span class="follow-up-count-pill">${count}</span></td>
-      <td class="follow-up-col-total"><span class="follow-up-total-amt">${fmtMoney(total)}</span></td>
-      <td class="follow-up-col-actions" onclick="event.stopPropagation()">
-        ${phone ? `<a class="btn primary follow-up-call-btn" href="tel:${esc(phone.replace(/\D/g, ''))}">Call</a>` : ''}
-        <button type="button" class="tracker-mark-btn follow-up-note-btn" onclick="openMemberNotes(${m.id})">Note</button>
+      <td data-label="Phone" class="tracker-phone-cell follow-up-col-phone">${adminPhoneCell(phone)}</td>
+      <td data-label="Unpaid" class="follow-up-col-count"><span class="follow-up-count-pill">${count}</span></td>
+      <td data-label="Owed" class="follow-up-col-total"><span class="follow-up-total-amt">${fmtMoney(total)}</span></td>
+      <td data-label="Actions" class="follow-up-col-actions" onclick="event.stopPropagation()">
+        <div class="follow-up-action-btns">
+          ${phone ? `<a class="btn primary follow-up-call-btn" href="tel:${esc(phone.replace(/\D/g, ''))}">Call</a>` : ''}
+          <button type="button" class="tracker-mark-btn follow-up-note-btn" onclick="openMemberNotes(${m.id})">Note</button>
+        </div>
       </td>
     </tr>
     <tr class="follow-up-mine-detail-row${expanded ? ' is-open' : ''}">
@@ -6568,7 +6577,7 @@ function renderFollowUpMinePaidTable(rows) {
   if (!rows.length) return '';
   return `
     <div class="sec-hd follow-up-mine-sec-hd"><h2>Your assigned members</h2><span class="follow-up-mine-sec-note">${rows.length} in your portfolio</span></div>
-    <div class="tracker-table-wrap follow-up-mine-table-wrap follow-up-mine-paid-wrap">
+    <div class="tracker-table-wrap follow-up-mine-table-wrap follow-up-mine-paid-wrap tracker-table-wrap--fluid">
       <table class="tracker-table follow-up-mine-table follow-up-mine-paid-table">
         <thead>
           <tr>
@@ -6581,14 +6590,14 @@ function renderFollowUpMinePaidTable(rows) {
         <tbody>${rows.map((row) => {
           const m = row.member;
           const phone = m.mobile || m.home || '';
-          return `<tr class="follow-up-mine-row-paid">
-            <td>
+          return `<tr class="follow-up-mine-row-paid follow-up-mobile-card">
+            <td data-label="Member" class="follow-up-col-member">
               <div class="tracker-member-name">${esc(followUpMemberLabel(m))}</div>
               ${m.spouse_name ? `<div class="follow-up-mine-spouse">${esc(m.spouse_name)}</div>` : ''}
             </td>
-            <td>${phone ? `<a class="follow-up-phone-link" href="tel:${esc(phone.replace(/\D/g, ''))}">${esc(phone)}</a>` : '—'}</td>
-            <td><span class="follow-up-ok">✓ Paid up</span></td>
-            <td class="follow-up-col-actions">
+            <td data-label="Phone" class="tracker-phone-cell follow-up-col-phone">${adminPhoneCell(phone)}</td>
+            <td data-label="Status"><span class="follow-up-ok">✓ Paid up</span></td>
+            <td data-label="Actions" class="follow-up-col-actions">
               <button type="button" class="tracker-mark-btn follow-up-note-btn" onclick="openMemberNotes(${m.id})">Note</button>
             </td>
           </tr>`;
