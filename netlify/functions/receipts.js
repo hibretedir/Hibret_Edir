@@ -1,6 +1,6 @@
 const { getDb } = require('./db');
 const { verifyAdminRequest, verifyMemberRequest, buildActorFromAdmin } = require('./admin-auth');
-const { loadBoardMemberAccess, assertCanApproveOperations, assertPerm } = require('./board-permissions');
+const { loadBoardMemberAccess, assertCanApproveOperations, assertPerm, assertNotRestrictedMembersOnly } = require('./board-permissions');
 const { logActivity } = require('./audit');
 const { invalidateInvoiceStatsCache } = require('./invoice-stats-cache');
 
@@ -273,6 +273,13 @@ exports.handler = async (event) => {
     if (event.httpMethod === 'GET') {
       const admin = verifyAdminRequest(event);
       if (!admin) return json(401, { error: 'Admin authorization required.' });
+      const db = getDb();
+      const access = await loadBoardMemberAccess(db, admin);
+      const memberId = event.queryStringParameters?.member_id;
+      if (!memberId) {
+        const restricted = assertNotRestrictedMembersOnly(access);
+        if (restricted) return json(403, { error: restricted });
+      }
       if (receiptId && !action) return await getReceipt(receiptId);
       return await listReceipts(event.queryStringParameters || {});
     }

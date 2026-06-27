@@ -10,6 +10,7 @@ const {
   assertCanApprovePayout,
   assertPerm,
   assertNotesOnlyUpdate,
+  assertNotRestrictedMembersOnly,
   hasPerm,
 } = require('./board-permissions');
 const { stampBoardNote, mergeBoardNotes } = require('./board-notes');
@@ -548,6 +549,9 @@ exports.handler = async (event) => {
   const access = await loadBoardMemberAccess(db, admin);
 
   try {
+    const restricted = assertNotRestrictedMembersOnly(access);
+    if (restricted) return json(403, { error: restricted });
+
     if (event.httpMethod === 'GET' && route.isRoot) {
       return await listPayouts(event.queryStringParameters || {});
     }

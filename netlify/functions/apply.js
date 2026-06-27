@@ -33,6 +33,7 @@ const {
   assertPerm,
   hasPerm,
   assertNotesOnlyUpdate,
+  assertNotRestrictedMembersOnly,
   WRITE_DENIED_MSG,
 } = require('./board-permissions');
 const { stampBoardNote, mergeBoardNotes } = require('./board-notes');
@@ -2020,7 +2021,13 @@ exports.handler = async (event) => {
       return json(401, { error: 'Admin authorization required. Please sign in.' });
     }
     try {
+      const db = getDb();
+      const access = await loadBoardMemberAccess(db, admin);
       const memberId = event.queryStringParameters?.member_id;
+      if (!memberId) {
+        const restricted = assertNotRestrictedMembersOnly(access);
+        if (restricted) return json(403, { error: restricted });
+      }
       if (memberId) {
         const messages = await listContactMessagesForMember(Number(memberId));
         return json(200, { messages });
@@ -2043,6 +2050,8 @@ exports.handler = async (event) => {
     try {
       const db = getDb();
       const access = await loadBoardMemberAccess(db, admin);
+      const restricted = assertNotRestrictedMembersOnly(access);
+      if (restricted) return json(403, { error: restricted });
       const denied = assertPerm(access, 'messages', 'You do not have permission to reply to contact messages.');
       if (denied) return json(403, { error: denied });
       const actor = await resolveAdminActor(admin);
@@ -2065,6 +2074,8 @@ exports.handler = async (event) => {
     const actor = await resolveAdminActor(admin);
     const db = getDb();
     const access = await loadBoardMemberAccess(db, admin);
+    const restricted = assertNotRestrictedMembersOnly(access);
+    if (restricted) return json(403, { error: restricted });
     try {
       if (event.httpMethod === 'GET' && !changePath.id) {
         const rows = await listChangeRequests(db);
@@ -2099,6 +2110,9 @@ exports.handler = async (event) => {
     }
     try {
       const db = getDb();
+      const access = await loadBoardMemberAccess(db, admin);
+      const restricted = assertNotRestrictedMembersOnly(access);
+      if (restricted) return json(403, { error: restricted });
       const dashboard = await buildMonitorHealthDashboard(db);
       return json(200, dashboard);
     } catch (err) {
@@ -2162,6 +2176,8 @@ exports.handler = async (event) => {
     const actor = await resolveAdminActor(admin);
     const db = getDb();
     const access = await loadBoardMemberAccess(db, admin);
+    const restricted = assertNotRestrictedMembersOnly(access);
+    if (restricted) return json(403, { error: restricted });
     try {
       if (event.httpMethod === 'GET' && !wlPath.id) {
         return await listWaitingListAdmin();
@@ -2194,6 +2210,8 @@ exports.handler = async (event) => {
     }
     const db = getDb();
     const access = await loadBoardMemberAccess(db, admin);
+    const restricted = assertNotRestrictedMembersOnly(access);
+    if (restricted) return json(403, { error: restricted });
     try {
       if (annPath.action === 'deceased-search' && event.httpMethod === 'GET') {
         const q = event.queryStringParameters?.q || '';
@@ -2286,6 +2304,8 @@ exports.handler = async (event) => {
     const actor = await resolveAdminActor(admin);
     const db = getDb();
     const access = await loadBoardMemberAccess(db, admin);
+    const restricted = assertNotRestrictedMembersOnly(access);
+    if (restricted) return json(403, { error: restricted });
     try {
       if (event.httpMethod === 'GET' && !appPath.id) {
         return await listApplications(event.queryStringParameters || {});

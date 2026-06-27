@@ -246,10 +246,7 @@ async function loadBoardMemberAccess(db, adminPayload) {
   }
 
   if (!adminId) {
-    return deriveBoardAccess({
-      is_active: true,
-      board_perms: { board_notes: true },
-    });
+    return null;
   }
   await syncSuperAdminFlags(db);
   const result = await db.query(

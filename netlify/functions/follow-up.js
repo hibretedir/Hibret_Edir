@@ -310,7 +310,8 @@ async function getRosterPayload(db) {
     fetchAssignmentsMap(db),
     fetchActiveBoardOptions(db),
   ]);
-  const rows = attachFollowUpRows(members, assignmentsMap, new Map());
+  const outstandingMap = await fetchOutstandingInvoicesForMembers(db, members);
+  const rows = attachFollowUpRows(members, assignmentsMap, outstandingMap);
   const assigned = rows.filter((r) => r.assignment).length;
   return {
     rows,

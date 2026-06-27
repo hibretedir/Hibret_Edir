@@ -167,11 +167,11 @@
 
 <nav class="tracker-mobile-nav" id="adminMobileNav" aria-label="Admin sections">
   <button type="button" data-view="members" onclick="switchView('members')">Members</button>
+  <button type="button" data-view="follow-up" onclick="switchView('follow-up')">Follow-Up</button>
   <button type="button" data-view="invoices" onclick="switchView('invoices')">Invoices</button>
   <button type="button" data-view="applications" onclick="switchView('applications')">Approval</button>
-  <button type="button" data-view="receipts" onclick="switchView('receipts')">Receipts</button>
   <button type="button" data-view="messages" onclick="switchView('messages')">Messages</button>
-  <button type="button" data-view="follow-up" onclick="switchView('follow-up')">Follow-Up</button>
+  <button type="button" data-view="receipts" onclick="switchView('receipts')">Receipts</button>
   <button type="button" data-view="events" onclick="switchView('events')">Summary</button>
   <button type="button" data-view="announcement" onclick="switchView('announcement')">Announce</button>
   <button type="button" data-view="payouts" onclick="switchView('payouts')">Payouts</button>
@@ -582,6 +582,14 @@ function adminIsRestrictedMembersOnly() {
 function guardRestrictedView(v) {
   if (adminIsRestrictedMembersOnly() && v !== 'members') {
     showAdminToast('Your access is limited to Members CRM.', 'warn');
+    return 'members';
+  }
+  return v;
+}
+
+function guardFollowUpView(v) {
+  if (v === 'follow-up' && ADMIN_AUTH_ENABLED && !adminCanFollowUp()) {
+    showAdminToast('You do not have payment follow-up permission.', 'warn');
     return 'members';
   }
   return v;
@@ -2492,6 +2500,7 @@ async function switchView(v) {
   closeAdminMenu();
   v = guardSuperAdminView(v);
   v = guardRestrictedView(v);
+  v = guardFollowUpView(v);
   currentView = v;
   if (v === 'invoices') fetchPayPalBalance();
   if (v === 'events') {
@@ -4590,7 +4599,13 @@ async function completeRegistrationReview() {
     showAdminToast(res.message || 'Member added.', 'success');
     closeModal('applicationModal');
     await refreshAdminSections(['applications', 'members', 'stats']);
-    render();
+    const memberId = res?.member?.id || res?.member_id;
+    if (memberId) {
+      switchView('members');
+      await openMemberDetail(Number(memberId));
+    } else {
+      render();
+    }
   } catch (e) {
     alert(e.message || 'Could not complete membership.');
   }
@@ -5963,6 +5978,7 @@ function applyAdminRouteFromUrl() {
   if (hash === 'monitor-health' || hash === 'system-health') hash = 'health-dashboard';
   if (!hash) return;
   const valid = ['members', 'invoices', 'applications', 'receipts', 'messages', 'events', 'payouts', 'announcement', 'health-dashboard', 'qa-testing'];
+  if (adminCanFollowUp()) valid.push('follow-up');
   if (adminIsSuperAdmin()) valid.push(...SECURITY_ADMIN_VIEWS);
   if (adminIsRestrictedMembersOnly()) {
     if (hash === 'members') switchView(hash);
@@ -6414,6 +6430,7 @@ function renderFollowUpAssignmentsPanel() {
       <select class="tracker-select" onchange="followUpFilter=this.value; renderFollowUpAssignmentsList()">
         <option value="all"${followUpFilter === 'all' ? ' selected' : ''}>All active</option>
         <option value="unassigned"${followUpFilter === 'unassigned' ? ' selected' : ''}>Unassigned only</option>
+        <option value="unpaid"${followUpFilter === 'unpaid' ? ' selected' : ''}>Has unpaid invoices</option>
       </select>
       <div class="tracker-results">${rows.length} shown · ${stats.assigned || 0}/${stats.active_members || 0} assigned</div>
     </div>
