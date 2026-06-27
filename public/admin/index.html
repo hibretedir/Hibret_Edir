@@ -6259,11 +6259,43 @@ async function fetchFollowUpData(loadAll) {
 }
 
 async function refreshFollowUpAfterSave() {
-  if (followUpTab === 'assignments') {
-    await apiGet('follow-up/roster').then((data) => { FOLLOW_UP_ROSTER = data; });
+  await Promise.all([
+    apiGet('follow-up/roster').then((data) => { FOLLOW_UP_ROSTER = data; }),
+    apiGet('follow-up/my-list').then((data) => {
+      FOLLOW_UP_MINE = data;
+      syncFollowUpBoardIdFromMine();
+    }),
+  ]);
+}
+
+async function claimFollowUpMember(memberId, busyEl) {
+  if (busyEl) busyEl.disabled = true;
+  try {
+    await apiPost(`follow-up/claim/${memberId}`, {});
+    await refreshFollowUpAfterSave();
+    render();
+    showAdminToast('Saved — open My Follow-Up List to see them.', 'ok');
+  } catch (e) {
+    showAdminToast(e.message || 'Could not save assignment.', 'err');
+    if (busyEl) busyEl.disabled = false;
+    await refreshFollowUpAfterSave();
+    render();
+    throw e;
+  }
+}
+
+async function saveFollowUpSelfAssignment(memberId, boardMemberId, selectEl) {
+  if (!boardMemberId) {
+    showAdminToast('Only a super admin can clear an assignment.', 'warn');
+    if (selectEl) selectEl.value = '';
     return;
   }
-  await fetchFollowUpData(true);
+  const prev = selectEl ? selectEl.value : '';
+  try {
+    await claimFollowUpMember(memberId, selectEl);
+  } catch (e) {
+    if (selectEl) selectEl.value = prev === String(boardMemberId) ? '' : prev;
+  }
 }
 
 function switchFollowUpTab(tab) {
@@ -6316,27 +6348,6 @@ function renderFollowUpAssignmentCell(row) {
   </select>`;
 }
 
-async function saveFollowUpSelfAssignment(memberId, boardMemberId, selectEl) {
-  if (!boardMemberId) {
-    showAdminToast('Only a super admin can clear an assignment.', 'warn');
-    if (selectEl) selectEl.value = String(followUpMyBoardId() || '');
-    return;
-  }
-  await claimFollowUpMember(memberId, selectEl);
-  if (btnEl) btnEl.disabled = true;
-  try {
-    await apiPost(`follow-up/claim/${memberId}`, {});
-    await refreshFollowUpAfterSave();
-    render();
-    showAdminToast('Saved — assigned to you.', 'ok');
-  } catch (e) {
-    showAdminToast(e.message || 'Could not save assignment.', 'err');
-    if (btnEl) btnEl.disabled = false;
-    await refreshFollowUpAfterSave();
-    render();
-  }
-}
-
 function followUpBoardSelectOptions(selectedId) {
   const options = FOLLOW_UP_ROSTER?.board_options || [];
   let html = `<option value="">— Unassigned —</option>`;
@@ -6378,7 +6389,7 @@ async function saveFollowUpAssignment(memberId, boardMemberId, selectEl) {
     }
     await refreshFollowUpAfterSave();
     render();
-    showAdminToast('Saved — assigned to you.', 'ok');
+    showAdminToast('Saved.', 'ok');
   } catch (e) {
     showAdminToast(e.message || 'Could not save assignment.', 'err');
     if (busyEl) busyEl.disabled = false;
@@ -6539,7 +6550,7 @@ function renderFollowUpMineUnpaidRow(row) {
 function renderFollowUpMinePaidTable(rows) {
   if (!rows.length) return '';
   return `
-    <div class="sec-hd follow-up-mine-sec-hd"><h2>Paid up</h2><span class="follow-up-mine-sec-note">${rows.length} member${rows.length === 1 ? '' : 's'} — no action needed</span></div>
+    <div class="sec-hd follow-up-mine-sec-hd"><h2>Your assigned members</h2><span class="follow-up-mine-sec-note">${rows.length} in your portfolio</span></div>
     <div class="tracker-table-wrap follow-up-mine-table-wrap follow-up-mine-paid-wrap">
       <table class="tracker-table follow-up-mine-table follow-up-mine-paid-table">
         <thead>
@@ -6581,14 +6592,16 @@ function renderFollowUpMineContentHtml() {
       <div class="tracker-empty follow-up-empty-ok">
         <div class="follow-up-empty-icon">—</div>
         <h3>No members assigned yet</h3>
-        <p>Use <strong>Assignments</strong> and tap <strong>Assign to me</strong> for people you know.</p>
+        <p>On <strong>Assignments</strong>, filter <strong>Unassigned only</strong>, then choose your name under <strong>Board contact</strong>.</p>
       </div>`;
   }
 
   const needsBlock = needsFollowUp.length
     ? `<div class="sec-hd follow-up-mine-sec-hd"><h2>Needs follow-up</h2><span class="follow-up-mine-sec-note">${needsFollowUp.length} member${needsFollowUp.length === 1 ? '' : 's'}</span></div>
        ${renderFollowUpMineUnpaidTable(needsFollowUp)}`
-    : `<div class="tracker-empty follow-up-empty-ok follow-up-empty-inline">
+    : paidUp.length
+      ? `<div class="tracker-banner follow-up-banner" role="status">No unpaid invoices right now. Your <strong>${paidUp.length}</strong> assigned member${paidUp.length === 1 ? '' : 's'} are listed below.</div>`
+      : `<div class="tracker-empty follow-up-empty-ok follow-up-empty-inline">
         <div class="follow-up-empty-icon">✓</div>
         <h3>All caught up on payments</h3>
         <p>Everyone in your portfolio is paid up right now.</p>
