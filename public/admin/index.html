@@ -6301,22 +6301,28 @@ function renderFollowUpAssignmentCell(row) {
     </select>`;
   }
 
-  if (!myId && !ADMIN_AUTH_ENABLED) {
-    return `<span class="follow-up-assigned-hint">Sign in as board admin</span>`;
+  if (assignId && Number(assignId) !== Number(myId)) {
+    return `<span class="follow-up-assigned-other">${esc(row.assignment?.board_display_name || 'Assigned')}</span>`;
   }
 
-  if (!assignId) {
-    return `<button type="button" class="btn primary follow-up-claim-btn" onclick="claimFollowUpMember(${m.id}, this)">Assign to me</button>`;
+  if (!myId) {
+    return `<span class="follow-up-assigned-hint">Refresh the page after sign-in</span>`;
   }
 
-  if (Number(assignId) === Number(myId)) {
-    return `<span class="follow-up-assigned-you">✓ ${esc(followUpMyBoardLabel())}</span>`;
-  }
-
-  return `<span class="follow-up-assigned-other">${esc(row.assignment?.board_display_name || 'Assigned')}</span>`;
+  const selected = Number(assignId) === Number(myId) ? String(myId) : '';
+  return `<select class="tracker-select follow-up-assign-select" onchange="saveFollowUpSelfAssignment(${m.id}, this.value, this)">
+    <option value="">— Unassigned —</option>
+    <option value="${myId}"${selected ? ' selected' : ''}>${esc(followUpMyBoardLabel())}</option>
+  </select>`;
 }
 
-async function claimFollowUpMember(memberId, btnEl) {
+async function saveFollowUpSelfAssignment(memberId, boardMemberId, selectEl) {
+  if (!boardMemberId) {
+    showAdminToast('Only a super admin can clear an assignment.', 'warn');
+    if (selectEl) selectEl.value = String(followUpMyBoardId() || '');
+    return;
+  }
+  await claimFollowUpMember(memberId, selectEl);
   if (btnEl) btnEl.disabled = true;
   try {
     await apiPost(`follow-up/claim/${memberId}`, {});
@@ -6386,7 +6392,7 @@ function renderFollowUpAssignmentsPanel() {
   const rows = getFollowUpAssignmentRows();
   return `
     <div class="tracker-banner follow-up-banner" role="status">
-      Assign people you know to yourself by clicking <strong>Unassigned</strong> and selecting your name.
+      Assign people you know to yourself: open <strong>Unassigned only</strong>, then in <strong>Board contact</strong> choose your name.
     </div>
     <div class="tracker-toolbar">
       <div class="tracker-search tracker-search-prominent">

@@ -257,7 +257,7 @@ async function loadBoardMemberAccess(db, adminPayload) {
      FROM board_members
      WHERE id = $1
      LIMIT 1`,
-    [adminPayload.adminId]
+    [adminId]
   );
   const row = result.rows[0];
   if (!row || !row.is_active) return null;

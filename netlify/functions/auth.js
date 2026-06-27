@@ -1102,7 +1102,8 @@ exports.handler = async (event, context) => {
       await syncSuperAdminFlags(db);
       const result = await db.query(
         `SELECT id, email, role, is_active,
-                is_super_admin, perm_full_access, perm_notes,
+                is_super_admin, board_perms,
+                perm_full_access, perm_notes,
                 perm_approve_payout, perm_approve_operations
          FROM board_members
          WHERE id = $1
