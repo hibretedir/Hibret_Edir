@@ -464,7 +464,8 @@ function parseBoardMembersPath(path) {
 
 function buildBoardMemberRow(row) {
   const memberNumber = row.member_number != null ? Number(row.member_number) : null;
-  const displayName = String(row.display_name || '').trim() || null;
+  const crmName = String(row.member_full_name || '').trim() || null;
+  const displayName = String(row.display_name || '').trim() || crmName || null;
   const loginEmails = Array.isArray(row.login_emails) && row.login_emails.length
     ? row.login_emails
     : (row.email ? [row.email] : []);
@@ -473,6 +474,7 @@ function buildBoardMemberRow(row) {
     member_id: row.member_id != null ? Number(row.member_id) : null,
     member_number: memberNumber,
     display_name: displayName,
+    member_full_name: crmName,
     email: row.email || loginEmails[0] || null,
     login_emails: loginEmails,
     role: row.role,
@@ -760,6 +762,15 @@ async function completeAdminPasswordReset(body) {
 async function listBoardMembers() {
   const db = getDb();
   await syncSuperAdminFlags(db);
+  await db.query(
+    `UPDATE board_members bm
+     SET display_name = m.full_name
+     FROM members m
+     WHERE m.id = bm.member_id
+       AND (bm.display_name IS NULL OR BTRIM(bm.display_name) = '')
+       AND m.full_name IS NOT NULL
+       AND BTRIM(m.full_name) <> ''`
+  );
   const result = await db.query(
     `SELECT bm.id, bm.member_id, bm.display_name, bm.email, bm.role, bm.is_active, bm.created_at,
             bm.is_super_admin, bm.board_perms,
@@ -794,7 +805,17 @@ async function resolveCrmMemberForEmail(db, email) {
 async function linkBoardMemberToCrm(db, boardId, email) {
   const member = await resolveCrmMemberForEmail(db, email);
   if (!member) return null;
-  await db.query(`UPDATE board_members SET member_id = $1 WHERE id = $2`, [member.id, boardId]);
+  const crmName = String(member.full_name || '').trim();
+  await db.query(
+    `UPDATE board_members
+     SET member_id = $1,
+         display_name = CASE
+           WHEN display_name IS NULL OR BTRIM(display_name) = '' THEN $3
+           ELSE display_name
+         END
+     WHERE id = $2`,
+    [member.id, boardId, crmName || null]
+  );
   return member;
 }
 
@@ -902,7 +923,7 @@ async function updateBoardMemberAccess(id, action, actor, access, body = {}) {
   const row = result.rows[0];
   if (!row) return jsonResponse(404, { error: 'Board member not found.' });
 
-  const needsManage = ['deactivate', 'reactivate', 'reset-password', 'permissions'];
+  const needsManage = ['deactivate', 'reactivate', 'reset-password', 'permissions', 'update-email'];
   if (needsManage.includes(action)) {
     const denied = assertCanManageBoard(access);
     if (denied) return jsonResponse(403, { error: denied });
@@ -945,9 +966,40 @@ async function updateBoardMemberAccess(id, action, actor, access, body = {}) {
     return jsonResponse(200, { ok: true, message: 'Permissions saved.' });
   }
 
+  if (action === 'update-email') {
+    if (row.is_super_admin) {
+      return jsonResponse(400, { error: 'Super admin emails are managed via BOARD_SUPER_ADMIN_EMAILS.' });
+    }
+    const newEmail = normalizeAdminEmail(body.email);
+    if (!newEmail || !newEmail.includes('@')) {
+      return jsonResponse(400, { error: 'A valid email is required.' });
+    }
+    const dup = await findAdmin({ email: newEmail });
+    if (dup && Number(dup.id) !== id) {
+      return jsonResponse(409, { error: 'That email is already used by another board login.' });
+    }
+    await db.query('UPDATE board_members SET email = $1 WHERE id = $2', [newEmail, id]);
+    await db.query('DELETE FROM board_member_emails WHERE board_member_id = $1', [id]);
+    await ensureBoardMemberEmail(db, id, newEmail, { isPrimary: true });
+    await linkBoardMemberToCrm(db, id, newEmail);
+    await logActivity(db, {
+      actor_type: 'board',
+      board_member_id: actor?.adminId || null,
+      actor_label: actor?.email || 'Board Admin',
+      action: 'board.email_updated',
+      entity_type: 'board_members',
+      record_id: id,
+      summary: `Board login email updated: ${row.email} → ${newEmail}`,
+    });
+    return jsonResponse(200, { ok: true, message: 'Login email updated.' });
+  }
+
   if (action === 'deactivate') {
     if (actor?.adminId && Number(actor.adminId) === id) {
       return jsonResponse(400, { error: 'You cannot deactivate your own account.' });
+    }
+    if (row.is_super_admin) {
+      return jsonResponse(400, { error: 'Super admins are managed via BOARD_SUPER_ADMIN_EMAILS.' });
     }
     await db.query('UPDATE board_members SET is_active = false WHERE id = $1', [id]);
     await logActivity(db, {

@@ -6,7 +6,7 @@
 <title>Hibret Edir Association — Ethiopian Mutual Assistance</title>
 <link rel="stylesheet" href="/css/hibret.css?v=nav1">
 <link rel="stylesheet" href="/css/compat.css?v=nav1">
-<link rel="stylesheet" href="/css/public-pages.css?v=pubfix24">
+<link rel="stylesheet" href="/css/public-pages.css?v=pubfix27">
 </head>
 <body class="site-public">
 
@@ -743,12 +743,17 @@ function positionMmenu() {
   menu.style.setProperty('left', `${left}px`, 'important');
 }
 
+let mmenuOpenedAt = 0;
+let mmenuScrollY = 0;
+
 function openMenu(){
   const menu = document.getElementById('mmenu');
   menu.classList.add('open');
   positionMmenu();
   document.getElementById('mmenuBackdrop').classList.add('open');
   document.getElementById('hamBtn').setAttribute('aria-expanded', 'true');
+  mmenuOpenedAt = Date.now();
+  mmenuScrollY = window.scrollY;
   requestAnimationFrame(positionMmenu);
 }
 function closeMenu(){
@@ -781,7 +786,15 @@ window.addEventListener('resize', () => {
   if (document.getElementById('mmenu')?.classList.contains('open')) positionMmenu();
 });
 window.addEventListener('scroll', () => {
-  if(document.getElementById('mmenu')?.classList.contains('open')) closeMenu();
+  const menu = document.getElementById('mmenu');
+  if (!menu?.classList.contains('open')) {
+    mmenuScrollY = window.scrollY;
+    return;
+  }
+  /* Ignore browser chrome jitter right after open — it was closing the menu on first tap */
+  if (Date.now() - mmenuOpenedAt < 400) return;
+  if (Math.abs(window.scrollY - mmenuScrollY) < 12) return;
+  closeMenu();
 }, { passive: true });
 
 document.addEventListener('keydown', (e) => {
@@ -815,6 +828,12 @@ function revealSection(pageEl){
   pageEl.querySelectorAll('.fade-up').forEach(el=>el.classList.add('vis'));
 }
 
+function setSectionBackVisible(on) {
+  document.body.classList.toggle('has-section-hash', !!on);
+  const footer = document.getElementById('mobileSectionFooter');
+  if (footer) footer.setAttribute('aria-hidden', on ? 'false' : 'true');
+}
+
 function goSection(id){
   closeMenu();
   if(id==='home'||id==='hero'){ goHome(); return false; }
@@ -824,6 +843,7 @@ function goSection(id){
 
   if(mob()){
     document.body.classList.add('mobile-section-active');
+    setSectionBackVisible(true);
     document.querySelectorAll('.section-page').forEach(s=>s.classList.remove('active'));
     const grid=document.getElementById('sectionGrid');
     if(grid) grid.style.display='none';
@@ -846,6 +866,7 @@ function goSection(id){
 
   if(NAV_SECTIONS.has(id)){
     history.replaceState(null,'','#'+id);
+    setSectionBackVisible(true);
   }
   if(id==='waitingliststatus'){
     loadWaitingListStatus();
@@ -858,6 +879,7 @@ function goSection(id){
 
 function goHome(){
   closeMenu();
+  setSectionBackVisible(false);
   if(mob()){
     document.body.classList.remove('mobile-section-active');
     document.querySelectorAll('.section-page').forEach(s=>s.classList.remove('active'));
@@ -872,19 +894,22 @@ function goHome(){
 function initNav(){
   const grid=document.getElementById('sectionGrid');
   const back=document.getElementById('backBtn');
+  const hash=(location.hash||'').replace(/^#/,'');
+  const inSection = hash && hash !== 'home' && NAV_SECTIONS.has(hash);
   if(mob()){
     document.body.classList.remove('mobile-section-active');
     if(grid) grid.style.display='block';
     if(back) back.style.removeProperty('display');
     document.querySelectorAll('.section-page').forEach(s=>s.classList.remove('active'));
+    setSectionBackVisible(false);
   } else {
     document.body.classList.remove('mobile-section-active');
     if(grid) grid.style.display='none';
     if(back) back.style.display='none';
     document.querySelectorAll('.section-page').forEach(s=>{s.classList.remove('active');s.style.display='';});
+    setSectionBackVisible(inSection);
   }
-  const hash=(location.hash||'').replace(/^#/,'');
-  if(hash && hash!=='home' && (document.getElementById('section-'+hash)||document.getElementById(hash))){
+  if(inSection && (document.getElementById('section-'+hash)||document.getElementById(hash))){
     goSection(hash);
   }
 }
@@ -896,11 +921,15 @@ window.addEventListener('resize',()=>{
     if(grid) grid.style.display='none';
     const back=document.getElementById('backBtn');
     if(back) back.style.display='none';
+    document.body.classList.remove('mobile-section-active');
     document.body.style.overflow='';
     closeMenu();
+    const hash=(location.hash||'').replace(/^#/,'');
+    setSectionBackVisible(hash && hash !== 'home' && NAV_SECTIONS.has(hash));
   } else if(!document.querySelector('.section-page.active')){
     const grid=document.getElementById('sectionGrid');
     if(grid) grid.style.display='block';
+    setSectionBackVisible(false);
   }
   if(wlStatusLoaded) filterWaitingList();
 });

@@ -119,6 +119,67 @@
 .site-public .lang-btn.on { background: var(--gold); border-color: var(--gold); color: #1a1a1a; }
 .site-public .back-btn { background: rgba(7, 24, 16, 0.92); border-color: var(--pub-card-border); color: var(--pub-text); top: calc(var(--nav-h) + 8px); z-index: 1001; }
 
+/* Back to Home — site green (override compat white button defaults) */
+.site-public button.mobile-section-home-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-width: min(280px, calc(100vw - 48px));
+  max-width: min(320px, calc(100vw - 48px));
+  min-height: 48px;
+  margin: 0 auto;
+  padding: 12px 28px;
+  border-radius: 999px;
+  border: 2px solid rgba(252, 221, 9, 0.55);
+  background-color: #056b24;
+  background: linear-gradient(135deg, #056b24 0%, #078930 100%);
+  color: var(--gold, #fcdd09);
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 1.3;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  text-align: center;
+}
+
+.site-public button.mobile-section-home-btn:hover,
+.site-public button.mobile-section-home-btn:focus-visible {
+  background-color: #078930;
+  background: linear-gradient(135deg, #078930 0%, #0a9e3a 100%);
+  border-color: var(--gold, #fcdd09);
+  color: #fff;
+  outline: none;
+}
+
+.site-public .mobile-section-footer {
+  display: none;
+}
+
+@media (min-width: 769px) {
+  body.site-public.has-section-hash .mobile-section-footer {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 24px;
+    z-index: 1002;
+    padding: 0 20px;
+    background: transparent;
+    border: none;
+    pointer-events: none;
+  }
+
+  body.site-public.has-section-hash .mobile-section-home-btn {
+    pointer-events: auto;
+  }
+}
+
 .site-public .mmenu-list a { cursor: pointer; -webkit-tap-highlight-color: transparent; min-height: 44px; color: var(--pub-text); }
 
 /* Dropdown menu (not full-page overlay) */
@@ -1441,7 +1502,7 @@ body.site-public .sg-card.sg-card-accent-red:active {
   }
 
   body.site-public.mobile-section-active .section-page.active {
-    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
   }
 
   /* Section content must be visible immediately (fade-up stays hidden until scroll otherwise) */
@@ -1454,53 +1515,29 @@ body.site-public .sg-card.sg-card-accent-red:active {
     display: none;
   }
 
-  .site-public .mobile-section-footer {
-    display: none;
-  }
-
   body.site-public.mobile-section-active .mobile-section-footer {
     display: flex;
     justify-content: center;
     align-items: center;
     position: fixed;
-    bottom: 0;
     left: 0;
     right: 0;
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
     z-index: 1002;
-    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
-    background: rgba(7, 24, 16, 0.96);
-    border-top: 1px solid var(--pub-card-border);
-    backdrop-filter: blur(6px);
+    padding: 0 20px;
+    background: transparent;
+    border: none;
+    backdrop-filter: none;
+    box-shadow: none;
+    pointer-events: none;
   }
 
-  .site-public button.mobile-section-home-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: auto;
-    min-width: 200px;
-    max-width: min(320px, calc(100vw - 48px));
-    min-height: 48px;
-    margin: 0 auto;
-    padding: 12px 24px;
-    border-radius: var(--radius);
-    border: 1px solid rgba(252, 221, 9, 0.45);
-    background: linear-gradient(135deg, rgba(5, 107, 36, 0.85), rgba(7, 137, 48, 0.65));
-    color: var(--gold);
-    font-family: inherit;
-    font-weight: 600;
-    font-size: 15px;
-    line-height: 1.3;
-    cursor: pointer;
-    appearance: none;
-    -webkit-appearance: none;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  body.site-public.mobile-section-active .mobile-section-home-btn {
+    pointer-events: auto;
   }
 
-  .site-public button.mobile-section-home-btn:hover {
-    background: linear-gradient(135deg, rgba(7, 137, 48, 0.95), rgba(5, 107, 36, 0.75));
-    border-color: var(--gold);
-    color: #fff;
+  body.site-public.mobile-section-active .back-btn {
+    display: none !important;
   }
 
   body.site-public .section-page {
@@ -1511,16 +1548,6 @@ body.site-public .sg-card.sg-card-accent-red:active {
     display: block;
     min-height: calc(100vh - var(--nav-h));
     padding-top: calc(var(--nav-h) + 4px);
-  }
-
-  body.site-public .back-btn {
-    display: none;
-    align-items: center;
-    gap: 6px;
-  }
-
-  body.site-public.mobile-section-active .back-btn {
-    display: flex;
   }
 
   .site-public .nav-menu-anchor {
@@ -2151,5 +2178,54 @@ body.site-public .sg-card.sg-card-accent-red:active {
     color: var(--pub-muted);
     font-size: 11px;
     text-transform: uppercase;
+  }
+}
+
+/* Touch nav — single tap (no hover-as-first-tap, no 300ms delay) */
+@media (max-width: 768px) {
+  .site-public .nav-ham,
+  .site-public .lang-btn,
+  .site-public .nav-home,
+  .site-public .nav-brand,
+  .site-public .mmenu-list a,
+  .site-public .mmenu-x,
+  .site-public .mmenu-login,
+  .site-public .sg-card,
+  .site-public button.mobile-section-home-btn {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .site-public .mmenu-list a:hover {
+    background: transparent;
+  }
+
+  .site-public .nav-desktop a:hover {
+    background: transparent;
+    color: rgba(255, 255, 255, 0.85);
+  }
+
+  .site-public .nav-desktop .nav-accent-green:hover {
+    background: rgba(7, 137, 48, 0.35);
+    color: #b8f0c8;
+  }
+
+  .site-public .nav-desktop .nav-accent-gold:hover {
+    background: rgba(252, 221, 9, 0.2);
+    color: var(--gold);
+  }
+
+  .site-public .nav-desktop .nav-accent-red:hover {
+    background: rgba(218, 18, 26, 0.28);
+    color: #fecaca;
+  }
+
+  .site-public button.mobile-section-home-btn:hover {
+    background-color: #056b24;
+    background: linear-gradient(135deg, #056b24 0%, #078930 100%);
+    border-color: rgba(252, 221, 9, 0.55);
+    color: var(--gold, #fcdd09);
   }
 }

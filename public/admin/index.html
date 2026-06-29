@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/css/admin-tracker.css?v=admin54">
+<link rel="stylesheet" href="/css/admin-tracker.css?v=admin69">
 <link rel="stylesheet" href="/css/admin-tracker-mh.css?v=1">
 </head>
 <body class="app-admin tracker">
@@ -82,6 +82,7 @@
       </div>
     </div>
     <a href="/" class="admin-main-site-link sidebar-main-site-link" aria-label="Visit Hibret Edir main website">Back to Main Site →</a>
+    <div class="sidebar-nav-scroll">
     <div class="sidebar-section">
       <div class="sidebar-label">Main</div>
       <button type="button" class="sidebar-nav accent-green" id="nav-members" onclick="switchView('members')">
@@ -158,11 +159,14 @@
         <span>Activity Log</span>
       </button>
     </div>
-    <div class="sidebar-footer" id="sidebarFooter">Loading…</div>
-    <button type="button" class="sidebar-nav" id="adminSignOutBtn" style="margin-top:8px;opacity:.85;display:none" onclick="adminSignOut()">
-      <span class="sidebar-nav-icon">⎋</span>
-      <span>Sign Out</span>
-    </button>
+    </div>
+    <div class="admin-sidebar-foot">
+      <div class="sidebar-footer" id="sidebarFooter">Loading…</div>
+      <button type="button" class="sidebar-nav admin-signout-btn" id="adminSignOutBtn" style="display:none" onclick="adminSignOut()">
+        <span class="sidebar-nav-icon">⎋</span>
+        <span>Log out</span>
+      </button>
+    </div>
   </aside>
 
   <div class="tracker-main">
@@ -173,6 +177,7 @@
         <div class="tracker-page-top-sub">Board Admin Page</div>
         <a href="/" class="admin-main-site-link admin-main-site-link--top" aria-label="Visit Hibret Edir main website">Back to Main Site →</a>
       </div>
+      <button type="button" class="admin-top-signout" id="adminTopSignOutBtn" style="display:none" onclick="adminSignOut()" aria-label="Log out">Log out</button>
       <button type="button" class="admin-hamburger" id="adminHamburgerBtn" aria-label="Open menu" aria-expanded="false" aria-controls="adminMobileMenu" onclick="toggleAdminMenu()">
         <span class="admin-hamburger-bar"></span>
         <span class="admin-hamburger-bar"></span>
@@ -268,8 +273,8 @@
   </div>
   <div class="admin-mobile-menu-footer" id="mobSidebarFooter">Loading…</div>
   <a href="/" class="admin-main-site-link admin-mobile-menu-home">Back to Main Site →</a>
-  <button type="button" class="sidebar-nav admin-mobile-menu-signout" id="mobAdminSignOutBtn" style="display:none" onclick="adminSignOut(); closeAdminMenu();">
-    <span class="sidebar-nav-icon">⎋</span><span>Sign Out</span>
+  <button type="button" class="sidebar-nav admin-mobile-menu-signout admin-signout-btn" id="mobAdminSignOutBtn" style="display:none" onclick="adminSignOut(); closeAdminMenu();">
+    <span class="sidebar-nav-icon">⎋</span><span>Log out</span>
   </button>
 </aside>
 
@@ -5535,6 +5540,47 @@ function boardAccessMatchesTier(keys, tierKeys) {
   return tierKeys.every((k) => set.has(k));
 }
 
+function boardAccessMatchesApprover(keys) {
+  const excluded = new Set(['edit_members', 'reset_pin', 'announce', 'payout_manage']);
+  const required = boardPermissionDefs().filter((d) => !excluded.has(d.key)).map((d) => d.key);
+  if (keys.length !== required.length) return false;
+  const set = new Set(keys);
+  return required.every((k) => set.has(k));
+}
+
+function boardAccessInferPresetFromKeys(keys) {
+  if (boardAccessMatchesTier(keys, BOARD_ACCESS_TIER_RESTRICTED)) return 'restricted';
+  if (!keys.length) return 'readonly';
+  if (boardAccessMatchesApprover(keys)) return 'approver';
+  if (boardAccessMatchesTier(keys, BOARD_ACCESS_TIER_OPERATION)) return 'operation';
+  if (boardAccessMatchesTier(keys, BOARD_ACCESS_TIER_BASIC)) return 'basic';
+  return null;
+}
+
+function boardAccessInferPreset(b) {
+  if (!b || b.is_super_admin) return null;
+  return boardAccessInferPresetFromKeys(boardAccessGrantedKeys(b));
+}
+
+function boardAccessPresetKeys(memberId) {
+  const keys = [];
+  for (const d of boardPermissionDefs()) {
+    const el = document.getElementById(`perm_${memberId}_${d.key}`);
+    if (el && el.checked) keys.push(d.key);
+  }
+  return keys;
+}
+
+function setBoardAccessPresetActive(preset) {
+  document.querySelectorAll('.board-access-preset-btn').forEach((btn) => {
+    btn.classList.toggle('is-active', !!preset && btn.dataset.preset === preset);
+  });
+}
+
+function syncBoardAccessPresetHighlight(memberId) {
+  setBoardAccessPresetActive(boardAccessInferPresetFromKeys(boardAccessPresetKeys(memberId)));
+}
+
 function boardPermissionDefByKey(key) {
   return boardPermissionDefs().find((d) => d.key === key);
 }
@@ -5575,7 +5621,7 @@ function boardPermToggleRow(id, def, b, canEdit) {
   return `<label class="board-access-perm-row${checked ? ' is-on' : ''}">
     <input type="checkbox" class="board-access-perm-input" id="perm_${id}_${key}" data-member="${id}" data-perm="${key}"
       ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''}
-      onchange="this.closest('.board-access-perm-row').classList.toggle('is-on', this.checked)">
+      onchange="this.closest('.board-access-perm-row').classList.toggle('is-on', this.checked); syncBoardAccessPresetHighlight(${id})">
     <span class="board-access-perm-copy">
       <span class="board-access-perm-label">${esc(def.label)}</span>
       <span class="board-access-perm-desc">${esc(def.desc || '')}</span>
@@ -5588,7 +5634,7 @@ function renderBoardAccessDetailPanel(b, canManage) {
     return `<div class="board-access-detail-empty">
       <div class="board-access-detail-empty-icon">🔐</div>
       <h3>Select a board member</h3>
-      <p>Choose someone from the list to review status and grant individual permissions.</p>
+      <p class="board-access-fine-print">Choose someone from the list to review status and grant individual permissions.</p>
     </div>`;
   }
 
@@ -5598,23 +5644,25 @@ function renderBoardAccessDetailPanel(b, canManage) {
   const canEditPerms = canManage && b.is_active && !b.is_super_admin && !isSelf;
 
   let actions = '';
-  if (canManage && b.is_active && !isSelf) {
+  if (canManage && b.is_active && !isSelf && !b.is_super_admin) {
     if (b.has_password) {
       actions += `<button type="button" class="btn sm" onclick="resetBoardPassword(${b.id})">Reset password</button>`;
     }
-    actions += `<button type="button" class="btn sm danger" onclick="deactivateBoardMember(${b.id})">Deactivate</button>`;
-  } else if (canManage && !b.is_active) {
-    actions = `<button type="button" class="btn sm primary" onclick="reactivateBoardMember(${b.id})">Re-invite</button>`;
+    actions += `<button type="button" class="btn sm danger" onclick="deactivateBoardMember(${b.id})">Remove</button>`;
+  } else if (canManage && !b.is_active && !isSelf && !b.is_super_admin) {
+    actions += `<button type="button" class="btn sm primary" onclick="reactivateBoardMember(${b.id})">Re-add</button>`;
   }
+
+  const accountSection = renderBoardAccessAccountSection(b, canManage, isSelf);
 
   const permGroups = b.is_super_admin
     ? `<div class="board-access-super-note">
         <span class="tracker-status paid"><span class="tracker-status-dot"></span>Super Admin</span>
-        <p>Full access to all areas. Managed via <code>BOARD_SUPER_ADMIN_EMAILS</code> in environment config — not editable here.</p>
+        <p class="board-access-fine-print">Full access to all areas. Managed via <code>BOARD_SUPER_ADMIN_EMAILS</code> in environment config — not editable here.</p>
       </div>`
     : !b.is_active || !b.has_password
-      ? `<div class="board-access-pending-note">
-          <p>${!b.has_password ? 'Pending first sign-in — they will create a password when they log in. You can pre-configure access below.' : 'Account deactivated. Re-invite to restore access.'}</p>
+      ? `<div class="board-access-pending-note board-access-fine-print">
+          <p>${!b.has_password ? 'Pending first sign-in — they will create a password when they log in. You can pre-configure access below.' : 'Access deactivated — use Re-add to restore sign-in.'}</p>
         </div>
         ${!b.is_active ? '' : BOARD_PERMISSION_GROUPS.map((group) => {
           const items = group.keys.map((key) => boardPermissionDefByKey(key)).filter(Boolean);
@@ -5633,14 +5681,15 @@ function renderBoardAccessDetailPanel(b, canManage) {
           </section>`;
         }).join('');
 
-  const presetBtns = canEditPerms ? `<div class="board-access-presets">
+  const activePreset = boardAccessInferPreset(b);
+  const presetBtn = (id, label) => `<button type="button" class="btn sm board-access-preset-btn${activePreset === id ? ' is-active' : ''}" data-preset="${id}" onclick="applyBoardAccessPreset('${id}')">${label}</button>`;
+  const presetBtns = canEditPerms ? `<div class="board-access-presets" id="boardAccessPresets">
     <span class="board-access-presets-label">Access tier:</span>
-    <button type="button" class="btn sm" onclick="applyBoardAccessPreset('restricted')">Restricted</button>
-    <button type="button" class="btn sm" onclick="applyBoardAccessPreset('readonly')">Read-only</button>
-    <button type="button" class="btn sm" onclick="applyBoardAccessPreset('basic')">Basic rights</button>
-    <button type="button" class="btn sm" onclick="applyBoardAccessPreset('operation')">Operation</button>
-    <button type="button" class="btn sm" onclick="applyBoardAccessPreset('approver')">Approver</button>
-    <span class="board-access-presets-hint">Restricted = read-only Members CRM. Read-only = view all sections except Security. Basic rights = view all + PayPal sync, board notes, contact messages. Operation = Basic + edit member records, reset PIN, approve PIN resets.</span>
+    ${presetBtn('restricted', 'Restricted')}
+    ${presetBtn('readonly', 'Read-only')}
+    ${presetBtn('basic', 'Basic rights')}
+    ${presetBtn('operation', 'Operation')}
+    ${presetBtn('approver', 'Approver')}
   </div>` : '';
 
   const saveBtn = canEditPerms
@@ -5651,7 +5700,6 @@ function renderBoardAccessDetailPanel(b, canManage) {
     ? `<div class="board-access-name-row">
         <label class="board-access-name-label" for="boardAccessName">Board display name</label>
         <input type="text" class="field-input board-access-name-input" id="boardAccessName" value="${esc(b.display_name || '')}" placeholder="Shown in Access Management only">
-        <span class="board-access-name-hint">${b.member_number != null ? `Linked to CRM #${esc(String(b.member_number))} — ` : ''}Member names are edited in <strong>Members CRM</strong>, not here.</span>
       </div>`
     : '';
 
@@ -5659,21 +5707,64 @@ function renderBoardAccessDetailPanel(b, canManage) {
     <header class="board-access-detail-head">
       <div>
         <h3 class="board-access-detail-email">${esc(boardMemberPrimaryLabel(b))}${isSelf ? ' <span class="board-access-you-tag">You</span>' : ''}</h3>
+        <div class="board-access-detail-login board-access-fine-print">
+          <span class="board-access-detail-login-label">Login email</span>
+          ${boardMemberLoginEmailsHtml(b)}
+        </div>
         <div class="board-access-detail-meta">
           <span class="tracker-status ${st.cls}"><span class="tracker-status-dot"></span>${st.text}</span>
           ${b.member_number != null ? `<span>Member #${esc(String(b.member_number))}</span>` : ''}
           ${String(b.role || '').toLowerCase() === 'advisor' ? '<span>Advisor</span>' : ''}
-          <span>Joined ${when}</span>
-          <span>${esc(boardAccessGrantedSummary(b))}</span>
+          <span class="board-access-fine-print">Joined ${when}</span>
+          <span class="board-access-fine-print">${esc(boardAccessGrantedSummary(b))}</span>
         </div>
       </div>
       <div class="board-access-detail-actions">${actions}</div>
     </header>
+    ${accountSection}
     ${nameField}
     ${presetBtns}
     <div class="board-access-detail-body">${permGroups}</div>
     ${saveBtn ? `<footer class="board-access-detail-foot">${saveBtn}</footer>` : ''}
   </div>`;
+}
+
+function renderBoardAccessAccountSection(b, canManage, isSelf) {
+  if (!canManage || !b) return '';
+  const logins = boardMemberLoginEmails(b);
+  const primaryEmail = logins[0] || '';
+
+  if (b.is_super_admin) {
+    return `<section class="board-access-account">
+      <h4 class="board-access-account-title">Board login</h4>
+      <p class="board-access-account-note board-access-fine-print">Super admins cannot be removed here. Update <code>BOARD_SUPER_ADMIN_EMAILS</code> in server config.</p>
+    </section>`;
+  }
+
+  if (isSelf) {
+    return `<section class="board-access-account">
+      <h4 class="board-access-account-title">Board login</h4>
+      <p class="board-access-account-note board-access-fine-print">You cannot remove or change your own login here. Ask another super admin.</p>
+    </section>`;
+  }
+
+  if (!b.is_active) {
+    return `<section class="board-access-account board-access-account--removed">
+      <h4 class="board-access-account-title">Board login</h4>
+      <p class="board-access-account-note board-access-fine-print">Deactivated — they cannot sign in. Use <strong>Re-add</strong> in the header to restore access. Their Members CRM record is unchanged.</p>
+    </section>`;
+  }
+
+  return `<section class="board-access-account">
+    <h4 class="board-access-account-title">Board login</h4>
+    <label class="board-access-name-label" for="boardAccessEmail">Login email</label>
+    <div class="board-access-email-row">
+      <input type="email" class="field-input board-access-email-input" id="boardAccessEmail" value="${esc(primaryEmail)}" placeholder="name@example.com"
+        onkeydown="if(event.key==='Enter')updateBoardMemberEmail(${b.id})">
+      <button type="button" class="btn sm" onclick="updateBoardMemberEmail(${b.id})">Update email</button>
+      <button type="button" class="btn sm danger" onclick="deactivateBoardMember(${b.id})">Remove board access</button>
+    </div>
+  </section>`;
 }
 
 function applyBoardAccessPreset(preset) {
@@ -5684,6 +5775,8 @@ function applyBoardAccessPreset(preset) {
   for (const d of defs) set[d.key] = false;
   if (preset === 'restricted') {
     for (const key of BOARD_ACCESS_TIER_RESTRICTED) set[key] = true;
+  } else if (preset === 'readonly') {
+    /* all false */
   } else if (preset === 'basic' || preset === 'notes') {
     for (const key of BOARD_ACCESS_TIER_BASIC) set[key] = true;
   } else if (preset === 'operation') {
@@ -5702,6 +5795,7 @@ function applyBoardAccessPreset(preset) {
       el.closest('.board-access-perm-row')?.classList.toggle('is-on', el.checked);
     }
   }
+  setBoardAccessPresetActive(preset === 'notes' ? 'basic' : preset);
 }
 
 function syncBoardAccessSelection() {
@@ -5717,11 +5811,24 @@ function syncBoardAccessSelection() {
 }
 
 function boardMemberPrimaryLabel(b) {
-  const name = (b?.display_name || '').trim();
+  const name = (b?.display_name || b?.member_full_name || '').trim();
   const num = b?.member_number != null ? Number(b.member_number) : null;
   if (num && name) return `#${num} ${name}`;
   if (name) return name;
-  return b?.email || 'Board member';
+  return boardMemberLoginEmails(b)[0] || b?.email || 'Board member';
+}
+
+function boardMemberLoginEmails(b) {
+  if (Array.isArray(b?.login_emails) && b.login_emails.length) return b.login_emails;
+  return b?.email ? [b.email] : [];
+}
+
+function boardMemberLoginEmailsHtml(b) {
+  const logins = boardMemberLoginEmails(b);
+  if (!logins.length) {
+    return '<span class="board-access-no-login">No login email — use Invite board member above</span>';
+  }
+  return logins.map((email) => `<span class="board-access-login-email">${esc(email)}</span>`).join('');
 }
 
 function boardAccessFilteredMembers() {
@@ -5734,6 +5841,7 @@ function boardAccessFilteredMembers() {
     const hay = [
       b.email,
       b.display_name,
+      b.member_full_name,
       ...logins,
       b.member_number != null ? `#${b.member_number}` : '',
       b.member_number != null ? String(b.member_number) : '',
@@ -5754,10 +5862,15 @@ function boardAccessMemberListItem(b, selected) {
   const summary = boardAccessGrantedSummary(b);
   const isSelf = adminUser && Number(adminUser.id) === Number(b.id);
   const primary = boardMemberPrimaryLabel(b);
+  const logins = boardMemberLoginEmails(b);
+  const loginHint = logins.length && primary !== logins[0] && !primary.includes('@')
+    ? `<span class="board-access-member-login">${esc(logins[0])}</span>`
+    : '';
   return `<button type="button" class="board-access-member-item${selected ? ' is-selected' : ''}"
     onclick="selectBoardMemberForAccess(${b.id})">
     <span class="board-access-member-main">
       <span class="board-access-member-email">${esc(primary)}${isSelf ? ' <span class="board-access-you-tag">You</span>' : ''}</span>
+      ${loginHint}
       <span class="board-access-member-summary">${esc(summary)}</span>
     </span>
     <span class="tracker-status ${st.cls} sm"><span class="tracker-status-dot"></span>${st.text}</span>
@@ -6031,18 +6144,19 @@ function renderBoardAccessView() {
     : `<div class="board-access-list-empty">${BOARD_MEMBERS.length ? 'No members match your search.' : 'No board logins yet.'}</div>`;
 
   const inviteBlock = canManage ? `<div class="board-access-invite">
-      <label class="admin-login-label" for="boardInviteEmail">Invite board member</label>
+      <div class="board-access-invite-head">
+        <h3 class="board-access-invite-title">Add board member</h3>
+      </div>
       <div class="board-access-invite-row">
         <input type="email" class="field-input" id="boardInviteEmail" placeholder="name@example.com"
           onkeydown="if(event.key==='Enter')inviteBoardMember()">
-        <button type="button" class="btn primary" onclick="inviteBoardMember()">Add email</button>
+        <button type="button" class="btn primary" onclick="inviteBoardMember()">Add board member</button>
       </div>
       <div class="board-access-invite-msg" id="boardInviteMsg"></div>
     </div>` : '';
 
   document.getElementById('mainArea').innerHTML = `
     ${trackerHeaderHtml(stats)}
-    <div class="tracker-banner tracker-intro-banner">Select a board member and set their access tier. <strong>Restricted</strong> = read-only Members CRM. <strong>Read-only</strong> can view everything except Security. <strong>Basic rights</strong> adds PayPal sync, board notes, and contact messages. <strong>Operation</strong> adds edit member records + reset/approve PIN resets.</div>
     ${inviteBlock || '<div class="tracker-banner" role="status">Only super admins can invite board members or change permissions.</div>'}
     <div class="board-access-shell">
       <aside class="board-access-list-panel">
@@ -6050,7 +6164,7 @@ function renderBoardAccessView() {
           <h3 class="board-access-list-title">Board members</h3>
           <span class="board-access-list-count">${BOARD_MEMBERS.length}</span>
         </div>
-        <input type="search" class="field-input board-access-search" id="boardAccessSearch" placeholder="Search by name or #…"
+        <input type="search" class="field-input board-access-search" id="boardAccessSearch" placeholder="Search by name, email, or #…"
           value="${esc(boardAccessFilter)}"
           oninput="filterBoardAccessList(this.value)">
         <div class="board-access-member-list">${listHtml}</div>
@@ -6136,29 +6250,54 @@ async function inviteBoardMember() {
 
 async function deactivateBoardMember(id) {
   const b = BOARD_MEMBERS.find(x => Number(x.id) === Number(id));
-  const email = b?.email || 'this account';
-  if (!confirm('Deactivate board access for ' + email + '?')) return;
+  const email = boardMemberLoginEmails(b)[0] || b?.email || boardMemberPrimaryLabel(b) || 'this person';
+  if (!confirm('Deactivate board access for ' + email + '?\n\nThey will stay in this list as Deactivated and cannot sign in until you Re-add them.')) return;
   try {
     await apiPost('auth/admin/board-members/' + id + '/deactivate', {});
     showAdminToast('Board access deactivated.', 'ok');
     await fetchBoardMembers();
     renderBoardAccessView();
   } catch (e) {
-    alert(e.message || 'Could not deactivate.');
+    alert(e.message || 'Could not remove board member.');
+  }
+}
+
+async function updateBoardMemberEmail(id) {
+  const input = document.getElementById('boardAccessEmail');
+  const email = (input?.value || '').trim();
+  if (!email) {
+    showAdminToast('Enter a login email.', 'error');
+    return;
+  }
+  const b = BOARD_MEMBERS.find((x) => Number(x.id) === Number(id));
+  const current = boardMemberLoginEmails(b)[0] || '';
+  if (email.toLowerCase() === String(current).toLowerCase()) {
+    showAdminToast('Login email unchanged.', 'info');
+    return;
+  }
+  if (!confirm('Change login email to ' + email + '?')) return;
+  try {
+    await apiPost('auth/admin/board-members/' + id + '/update-email', { email });
+    showAdminToast('Login email updated.', 'ok');
+    await fetchBoardMembers();
+    boardAccessSelectedId = Number(id);
+    renderBoardAccessView();
+  } catch (e) {
+    showAdminToast(e.message || 'Could not update email.', 'error');
   }
 }
 
 async function reactivateBoardMember(id) {
   const b = BOARD_MEMBERS.find(x => Number(x.id) === Number(id));
-  const email = b?.email || 'this account';
-  if (!confirm('Re-invite ' + email + '? They will create a new password on next sign-in.')) return;
+  const email = boardMemberLoginEmails(b)[0] || b?.email || boardMemberPrimaryLabel(b) || 'this person';
+  if (!confirm('Re-add ' + email + '?\n\nThey will create a new password on next sign-in.')) return;
   try {
     await apiPost('auth/admin/board-members/' + id + '/reactivate', {});
-    showAdminToast('Re-invited. They must set a new password.', 'ok');
+    showAdminToast('Board member re-added. They must set a new password.', 'ok');
     await fetchBoardMembers();
     renderBoardAccessView();
   } catch (e) {
-    alert(e.message || 'Could not re-invite.');
+    alert(e.message || 'Could not re-add board member.');
   }
 }
 
@@ -6940,6 +7079,22 @@ async function saveMemberEdit() {
 function showAdminApp() {
   document.getElementById('adminLoginScreen').style.display = 'none';
   document.getElementById('adminShell').style.display = '';
+  updateAdminSignOutVisibility();
+}
+
+function updateAdminSignOutVisibility() {
+  const shell = document.getElementById('adminShell');
+  const login = document.getElementById('adminLoginScreen');
+  const appOpen = shell && shell.style.display !== 'none'
+    && (!login || login.style.display === 'none');
+  const show = appOpen && !!adminUser
+    && (!ADMIN_AUTH_ENABLED || !!getAdminToken());
+  const sidebar = document.getElementById('adminSignOutBtn');
+  const top = document.getElementById('adminTopSignOutBtn');
+  const mob = document.getElementById('mobAdminSignOutBtn');
+  if (sidebar) sidebar.style.display = show ? 'flex' : 'none';
+  if (top) top.style.display = show ? 'inline-flex' : 'none';
+  if (mob) mob.style.display = show ? 'flex' : 'none';
 }
 
 function adminLoginClearMessages() {
@@ -6961,6 +7116,7 @@ function adminLoginShowMessage(type, text) {
 function showAdminLogin() {
   document.getElementById('adminLoginScreen').style.display = 'flex';
   document.getElementById('adminShell').style.display = 'none';
+  updateAdminSignOutVisibility();
   adminLoginEmail = '';
   adminPasswordResetToken = '';
   adminLoginClearMessages();
@@ -7235,6 +7391,7 @@ async function bootAdmin() {
   }
   applyAdminRouteFromUrl();
   window.addEventListener('hashchange', () => applyAdminRouteFromUrl());
+  updateAdminSignOutVisibility();
   if (adminBackgroundFetch) adminBackgroundFetch = null;
   adminBackgroundFetch = Promise.all([
     fetchAdminSecondary(),
@@ -7271,10 +7428,6 @@ async function init() {
     ADMIN_AUTH_ENABLED = false;
   }
 
-  document.getElementById('adminSignOutBtn').style.display = ADMIN_AUTH_ENABLED ? '' : 'none';
-  const mobSignOut = document.getElementById('mobAdminSignOutBtn');
-  if (mobSignOut) mobSignOut.style.display = ADMIN_AUTH_ENABLED ? '' : 'none';
-
   if (!ADMIN_AUTH_ENABLED) {
     adminUser = {
       email: 'dev',
@@ -7294,6 +7447,7 @@ async function init() {
       can_manage_board: true,
     };
     await bootAdmin();
+    updateAdminSignOutVisibility();
     return;
   }
 
@@ -7318,6 +7472,7 @@ async function init() {
     localStorage.removeItem(ADMIN_TOKEN_KEY);
     showAdminLogin();
   }
+  updateAdminSignOutVisibility();
 }
 
 init();
