@@ -492,6 +492,19 @@ CREATE TABLE IF NOT EXISTS member_board_assignments (
 
 CREATE INDEX IF NOT EXISTS idx_member_board_assignments_board ON member_board_assignments(board_member_id);
 
+-- Board admin self-service password reset (email link).
+CREATE TABLE IF NOT EXISTS board_password_reset_tokens (
+  id SERIAL PRIMARY KEY,
+  board_member_id INTEGER NOT NULL REFERENCES board_members(id) ON DELETE CASCADE,
+  token_hash VARCHAR(64) NOT NULL,
+  expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  used_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_board_pwd_reset_hash ON board_password_reset_tokens(token_hash);
+CREATE INDEX IF NOT EXISTS idx_board_pwd_reset_member ON board_password_reset_tokens(board_member_id, created_at DESC);
+
 -- Grant follow_up to active board logins except Restricted (CRM-only) advisors.
 UPDATE board_members bm
 SET board_perms = board_perms || '{"follow_up": true}'::jsonb

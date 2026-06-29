@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/css/admin-tracker.css?v=admin53">
+<link rel="stylesheet" href="/css/admin-tracker.css?v=admin54">
 <link rel="stylesheet" href="/css/admin-tracker-mh.css?v=1">
 </head>
 <body class="app-admin tracker">
@@ -22,10 +22,12 @@
       </div>
     </div>
     <div class="admin-login-err" id="adminLoginErr"></div>
+    <div class="admin-login-ok" id="adminLoginOk"></div>
     <div id="adminLoginStepEmail">
       <label class="admin-login-label">Email</label>
       <input type="email" class="admin-login-input" id="adminEmail" placeholder="board@example.com" autocomplete="username"
         onkeydown="if(event.key==='Enter')adminLoginContinue()">
+      <button class="admin-login-forgot" type="button" onclick="adminForgotPasswordStart()">Forgot password?</button>
       <button class="btn primary" type="button" onclick="adminLoginContinue()">Continue →</button>
     </div>
     <div id="adminLoginStepPassword" style="display:none">
@@ -33,8 +35,27 @@
       <label class="admin-login-label">Password</label>
       <input type="password" class="admin-login-input" id="adminPassword" placeholder="Password" autocomplete="current-password"
         onkeydown="if(event.key==='Enter')adminLogin()">
+      <button class="admin-login-forgot" type="button" onclick="adminForgotPasswordStart()">Forgot password?</button>
       <button class="btn primary" type="button" onclick="adminLogin()">Sign In</button>
       <button class="btn-link admin-login-back" type="button" onclick="adminLoginBack()">← Use a different email</button>
+    </div>
+    <div id="adminLoginStepForgot" style="display:none">
+      <p class="admin-login-hint">Enter your board email and we will send a link to reset your password.</p>
+      <label class="admin-login-label">Email</label>
+      <input type="email" class="admin-login-input" id="adminForgotEmail" placeholder="board@example.com" autocomplete="username"
+        onkeydown="if(event.key==='Enter')adminForgotPasswordSubmit()">
+      <button class="btn primary" type="button" onclick="adminForgotPasswordSubmit()">Send reset link</button>
+      <button class="btn-link admin-login-back" type="button" onclick="adminLoginBack()">← Back to sign in</button>
+    </div>
+    <div id="adminLoginStepReset" style="display:none">
+      <p class="admin-login-hint" id="adminResetEmailHint">Choose a new password for your board account.</p>
+      <label class="admin-login-label">New password</label>
+      <input type="password" class="admin-login-input" id="adminResetPassword" placeholder="New password" autocomplete="new-password">
+      <label class="admin-login-label">Confirm password</label>
+      <input type="password" class="admin-login-input" id="adminResetPasswordConfirm" placeholder="Confirm password" autocomplete="new-password"
+        onkeydown="if(event.key==='Enter')adminResetPasswordSubmit()">
+      <button class="btn primary" type="button" onclick="adminResetPasswordSubmit()">Save password &amp; sign in</button>
+      <button class="btn-link admin-login-back" type="button" onclick="adminForgotPasswordStart()">Request a new reset link</button>
     </div>
     <div id="adminLoginStepSetup" style="display:none">
       <p class="admin-login-hint" id="adminSetupEmailHint"></p>
@@ -527,6 +548,7 @@ const ADMIN_CACHE_KEY = 'hibret_admin_boot_cache_v3';
 const ADMIN_CACHE_MS = 10 * 60 * 1000;
 const adminSectionsLoaded = { applications: false, receipts: false, inbox: false, activity: false, payouts: false, boardAccess: false };
 let adminLoginEmail = '';
+let adminPasswordResetToken = '';
 let adminBackgroundFetch = null;
 let markPaidTarget = null;
 let pendingMarkPaidByInvoice = new Map();
@@ -6920,50 +6942,157 @@ function showAdminApp() {
   document.getElementById('adminShell').style.display = '';
 }
 
+function adminLoginClearMessages() {
+  const err = document.getElementById('adminLoginErr');
+  const ok = document.getElementById('adminLoginOk');
+  if (err) { err.textContent = ''; err.classList.remove('show'); err.style.display = 'none'; }
+  if (ok) { ok.textContent = ''; ok.classList.remove('show'); ok.style.display = 'none'; }
+}
+
+function adminLoginShowMessage(type, text) {
+  adminLoginClearMessages();
+  const el = document.getElementById(type === 'ok' ? 'adminLoginOk' : 'adminLoginErr');
+  if (!el) return;
+  el.textContent = text;
+  el.classList.add('show');
+  el.style.display = 'block';
+}
+
 function showAdminLogin() {
   document.getElementById('adminLoginScreen').style.display = 'flex';
   document.getElementById('adminShell').style.display = 'none';
   adminLoginEmail = '';
+  adminPasswordResetToken = '';
+  adminLoginClearMessages();
+  const resetFromUrl = new URLSearchParams(window.location.search).get('reset');
+  if (resetFromUrl) {
+    adminPasswordResetToken = resetFromUrl;
+    adminLoginShowStep('reset');
+    validateAdminResetTokenFromUrl(resetFromUrl);
+    return;
+  }
   adminLoginShowStep('email');
-  const err = document.getElementById('adminLoginErr');
-  if (err) { err.textContent = ''; err.classList.remove('show'); err.style.display = 'none'; }
+}
+
+async function validateAdminResetTokenFromUrl(token) {
+  try {
+    const res = await apiGet('auth/admin/reset-password?token=' + encodeURIComponent(token));
+    const hint = document.getElementById('adminResetEmailHint');
+    if (hint && res.email) {
+      hint.textContent = `Choose a new password for ${res.email}.`;
+    }
+  } catch (e) {
+    adminLoginShowMessage('err', e.message || 'This reset link is invalid or has expired.');
+  }
 }
 
 function adminLoginShowStep(step) {
   const emailStep = document.getElementById('adminLoginStepEmail');
   const passStep = document.getElementById('adminLoginStepPassword');
   const setupStep = document.getElementById('adminLoginStepSetup');
+  const forgotStep = document.getElementById('adminLoginStepForgot');
+  const resetStep = document.getElementById('adminLoginStepReset');
   const sub = document.getElementById('adminLoginSub');
   if (emailStep) emailStep.style.display = step === 'email' ? '' : 'none';
   if (passStep) passStep.style.display = step === 'password' ? '' : 'none';
   if (setupStep) setupStep.style.display = step === 'setup' ? '' : 'none';
+  if (forgotStep) forgotStep.style.display = step === 'forgot' ? '' : 'none';
+  if (resetStep) resetStep.style.display = step === 'reset' ? '' : 'none';
   if (sub) {
     sub.textContent = step === 'setup'
       ? 'First-time setup — create your password'
-      : 'Sign in to manage members & invoices';
+      : step === 'forgot'
+        ? 'Reset your password'
+        : step === 'reset'
+          ? 'Create a new password'
+          : 'Sign in to manage members & invoices';
+  }
+}
+
+function adminForgotPasswordStart() {
+  adminLoginClearMessages();
+  const forgotEmail = document.getElementById('adminForgotEmail');
+  if (forgotEmail) {
+    forgotEmail.value = adminLoginEmail || document.getElementById('adminEmail')?.value.trim() || '';
+  }
+  adminLoginShowStep('forgot');
+  setTimeout(() => forgotEmail?.focus(), 50);
+}
+
+async function adminForgotPasswordSubmit() {
+  const email = document.getElementById('adminForgotEmail')?.value.trim();
+  adminLoginClearMessages();
+  if (!email) {
+    adminLoginShowMessage('err', 'Enter your email.');
+    return;
+  }
+  try {
+    const res = await apiPost('auth/admin/forgot-password', { email });
+    adminLoginShowMessage('ok', res.message || 'If that email is on the board access list, we sent a reset link.');
+  } catch (e) {
+    adminLoginShowMessage('err', e.message || 'Could not send reset email.');
+  }
+}
+
+async function adminResetPasswordSubmit() {
+  const password = document.getElementById('adminResetPassword')?.value || '';
+  const confirm = document.getElementById('adminResetPasswordConfirm')?.value || '';
+  adminLoginClearMessages();
+  if (!adminPasswordResetToken) {
+    adminLoginShowMessage('err', 'Reset link is missing. Request a new one.');
+    adminForgotPasswordStart();
+    return;
+  }
+  if (password.length < 8) {
+    adminLoginShowMessage('err', 'Password must be at least 8 characters.');
+    return;
+  }
+  if (password !== confirm) {
+    adminLoginShowMessage('err', 'Passwords do not match.');
+    return;
+  }
+  try {
+    const res = await apiPost('auth/admin/reset-password', {
+      token: adminPasswordResetToken,
+      password,
+      confirmPassword: confirm,
+    });
+    if (res.token) {
+      localStorage.setItem(ADMIN_TOKEN_KEY, res.token);
+      adminUser = res.admin;
+      adminPasswordResetToken = '';
+      if (window.history.replaceState) {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+      showAdminApp();
+      await bootAdmin();
+    }
+  } catch (e) {
+    adminLoginShowMessage('err', e.message || 'Could not reset password.');
   }
 }
 
 function adminLoginBack() {
   adminLoginEmail = '';
+  adminPasswordResetToken = '';
   document.getElementById('adminPassword').value = '';
   document.getElementById('adminSetupPassword').value = '';
   document.getElementById('adminSetupPasswordConfirm').value = '';
+  document.getElementById('adminResetPassword').value = '';
+  document.getElementById('adminResetPasswordConfirm').value = '';
+  adminLoginClearMessages();
+  if (window.history.replaceState && window.location.search.includes('reset=')) {
+    window.history.replaceState({}, '', window.location.pathname);
+  }
   adminLoginShowStep('email');
-  const err = document.getElementById('adminLoginErr');
-  if (err) { err.textContent = ''; err.classList.remove('show'); err.style.display = 'none'; }
   setTimeout(() => document.getElementById('adminEmail')?.focus(), 50);
 }
 
 async function adminLoginContinue() {
   const email = document.getElementById('adminEmail').value.trim();
-  const err = document.getElementById('adminLoginErr');
-  err.classList.remove('show');
-  err.style.display = 'none';
+  adminLoginClearMessages();
   if (!email) {
-    err.textContent = 'Enter your email.';
-    err.classList.add('show');
-    err.style.display = 'block';
+    adminLoginShowMessage('err', 'Enter your email.');
     return;
   }
   try {
@@ -6979,32 +7108,24 @@ async function adminLoginContinue() {
       setTimeout(() => document.getElementById('adminPassword')?.focus(), 50);
     }
   } catch (e) {
-    err.textContent = e.message || 'Could not verify email.';
-    err.classList.add('show');
-    err.style.display = 'block';
+    adminLoginShowMessage('err', e.message || 'Could not verify email.');
   }
 }
 
 async function adminSetupPassword() {
   const password = document.getElementById('adminSetupPassword').value;
   const confirm = document.getElementById('adminSetupPasswordConfirm').value;
-  const err = document.getElementById('adminLoginErr');
-  err.classList.remove('show');
-  err.style.display = 'none';
+  adminLoginClearMessages();
   if (!adminLoginEmail) {
     adminLoginShowStep('email');
     return;
   }
   if (password.length < 8) {
-    err.textContent = 'Password must be at least 8 characters.';
-    err.classList.add('show');
-    err.style.display = 'block';
+    adminLoginShowMessage('err', 'Password must be at least 8 characters.');
     return;
   }
   if (password !== confirm) {
-    err.textContent = 'Passwords do not match.';
-    err.classList.add('show');
-    err.style.display = 'block';
+    adminLoginShowMessage('err', 'Passwords do not match.');
     return;
   }
   try {
@@ -7020,18 +7141,14 @@ async function adminSetupPassword() {
       await bootAdmin();
     }
   } catch (e) {
-    err.textContent = e.message || 'Could not create password.';
-    err.classList.add('show');
-    err.style.display = 'block';
+    adminLoginShowMessage('err', e.message || 'Could not create password.');
   }
 }
 
 async function adminLogin() {
   const email = adminLoginEmail || document.getElementById('adminEmail').value.trim();
   const password = document.getElementById('adminPassword').value;
-  const err = document.getElementById('adminLoginErr');
-  err.classList.remove('show');
-  err.style.display = 'none';
+  adminLoginClearMessages();
   try {
     const res = await apiPost('auth/admin/login', { email, password });
     if (res.needsSetup) {
@@ -7053,9 +7170,7 @@ async function adminLogin() {
       document.getElementById('adminSetupEmailHint').textContent = email;
       return;
     }
-    err.textContent = e.message || 'Sign in failed';
-    err.classList.add('show');
-    err.style.display = 'block';
+    adminLoginShowMessage('err', e.message || 'Sign in failed');
   }
 }
 
@@ -7179,6 +7294,12 @@ async function init() {
       can_manage_board: true,
     };
     await bootAdmin();
+    return;
+  }
+
+  const resetFromUrl = new URLSearchParams(window.location.search).get('reset');
+  if (resetFromUrl) {
+    showAdminLogin();
     return;
   }
 

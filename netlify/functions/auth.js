@@ -6,6 +6,7 @@
 //   JWT_SECRET
 //   JWT_EXPIRES_IN
 
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { getDb } = require('./db');
@@ -25,7 +26,7 @@ const {
   BOARD_PERMISSION_DEFS,
   defaultInvitePerms,
 } = require('./board-permissions');
-const { notifyBoard } = require('./notify');
+const { notifyBoard, sendEmail, getPublicSiteUrl } = require('./notify');
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -565,6 +566,197 @@ async function setupAdminPassword(body) {
   return jsonResponse(200, { token, admin: buildAdminPayload(admin) });
 }
 
+const BOARD_PWD_RESET_HOURS = 1;
+
+function hashBoardResetToken(token) {
+  return crypto.createHash('sha256').update(String(token || '')).digest('hex');
+}
+
+function generateBoardResetToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+async function ensureBoardPasswordResetTable(db) {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS board_password_reset_tokens (
+      id SERIAL PRIMARY KEY,
+      board_member_id INTEGER NOT NULL REFERENCES board_members(id) ON DELETE CASCADE,
+      token_hash VARCHAR(64) NOT NULL,
+      expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+      used_at TIMESTAMP WITH TIME ZONE,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    )`);
+  await db.query(`
+    CREATE INDEX IF NOT EXISTS idx_board_pwd_reset_hash
+    ON board_password_reset_tokens(token_hash)`);
+}
+
+async function requestAdminPasswordReset(body) {
+  const email = normalizeAdminEmail(body.email);
+  if (!email) return jsonResponse(400, { error: 'Email is required.' });
+  if (!adminAuthRequired()) {
+    return jsonResponse(400, { error: 'Password reset is only available when board sign-in is enabled.' });
+  }
+  if (!process.env.DATABASE_URL) {
+    return jsonResponse(503, { error: 'Password reset requires a database connection.' });
+  }
+
+  const genericOk = {
+    ok: true,
+    message: 'If that email is on the board access list, we sent a password reset link. Check your inbox and spam folder.',
+  };
+
+  const admin = await findAdmin({ email });
+  if (!admin || !admin.is_active) {
+    return jsonResponse(200, genericOk);
+  }
+
+  const db = getDb();
+  await ensureBoardPasswordResetTable(db);
+
+  const rawToken = generateBoardResetToken();
+  const tokenHash = hashBoardResetToken(rawToken);
+  const expiresAt = new Date(Date.now() + BOARD_PWD_RESET_HOURS * 60 * 60 * 1000);
+
+  await db.query(
+    `UPDATE board_password_reset_tokens
+     SET used_at = NOW()
+     WHERE board_member_id = $1 AND used_at IS NULL`,
+    [admin.id]
+  );
+  await db.query(
+    `INSERT INTO board_password_reset_tokens (board_member_id, token_hash, expires_at)
+     VALUES ($1, $2, $3)`,
+    [admin.id, tokenHash, expiresAt]
+  );
+
+  const resetUrl = `${getPublicSiteUrl()}/admin/?reset=${encodeURIComponent(rawToken)}`;
+  const subject = 'Hibret Edir — reset your board admin password';
+  const text = [
+    'Hello,',
+    '',
+    'We received a request to reset the password for your Hibret Edir board admin account.',
+    '',
+    `Reset your password (link expires in ${BOARD_PWD_RESET_HOURS} hour):`,
+    resetUrl,
+    '',
+    'If you did not request this, you can ignore this email. Your password will not change.',
+    '',
+    'Hibret Edir Association',
+  ].join('\n');
+  const html = `
+    <p>Hello,</p>
+    <p>We received a request to reset the password for your <strong>Hibret Edir board admin</strong> account.</p>
+    <p><a href="${resetUrl}">Reset your password</a> (link expires in ${BOARD_PWD_RESET_HOURS} hour)</p>
+    <p style="font-size:12px;color:#666">If the button does not work, copy this link:<br>${resetUrl}</p>
+    <p>If you did not request this, you can ignore this email.</p>
+    <p>— Hibret Edir Association</p>`;
+
+  const mailTo = email;
+  try {
+    const sent = await sendEmail({ to: mailTo, subject, text, html });
+    if (sent.skipped) {
+      console.warn('[auth] password reset email skipped — SendGrid not configured');
+    }
+  } catch (mailErr) {
+    console.error('[auth] password reset email failed:', mailErr.message);
+    return jsonResponse(500, { error: 'Could not send reset email. Try again or contact an administrator.' });
+  }
+
+  await logActivity(db, {
+    actor_type: 'board',
+    board_member_id: admin.id,
+    actor_label: admin.email,
+    action: 'board.password_reset_requested',
+    entity_type: 'board_members',
+    record_id: admin.id,
+    summary: `Password reset email sent to ${mailTo}`,
+  });
+
+  return jsonResponse(200, genericOk);
+}
+
+async function findValidBoardResetToken(db, rawToken) {
+  if (!rawToken || String(rawToken).length < 32) return null;
+  await ensureBoardPasswordResetTable(db);
+  const tokenHash = hashBoardResetToken(rawToken);
+  const result = await db.query(
+    `SELECT t.id, t.board_member_id, t.expires_at, bm.email, bm.is_active
+     FROM board_password_reset_tokens t
+     JOIN board_members bm ON bm.id = t.board_member_id
+     WHERE t.token_hash = $1
+       AND t.used_at IS NULL
+       AND t.expires_at > NOW()
+     LIMIT 1`,
+    [tokenHash]
+  );
+  return result.rows[0] || null;
+}
+
+async function validateAdminPasswordReset(query) {
+  const rawToken = query.token || query.reset;
+  if (!rawToken) return jsonResponse(400, { error: 'Reset token is required.' });
+  if (!process.env.DATABASE_URL) {
+    return jsonResponse(503, { error: 'Password reset requires a database connection.' });
+  }
+  const db = getDb();
+  const row = await findValidBoardResetToken(db, rawToken);
+  if (!row || !row.is_active) {
+    return jsonResponse(400, { error: 'This reset link is invalid or has expired. Request a new one.' });
+  }
+  return jsonResponse(200, { ok: true, email: row.email });
+}
+
+async function completeAdminPasswordReset(body) {
+  const rawToken = body.token || body.reset;
+  const password = body.password;
+  const confirm = body.confirmPassword || body.confirm_password;
+  if (!rawToken) return jsonResponse(400, { error: 'Reset token is required.' });
+  const pwdErr = validateAdminPassword(password);
+  if (pwdErr) return jsonResponse(400, { error: pwdErr });
+  if (password !== confirm) return jsonResponse(400, { error: 'Passwords do not match.' });
+  if (!process.env.DATABASE_URL) {
+    return jsonResponse(503, { error: 'Password reset requires a database connection.' });
+  }
+
+  const db = getDb();
+  const row = await findValidBoardResetToken(db, rawToken);
+  if (!row || !row.is_active) {
+    return jsonResponse(400, { error: 'This reset link is invalid or has expired. Request a new one.' });
+  }
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  await db.query('UPDATE board_members SET password_hash = $1 WHERE id = $2', [passwordHash, row.board_member_id]);
+  await db.query(
+    `UPDATE board_password_reset_tokens SET used_at = NOW() WHERE id = $1`,
+    [row.id]
+  );
+  await db.query(
+    `UPDATE board_password_reset_tokens SET used_at = NOW()
+     WHERE board_member_id = $1 AND used_at IS NULL`,
+    [row.board_member_id]
+  );
+
+  const admin = await findAdmin({ email: row.email });
+  if (!admin) {
+    return jsonResponse(500, { error: 'Could not complete password reset.' });
+  }
+
+  await logActivity(db, {
+    actor_type: 'board',
+    board_member_id: admin.id,
+    actor_label: admin.email,
+    action: 'board.password_reset_completed',
+    entity_type: 'board_members',
+    record_id: admin.id,
+    summary: `Board password reset via email link: ${admin.email}`,
+  });
+
+  const token = await issueAdminToken(admin);
+  await logAdminSignIn(admin, 'board.login', `Board sign-in after password reset: ${admin.email}`);
+  return jsonResponse(200, { ok: true, token, admin: buildAdminPayload(admin) });
+}
+
 async function listBoardMembers() {
   const db = getDb();
   await syncSuperAdminFlags(db);
@@ -976,6 +1168,19 @@ exports.handler = async (event, context) => {
 
     if (event.httpMethod === 'POST' && path === '/admin/setup-password') {
       return await setupAdminPassword(body);
+    }
+
+    if (event.httpMethod === 'POST' && path === '/admin/forgot-password') {
+      return await requestAdminPasswordReset(body);
+    }
+
+    if (event.httpMethod === 'GET' && path === '/admin/reset-password') {
+      const query = event.queryStringParameters || {};
+      return await validateAdminPasswordReset(query);
+    }
+
+    if (event.httpMethod === 'POST' && path === '/admin/reset-password') {
+      return await completeAdminPasswordReset(body);
     }
 
     const boardMembersPath = parseBoardMembersPath(path);
