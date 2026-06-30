@@ -484,7 +484,8 @@ let ADMIN_AUTH_ENABLED = false;
 
 let adminUser = null;
 let adminDataError = null;
-let reportLabel = 'Report as of today · PayPal Export';
+let reportLabel = 'Report as of today · PayPal sync';
+let serverPayPalLastSync = null;
 let dataSource = 'api';
 
 let memberEdits = {};
@@ -1744,11 +1745,55 @@ function invoicePreferRank(inv) {
   return rank;
 }
 
-function paypalReportLabel(iso) {
-  if (!iso) return reportLabel;
+function formatPayPalSyncDate(iso) {
   const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return reportLabel;
-  return `Report as of ${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} · PayPal sync`;
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleDateString('en-US', {
+    timeZone: 'America/Los_Angeles',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+function getStoredPayPalSyncIso() {
+  try {
+    return localStorage.getItem(PAYPAL_SYNC_KEY) || null;
+  } catch {
+    return null;
+  }
+}
+
+function pickLatestPayPalSyncIso(...candidates) {
+  let best = null;
+  let bestTime = 0;
+  for (const iso of candidates) {
+    if (!iso) continue;
+    const t = new Date(iso).getTime();
+    if (!Number.isNaN(t) && t > bestTime) {
+      bestTime = t;
+      best = iso;
+    }
+  }
+  return best;
+}
+
+function applyPayPalSyncReportLabel(preferredIso) {
+  const iso = pickLatestPayPalSyncIso(preferredIso, serverPayPalLastSync, getStoredPayPalSyncIso());
+  if (!iso) return;
+  try {
+    localStorage.setItem(PAYPAL_SYNC_KEY, iso);
+  } catch { /* private mode */ }
+  const labelDate = formatPayPalSyncDate(iso);
+  if (labelDate) {
+    reportLabel = `Report as of ${labelDate} · PayPal sync`;
+  }
+}
+
+function paypalReportLabel(iso) {
+  const labelDate = formatPayPalSyncDate(iso);
+  if (!labelDate) return reportLabel;
+  return `Report as of ${labelDate} · PayPal sync`;
 }
 
 async function fetchPayPalBalance(force = false) {
@@ -1806,8 +1851,8 @@ async function syncPayPalInvoices(options = {}) {
     }
 
     const syncedAt = lastRes?.synced_at || new Date().toISOString();
-    localStorage.setItem(PAYPAL_SYNC_KEY, syncedAt);
-    reportLabel = paypalReportLabel(syncedAt);
+    serverPayPalLastSync = syncedAt;
+    applyPayPalSyncReportLabel(syncedAt);
     sessionStorage.removeItem(ADMIN_CACHE_KEY);
     invoicesFullyLoaded = false;
     if (!silent) {
@@ -1819,6 +1864,7 @@ async function syncPayPalInvoices(options = {}) {
       );
     }
     await fetchAdminCore({ forceInvoices: true });
+    applyPayPalSyncReportLabel(syncedAt);
     await fetchAllInvoices();
     await fetchPayPalBalance(true);
     invalidateAdminCaches();
@@ -1942,6 +1988,7 @@ async function fetchAdminCore(options = {}) {
 
   if (!restricted && statsResult && statsResult.status === 'fulfilled') {
     INVOICE_STATS = statsResult.value?.stats ?? null;
+    serverPayPalLastSync = INVOICE_STATS?.paypal_last_sync_at || serverPayPalLastSync;
     statsCache = null;
   }
 
@@ -1965,7 +2012,10 @@ async function fetchAdminCore(options = {}) {
     }
   }
 
-  if (apiLoaded) writeAdminCache();
+  if (apiLoaded) {
+    writeAdminCache();
+    applyPayPalSyncReportLabel();
+  }
 
   if (!apiLoaded) {
     try {
@@ -1973,7 +2023,8 @@ async function fetchAdminCore(options = {}) {
       if (!INVOICES.length) {
         INVOICES.splice(0, INVOICES.length, ...dedupeInvoicesByNumber(snap.invoices || []));
       }
-      reportLabel = snap.report_label || reportLabel;
+      /* Never use stale snapshot date — keep server/local sync time only */
+      applyPayPalSyncReportLabel();
       dataSource = 'snapshot';
       if (!INVOICES.length && !MEMBERS.length) {
         adminDataError = 'No invoice data found. Run: python scripts/build_invoice_snapshot.py';
@@ -1985,6 +2036,7 @@ async function fetchAdminCore(options = {}) {
     }
   } else {
     dataSource = 'api';
+    applyPayPalSyncReportLabel();
     if (!MEMBERS.length) {
       adminDataError = 'No members returned from API. Run npm run seed if the database is empty.';
     }
@@ -2198,6 +2250,8 @@ async function refreshInvoiceStatsOnly() {
   try {
     const res = await apiGet('portal/invoice-stats');
     INVOICE_STATS = res?.stats ?? INVOICE_STATS;
+    serverPayPalLastSync = INVOICE_STATS?.paypal_last_sync_at || serverPayPalLastSync;
+    applyPayPalSyncReportLabel();
     statsCache = null;
   } catch (e) {
     console.warn('Invoice stats refresh failed:', e.message || e);
@@ -7364,8 +7418,7 @@ async function bootAdmin() {
   showAdminApp();
   const cached = readAdminCache();
   const hadCache = hydrateAdminCache(cached);
-  const lastSync = localStorage.getItem(PAYPAL_SYNC_KEY);
-  if (lastSync) reportLabel = paypalReportLabel(lastSync);
+  applyPayPalSyncReportLabel();
   if (hadCache) {
     if (INVOICES.length && MEMBERS.length) {
       rebuildInvoiceMemberMap();
@@ -7382,7 +7435,7 @@ async function bootAdmin() {
       rebuildInvoiceMemberMap();
       getTrackerInvoices();
     }
-    if (lastSync) reportLabel = paypalReportLabel(lastSync);
+    applyPayPalSyncReportLabel();
     render();
   } catch (e) {
     console.error('Admin boot failed:', e);

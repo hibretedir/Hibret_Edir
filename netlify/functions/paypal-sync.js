@@ -524,6 +524,7 @@ async function syncInvoicesToDb(paypalItems) {
 
   const withEvent = paypalItems.filter((item) => extractEventFromItems(item).event_number).length;
 
+  const synced_at = new Date().toISOString();
   return {
     ok: true,
     paypal_total: paypalItems.length,
@@ -537,8 +538,34 @@ async function syncInvoicesToDb(paypalItems) {
     unpaid_on_paypal: paypalItems.length - paid - partial,
     partial_reconciled,
     membership_completed,
-    synced_at: new Date().toISOString(),
+    synced_at,
   };
+}
+
+async function logPayPalSyncActivity(db, result, adminPayload) {
+  if (!db || !result) return;
+  const syncedAt = result.synced_at || new Date().toISOString();
+  const { logActivity } = require('./audit');
+  let actorLabel = 'System';
+  let boardMemberId = null;
+  if (adminPayload) {
+    actorLabel = adminPayload.email || adminPayload.name || 'Board';
+    boardMemberId = adminPayload.board_member_id ?? adminPayload.id ?? null;
+  }
+  await logActivity(db, {
+    actor_type: adminPayload ? 'board' : 'system',
+    board_member_id: boardMemberId,
+    actor_label: actorLabel,
+    action: 'paypal_sync',
+    entity_type: 'invoices',
+    summary: `PayPal sync — ${result.synced || 0} invoices updated`,
+    new_value: {
+      synced_at: syncedAt,
+      synced: result.synced || 0,
+      with_event: result.with_event || 0,
+      paid_on_paypal: result.paid_on_paypal || 0,
+    },
+  });
 }
 
 function verifyCronSecret(event) {
@@ -606,6 +633,11 @@ async function runPayPalSyncFullBatched() {
 
   invalidateInvoiceStatsCache();
   aggregate.synced_at = new Date().toISOString();
+  try {
+    await logPayPalSyncActivity(getDb(), aggregate, null);
+  } catch (err) {
+    console.warn('[paypal-sync] audit log failed:', err.message);
+  }
   return aggregate;
 }
 
@@ -638,8 +670,14 @@ exports.handler = async (event) => {
       const paypalItems = invoiceIds?.length
         ? await fetchPaypalDetailsByIds(accessToken, invoiceIds)
         : await fetchAllPaypalInvoices(accessToken);
+      const db = getDb();
       const result = await syncInvoicesToDb(paypalItems);
       invalidateInvoiceStatsCache();
+      try {
+        await logPayPalSyncActivity(db, result, admin);
+      } catch (err) {
+        console.warn('[paypal-sync] audit log failed:', err.message);
+      }
       return json(200, {
         ...result,
         batch_size: paypalItems.length,

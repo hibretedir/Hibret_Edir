@@ -1,9 +1,9 @@
 # Hibret Edir — Agent Context & Handoff
 
-**Last updated:** June 17, 2026 (member portal mobile perf, UX, auth fixes — deploy `21e1514`)  
+**Last updated:** June 17, 2026 (board Access Management UX + mobile admin — deploy `ec09b90`)  
 **Purpose:** Onboard a new Cursor agent quickly. Read this file first, then `HIBRET_EDIR_PROJECT_HANDOFF (1).md` for deeper business rules and by-laws.
 
-**Current focus (next agent):** **Twilio SMS** — buy number, set `TWILIO_*` on Netlify, `npm run test:notify -- --send`. Then **production smoke-test** (invite email + SMS). **Database:** local `.env` `DATABASE_URL` points at **Render Postgres** — `npm run db:migrate` from your laptop **is** production DB ops. Set **`BOARD_SUPER_ADMIN_EMAILS`** on Netlify. SendGrid is **done** — see **`docs/notifications-setup.md`**. QA playbook: **`docs/system-validation-playbook.md`**. **Local mobile testing:** `npm run dev` → phone browser `http://<PC-LAN-IP>:8888/portal/` (no push needed for layout/tap testing).
+**Current focus (next agent):** **Twilio SMS** — buy number, set `TWILIO_*` on Netlify, `npm run test:notify -- --send`. Then **production smoke-test** (invite email + SMS; board Access Management on phone + PC). **Database:** local `.env` `DATABASE_URL` points at **Render Postgres** — `npm run db:migrate` from your laptop **is** production DB ops. Confirm **`ADMIN_AUTH_ENABLED=true`** and **`BOARD_SUPER_ADMIN_EMAILS`** on Netlify. SendGrid is **done** — see **`docs/notifications-setup.md`**. QA playbook: **`docs/system-validation-playbook.md`**. **Local mobile testing:** `npm run dev` → phone browser `http://<PC-LAN-IP>:8888/admin/` or `/portal/` (no push needed for layout/tap testing).
 
 ---
 
@@ -296,7 +296,11 @@ Base URL: `/.netlify/functions/<name>`
 | GET | `/admin/me` | Board JWT | Profile + `perms` |
 | GET/POST | `/admin/board-members` | Super admin | List / invite board logins |
 | POST | `/admin/board-members/:id/permissions` | Super admin | Save `board_perms` + `display_name` (board only — never CRM) |
-| POST | `/admin/board-members/:id/deactivate` | Super admin | Deactivate login |
+| POST | `/admin/board-members/:id/deactivate` | Super admin | Deactivate login (stays in list; cannot sign in) |
+| POST | `/admin/board-members/:id/reactivate` | Super admin | Restore login (new password on next sign-in) |
+| POST | `/admin/board-members/:id/update-email` | Super admin | Change board login email (alias table updated) |
+
+**Board member list (`listBoardMembers`):** Backfills empty `display_name` from linked CRM `members.full_name`; `linkBoardMemberToCrm` on invite sets `display_name` when CRM email matches.
 
 ### `portal.js`
 
@@ -378,6 +382,7 @@ Hash routing (`#announcement`, `#apply`, etc.). English + Amharic.
 - **Waiting list status** → `apply/waiting-list/status` (same PostgreSQL queue as Admin; hides Added/Rejected/Canceled; renumbers place in line)
 - Public labels: **Added** only for members; **Invitation Sent** for invited / in-progress applicants
 - **Desktop hamburger menu** — dropdown below nav bar (`#mmenu` outside `.nav` to avoid `backdrop-filter` positioning bug; JS `positionMmenu()`)
+- **Mobile nav (June 17)** — `touch-action: manipulation` (no double-tap delay); hover styles wrapped in `@media (hover: hover)`; menu closes on scroll without jitter; **Back to Home** visible on PC when a section hash is active (`has-section-hash`)
 - **Make a Payment** section — PayPal card links to member portal; Bank of America account #002174902906 under Upload Receipt
 
 Placeholders show `—` until API loads. Regenerate static JSON: `python scripts/mark_added_waiting_list_members.py` (runs export at end) or import script.
@@ -415,9 +420,13 @@ Placeholders show `—` until API loads. Regenerate static JSON: `python scripts
 
 **Live stats bar:** Unpaid, Paid (PayPal), Zelle & BofA, Late — colors: green / green / red. **Partial** invoices are not counted as late.
 
-**Board permissions (June 17):** Super Admin (`BOARD_SUPER_ADMIN_EMAILS`) manages **Access Management** (master-detail: pick member → grant tier or individual perms). **17 granular keys** in `board_perms` JSONB (`board-permissions.js`). **Access tiers:** **Restricted** (read-only Members CRM only — hides other nav), **Read-only** (view all except Security), **Basic** (notes + PayPal sync + messages), **Operation** (+ edit members, reset/approve PIN), **Approver** (broad ops without full CRM write). **Security** (Access Management + Activity Log) is **super-admin only**. Read-only board members cannot see Security. Enforced in `board-permissions.js` across `auth.js`, `apply.js`, `portal.js`, `payouts.js`, `receipts.js`, `paypal-sync.js`.
+**Board permissions (June 17):** Super Admin (`BOARD_SUPER_ADMIN_EMAILS`) manages **Access Management** (master-detail: pick member → grant tier or individual perms). **17 granular keys** in `board_perms` JSONB (`board-permissions.js`). **Access tiers:** **Restricted** (read-only Members CRM only — hides other nav), **Read-only** (view all except Security), **Basic** (notes + PayPal sync + messages), **Operation** (+ edit members, reset/approve PIN), **Approver** (broad ops without full CRM write). Tier buttons highlight gold when active (`board-access-preset-btn.is-active`). **Security** (Access Management + Activity Log) is **super-admin only**. Read-only board members cannot see Security. Enforced in `board-permissions.js` across `auth.js`, `apply.js`, `portal.js`, `payouts.js`, `receipts.js`, `paypal-sync.js`.
 
-**Board vs CRM names:** `board_members.display_name` is the label in Access Management only. **CRM member names** (`members.paypal_name`, `full_name`, `spouse_name`) are edited only in **Members CRM**. `node scripts/sync_board_member_names.js --apply` links board logins to CRM `member_number` and sets `display_name` only when empty (use `--force-names` to reset from roster). **Multi-email login:** `board_member_emails` — one account, multiple emails (e.g. `babimuli@gmail.com` + `lily_mulugeta@yahoo.com`).
+**Access Management UX (June 17, `ec09b90`):** Super-admin **Security → Access Management** (mobile: ☰ → Security). **Add board member** form at top (email → invite). Per member: **Remove** (deactivate — stays in list), **Re-add**, **Reset password**, **Update email**, tier presets + individual checkboxes → **Save access**. Deactivated members remain visible; super admins cannot be removed (env `BOARD_SUPER_ADMIN_EMAILS`). **Mobile:** controls-only layout — hides helper paragraphs, permission descriptions, duplicate login line, joined/summary chips (full detail on PC). CSS cache bust `admin69` in `admin-tracker.css`.
+
+**Board vs CRM names:** `board_members.display_name` is the label in Access Management only. **CRM member names** (`members.full_name`, `paypal_name`, `spouse_name`) are edited only in **Members CRM**. On invite/link, empty `display_name` auto-fills from CRM. `node scripts/sync_board_member_names.js --apply` links board logins to CRM `member_number` and sets `display_name` only when empty (use `--force-names` to reset from roster). **Multi-email login:** `board_member_emails` — one account, multiple emails (e.g. `babimuli@gmail.com` + `lily_mulugeta@yahoo.com`).
+
+**Admin auth UI (June 17):** Logout visible on PC when signed in (sidebar foot + header); `ADMIN_AUTH_ENABLED=false` locally still shows logout for dev session.
 
 **Members CRM (June 17):** List shows **Member** + **Spouse** columns; profile form has separate spouse field; `members.spouse_name` backfilled from `full_name` where `Primary/Spouse` format exists.
 
@@ -542,15 +551,19 @@ Auth, portal, admin CRM, applications, waiting list, notifications, audit, payou
 
 ### June 2026 — Access Management & board permissions (June 17)
 
-- [x] **Access Management UI** — Master-detail layout; board names by CRM `#` + `display_name` (not email); access tier presets
+- [x] **Access Management UI** — Master-detail layout; board names by CRM `#` + `display_name` (not email); access tier presets with gold active-state highlight
 - [x] **17 granular permissions** — `board_perms` JSONB; default invite = Basic rights
 - [x] **Restricted tier** — `view_members_crm` only; Members CRM read-only; API + nav gated
 - [x] **Security super-admin only** — Access Management + Activity Log hidden from non–super-admins
-- [x] **Board display names** — Separate from CRM; edits in Access Management do not update `members` table
+- [x] **Board display names** — Separate from CRM; edits in Access Management do not update `members` table; CRM name auto-fill on invite/link
+- [x] **Board login lifecycle** — Invite, deactivate (Remove), reactivate (Re-add), update email, reset password (`auth.js` `update-email` action)
+- [x] **Mobile Access Management** — Stripped non-essential copy on ≤900px; all actions retained; PC keeps full descriptions
 - [x] **Multi-email board login** — `board_member_emails`; merged duplicate accounts (Betelhem, Genene)
 - [x] **`sync_board_member_names.js`** — Roster links board emails → CRM `member_number`; advisor role (Tsehaye Mogus = Restricted)
 - [x] **CRM spouse column** — `members.spouse_name`; list + profile; migrate backfill from `full_name`
+- [x] **Admin + public mobile nav** — Double-tap fix, logout on PC, public hamburger scroll/back-home
 - [x] **Schema migrate** — `board_member_emails`, `display_name`, `spouse_name`; run `npm run db:migrate` June 17
+- [x] **Deploy** — `ec09b90` on `main` June 17
 
 ### June 2026 — Announcement intake & public site (`1684565`)
 
@@ -626,6 +639,17 @@ From by-laws / handoff:
 
 ## 12. Recent session changelog
 
+### June 17, 2026 — Board Access Management UX + mobile admin (`ec09b90`)
+
+- **Access Management** — Invite at top; per-member Remove (deactivate, stays in list), Re-add, reset password, update email; tier presets (Restricted → Approver) with gold **active** button state; Read-only preset clears all perms
+- **CRM name sync** — `listBoardMembers` backfills empty `display_name` from CRM; `linkBoardMemberToCrm` sets name on invite when email matches member
+- **Mobile simplicity** — `board-access-fine-print` hides helper text, perm descriptions, duplicate login line, joined/summary on phone; full detail on PC (≥901px)
+- **Removed clutter** — “Linked to CRM — edit names in Members CRM” hint; redundant intro copy
+- **Admin auth UI** — Logout visible on desktop when signed in; sidebar foot pinned
+- **Public site mobile** — Nav double-tap fix (`touch-action: manipulation`); scroll jitter menu close; Back to Home on PC with active section hash
+- **API** — `update-email`, `reactivate` board-member actions in `auth.js`
+- **Ops** — User ran `npm run db:migrate` + pushed `ec09b90` to `main` June 17
+
 ### June 17, 2026 — Member portal mobile performance & UX (`21e1514`)
 
 - **Problem:** Every tab tap fired ~6 Netlify function calls (member, profile, invoices×2500, activity, messages, events) — very slow on real phones over cellular.
@@ -638,11 +662,11 @@ From by-laws / handoff:
 - **Local workflow:** Test mobile via `http://<LAN-IP>:8888/portal/` — avoid push-for-every-tweak.
 - **Deploy:** Pushed `main` June 17.
 
-### June 17, 2026 — Access Management, permissions, CRM spouse
+### June 17, 2026 — Access Management, permissions, CRM spouse (earlier session)
 
 - **Access Management** — Replaced 17-checkbox-per-row with master-detail; tier buttons (Restricted, Read-only, Basic, Operation, Approver); names show as `#N Name` without emails in list
 - **Permissions model** — `board_perms` JSONB with 17 keys; `isRestrictedMembersOnly()` gates portal API + admin nav to Members CRM only
-- **Board vs CRM** — `display_name` on `board_members` only; sync script never writes `members`; UI hint “edit names in Members CRM”
+- **Board vs CRM** — `display_name` on `board_members` only; sync script never writes `members`
 - **Email aliases** — `board_member_emails` table; `findAdmin()` matches any alias; duplicate board rows merged
 - **Roster** — 7 board logins + super admin (#52 Behailu); Tsehaye Mogus (#11) = **advisor** + **Restricted**
 - **CRM** — `spouse_name` column; Members list Spouse column; profile side-by-side name/spouse
@@ -773,6 +797,8 @@ From by-laws / handoff:
 | Meridian voice sounds robotic on deploy | Normal — TTS runs in visitor's browser, not on Netlify; Edge + UK Natural voices sound best |
 | Board admin read-only / 403 on save | Run `npm run db:migrate`; set `BOARD_SUPER_ADMIN_EMAILS` on Netlify; re-login after permission change |
 | Restricted user sees all admin tabs | Re-login; confirm `view_members_crm` only in `board_perms`; hard-refresh admin |
+| Access Management tier not highlighted | Hard-refresh admin (`admin-tracker.css?v=admin69`); click tier then check gold `is-active` on button |
+| Access Management crowded on mobile | By design — helper text hidden ≤900px; use PC for full descriptions |
 | Access Management name changed CRM | Should not happen — `display_name` is board-only; CRM names in Members CRM tab |
 | Board login with alternate email fails | Run `sync_board_member_names.js --apply`; check `board_member_emails` |
 | Same-day waiting list order wrong | Run `python scripts/fix_waiting_list_order.py --apply` with registration order file in `data/` |
@@ -805,11 +831,11 @@ From by-laws / handoff:
 ## 15. Next agent priorities (June 17, 2026)
 
 1. **Twilio SMS** — Buy US SMS number; add `TWILIO_*` to Netlify; set `DEMO_QA_PHONE=3105550199`; `npm run test:notify -- --send`.
-2. **Production smoke-test** — Portal on real phone (post-`21e1514`): instant tabs, EN/አማ toggle, login as known member; board login with alias email; Restricted advisor (Tsehaye); super-admin Access Management.
+2. **Production smoke-test** — Portal on real phone (instant tabs, EN/አማ toggle); **Access Management** on phone + PC (invite, tier presets, save, deactivate/re-add); board login with alias email; Restricted advisor (Tsehaye); confirm `ADMIN_AUTH_ENABLED` + `BOARD_SUPER_ADMIN_EMAILS` on Netlify.
 3. **EVT-06** — Admin create event + bulk PayPal invoices to all active members.
 4. **EVT-08** — Payment reminders.
 5. **Optional portal** — Extend Amharic to dynamic invoice card strings; one-off script to clear date-like `address` values in CRM for legacy members.
 
-**Done this cycle:** Access Management + 17 granular perms; member portal mobile perf (instant tabs, lazy load); portal i18n; auth phone collision fix; profile address normalization; nav overlap fix; secrets-scan-safe board sync script. Deployed `21e1514`.
+**Done this cycle:** Board Access Management (invite, deactivate/re-add, update email, mobile-simplified UI, tier highlight); CRM name auto-fill on board invite; admin logout + public mobile nav fixes; member portal mobile perf (`21e1514`). Deployed `ec09b90`.
 
-**Do not regress:** Portal tabs must stay instant (no full `refreshPortalData()` on every tap); `DEMO_QA_PHONE` must not match a real member; Board `display_name` must never UPDATE `members`; sync script must not overwrite non-empty `display_name` without `--force-names`; Security views super-admin only; Restricted scope limits to Members CRM; Meridian showcase; waiting list order; current announcement uses `event_number`.
+**Do not regress:** Portal tabs must stay instant (no full `refreshPortalData()` on every tap); `DEMO_QA_PHONE` must not match a real member; Board `display_name` must never UPDATE `members` (except read-only backfill from CRM when empty); sync script must not overwrite non-empty `display_name` without `--force-names`; Security views super-admin only; Restricted scope limits to Members CRM; deactivated board members stay in Access Management list; Meridian showcase; waiting list order; current announcement uses `event_number`.

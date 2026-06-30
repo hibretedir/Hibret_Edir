@@ -263,7 +263,7 @@ async function getInvoiceStats() {
     return getInvoiceStatsCache().data;
   }
   const db = getDb();
-  const [result, activeResult, eventSummaryResult] = await Promise.all([
+  const [result, activeResult, syncResult, eventSummaryResult] = await Promise.all([
     db.query(`
       SELECT
         COUNT(*) FILTER (WHERE LOWER(COALESCE(members.status, '')) = 'active')::int AS total,
@@ -316,6 +316,18 @@ async function getInvoiceStats() {
       WHERE LOWER(COALESCE(status, '')) = 'active'
     `),
     db.query(`
+      SELECT GREATEST(
+        COALESCE(
+          (SELECT MAX(created_at) FROM audit_log WHERE action = 'paypal_sync'),
+          'epoch'::timestamptz
+        ),
+        COALESCE(
+          (SELECT MAX(updated_at) FROM invoices WHERE paypal_invoice_id IS NOT NULL),
+          'epoch'::timestamptz
+        )
+      ) AS paypal_last_sync_at
+    `),
+    db.query(`
       SELECT e.id, e.event_number, e.deceased_name, e.event_date,
              COUNT(i.id) FILTER (
                WHERE i.invoice_number IS NOT NULL
@@ -344,6 +356,7 @@ async function getInvoiceStats() {
     `),
   ]);
   const row = result.rows[0] || {};
+  const syncAt = syncResult.rows[0]?.paypal_last_sync_at;
   const stats = {
     total: Number(row.total || 0),
     paid: Number(row.paid || 0),
@@ -357,6 +370,9 @@ async function getInvoiceStats() {
     events: Number(row.events || 0),
     active_members: Number(activeResult.rows[0]?.active_members || 0),
     event_summary: (eventSummaryResult.rows || []).map(mapEventSummaryRow),
+    paypal_last_sync_at: syncAt && String(syncAt) !== '1970-01-01T00:00:00.000Z'
+      ? new Date(syncAt).toISOString()
+      : null,
   };
   setInvoiceStatsCache(stats);
   return stats;
