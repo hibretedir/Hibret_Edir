@@ -3440,6 +3440,17 @@ body.tracker .btn.primary {
   color: var(--tk-muted);
 }
 
+.msg-reply-hint {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(252, 221, 9, 0.08);
+  border: 1px solid rgba(252, 221, 9, 0.22);
+  font-size: 12px;
+  color: var(--tk-text);
+  line-height: 1.45;
+}
+
 .msg-reply-notify {
   display: flex;
   align-items: center;

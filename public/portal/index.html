@@ -39,7 +39,7 @@
     </div>
     <div class="error-msg" id="phoneErr"></div>
     <div id="phoneHelpPanel" class="phone-help-panel" style="display:none">
-      <p class="phone-help-intro">Send a message to the board — we'll help you get signed in.</p>
+      <p class="phone-help-intro">Send a message to the board — we'll reply to your <strong>email</strong> (you can't sign in to see replies here).</p>
       <div class="form-msg" id="phoneHelpMsg"></div>
       <div class="phone-help-grid">
         <div class="form-group">
@@ -47,8 +47,8 @@
           <input type="text" class="form-input" id="phoneHelpName" placeholder="First and last name">
         </div>
         <div class="form-group">
-          <label class="form-label">Email <span class="form-optional">(optional)</span></label>
-          <input type="email" class="form-input" id="phoneHelpEmail" placeholder="your@email.com">
+          <label class="form-label">Email <span class="amh">ኢሜይል</span> *</label>
+          <input type="email" class="form-input" id="phoneHelpEmail" placeholder="your@email.com" required autocomplete="email">
         </div>
         <div class="form-group form-group--full">
           <label class="form-label">Mobile (you entered)</label>
@@ -1196,6 +1196,16 @@ async function submitPhoneHelp(){
   const phone=(document.getElementById('phoneHelpPhone')?.value||'').trim();
   const email=(document.getElementById('phoneHelpEmail')?.value||'').trim();
   const message=(document.getElementById('phoneHelpMessage')?.value||'').trim();
+  if(!email){
+    showPhoneHelpMsg('Please enter your email so the board can reply to you.', false);
+    document.getElementById('phoneHelpEmail')?.focus();
+    return;
+  }
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+    showPhoneHelpMsg('Please enter a valid email address.', false);
+    document.getElementById('phoneHelpEmail')?.focus();
+    return;
+  }
   if(!message){
     showPhoneHelpMsg('Please enter a message for the board.', false);
     return;
@@ -1203,7 +1213,7 @@ async function submitPhoneHelp(){
   showPhoneHelpMsg('Sending…', true);
   try {
     await apiPost('apply/contact', { name, phone, email, message, source: 'portal-login' });
-    showPhoneHelpMsg('Message sent! The board will contact you soon.', true);
+    showPhoneHelpMsg('Message sent! The board will reply to your email.', true);
     document.getElementById('phoneHelpMessage').value='';
   } catch (error) {
     showPhoneHelpMsg(error.message || 'Could not send message. Please try again.', false);

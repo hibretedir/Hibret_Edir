@@ -1472,6 +1472,14 @@ async function submitContactForm(body) {
   if (!name || !message) {
     return json(400, { error: 'Name and message are required.' });
   }
+  if (source === 'portal-login') {
+    if (!email) {
+      return json(400, { error: 'Email is required so the board can reply to you.' });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return json(400, { error: 'Please enter a valid email address.' });
+    }
+  }
   const savedName = memberNumber ? `${name} (#${memberNumber})` : name;
   const text = [
     source === 'portal-login'
@@ -1530,7 +1538,13 @@ async function submitContactForm(body) {
       }
     }
   }
-  return json(200, { ok: true, message: 'Message sent to the board.', id: savedId });
+  return json(200, {
+    ok: true,
+    message: source === 'portal-login'
+      ? 'Message sent. The board will reply to your email.'
+      : 'Message sent to the board.',
+    id: savedId,
+  });
 }
 
 async function listContactMessages() {
@@ -1626,7 +1640,10 @@ async function replyContactMessage(id, body, actor) {
     new_value: { reply: reply.slice(0, 500), contact_message_id: id },
   });
 
-  const notifyMemberFlag = body.notify_member !== false;
+  const isLoginHelp = String(msg.source || '').toLowerCase() === 'portal-login';
+  const notifyMemberFlag = isLoginHelp || body.notify_member !== false;
+  const mustEmail = isLoginHelp || (!memberId && !msg.member_id);
+
   if (notifyMemberFlag) {
     let memberRow = null;
     if (memberId) {
@@ -1637,37 +1654,64 @@ async function replyContactMessage(id, body, actor) {
       );
       memberRow = mr.rows[0];
     }
+    const recipientEmail = String(memberRow?.email || msg.email || '').trim();
+    if (isLoginHelp && !recipientEmail) {
+      return json(400, {
+        error: 'This login-help message has no email on file. The member must provide an email when contacting us.',
+      });
+    }
     const memberName = memberRow?.full_name
       || `${memberRow?.first_name || ''} ${memberRow?.last_name || ''}`.trim()
       || msg.name;
-    const subject = 'Hibret Edir — reply from the board';
-    const text = [
-      `Hello ${memberName},`,
-      '',
-      'The board replied to your message:',
-      '',
-      reply,
-      '',
-      'Sign in to the Member Portal → Home → Messages from the Board to view your message history.',
-      process.env.URL ? `${process.env.URL}/portal/` : '',
-    ].filter(Boolean).join('\n');
-    const sms = `Hibret Edir: The board replied to your message. Sign in to the member portal to read it.`;
-    if (memberRow) {
+    const subject = isLoginHelp
+      ? 'Hibret Edir — reply to your login help request'
+      : 'Hibret Edir — reply from the board';
+    let text;
+    let sms;
+    if (isLoginHelp || mustEmail) {
+      text = [
+        `Hello ${memberName},`,
+        '',
+        isLoginHelp
+          ? 'The Hibret Edir board replied to your member portal login help request:'
+          : 'The Hibret Edir board replied to your message:',
+        '',
+        reply,
+        '',
+        isLoginHelp
+          ? 'If you still need help signing in, reply to this email or call (424) 547-5594.'
+          : 'If you have questions, reply to this email or call (424) 547-5594.',
+      ].join('\n');
+      sms = `Hibret Edir: ${reply.slice(0, 140)}${reply.length > 140 ? '…' : ''}`;
+    } else {
+      text = [
+        `Hello ${memberName},`,
+        '',
+        'The board replied to your message:',
+        '',
+        reply,
+        '',
+        'Sign in to the Member Portal → Home → Messages from the Board to view your message history.',
+        process.env.URL ? `${process.env.URL}/portal/` : '',
+      ].filter(Boolean).join('\n');
+      sms = 'Hibret Edir: The board replied to your message. Sign in to the member portal to read it.';
+    }
+    if (recipientEmail) {
       await notifyMember({
         db,
-        memberId: memberRow.id,
-        email: memberRow.email || msg.email,
-        phone: memberRow.mobile || msg.phone,
+        memberId: memberRow?.id || memberId || null,
+        email: recipientEmail,
+        phone: isLoginHelp ? null : (memberRow?.mobile || msg.phone),
         subject,
         text,
-        smsText: sms,
+        smsText: isLoginHelp ? null : sms,
       });
-    } else if (msg.email) {
+    } else if (memberRow || msg.phone) {
       await notifyMember({
         db,
-        memberId: null,
-        email: msg.email,
-        phone: msg.phone,
+        memberId: memberRow?.id || memberId || null,
+        email: null,
+        phone: memberRow?.mobile || msg.phone,
         subject,
         text,
         smsText: sms,
@@ -1686,7 +1730,9 @@ async function replyContactMessage(id, body, actor) {
   );
   return json(200, {
     ok: true,
-    message: 'Reply posted to the member profile.',
+    message: isLoginHelp
+      ? 'Reply emailed to the member.'
+      : 'Reply posted to the member profile.',
     contact_message: buildContactMessageRow(refreshed.rows[0]),
   });
 }

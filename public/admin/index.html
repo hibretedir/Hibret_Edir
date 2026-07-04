@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/css/admin-tracker.css?v=admin69">
+<link rel="stylesheet" href="/css/admin-tracker.css?v=admin70">
 <link rel="stylesheet" href="/css/admin-tracker-mh.css?v=1">
 </head>
 <body class="app-admin tracker">
@@ -351,15 +351,16 @@
     </div>
     <div class="modal-body">
       <div class="msg-reply-original" id="messageReplyOriginal"></div>
+      <p class="msg-reply-hint" id="messageReplyHint"></p>
       <label class="admin-login-label" for="messageReplyText">Your reply *</label>
-      <textarea class="field-input" id="messageReplyText" rows="4" placeholder="Type your reply — this appears under Messages from the Board on the member portal"></textarea>
-      <div class="fg" style="margin-top:12px">
+      <textarea class="field-input" id="messageReplyText" rows="4" placeholder="Type your reply"></textarea>
+      <div class="fg" style="margin-top:12px" id="messageReplyMemberWrap">
         <label class="admin-login-label" for="messageReplyMember">Link to member (optional)</label>
         <select class="field-input" id="messageReplyMember">
           <option value="">— Auto-match by phone/email —</option>
         </select>
       </div>
-      <label class="msg-reply-notify"><input type="checkbox" id="messageReplyNotify" checked> Email / text the member about this reply</label>
+      <label class="msg-reply-notify" id="messageReplyNotifyWrap"><input type="checkbox" id="messageReplyNotify" checked> <span id="messageReplyNotifyLabel">Email / text the member about this reply</span></label>
       <div class="admin-login-err" id="messageReplyErr"></div>
     </div>
     <div class="modal-footer">
@@ -5357,7 +5358,7 @@ function renderMessagesBodyHtml() {
       </tr>`;
     }).join('') : '';
     return `
-      <div class="tracker-banner tracker-intro-banner">Messages from the public Contact Us form and the <strong>Member Portal</strong>. Replies appear under Home → Messages from the Board and are optionally emailed.</div>
+      <div class="tracker-banner tracker-intro-banner">Messages from the public Contact Us form and the <strong>Member Portal</strong>. <strong>Login help</strong> requests cannot sign in — replies are <strong>emailed</strong> to the address they provide. Signed-in portal messages also appear under Home → Messages from the Board.</div>
       <div class="tracker-table-wrap">
         ${CONTACT_MESSAGES.length ? `<table class="tracker-table admin-mobile-table">
           <thead><tr><th>From</th><th>Phone</th><th>Source</th><th>Status</th><th>Message</th><th>Received</th><th></th></tr></thead>
@@ -5431,12 +5432,42 @@ function fillMessageReplyMemberSelect(selectedId) {
 function openMessageReply(id) {
   const msg = CONTACT_MESSAGES.find(m => Number(m.id) === Number(id));
   if (!msg) return;
+  const isLoginHelp = String(msg.source || '').toLowerCase() === 'portal-login';
   replyingMessageId = id;
   document.getElementById('messageReplyTitle').textContent = msg.board_reply ? 'Edit Reply' : 'Reply to Member';
-  document.getElementById('messageReplySub').textContent = `${msg.name || '—'} · ${msg.phone || msg.email || 'no contact on file'}`;
+  document.getElementById('messageReplySub').textContent = isLoginHelp
+    ? `${msg.name || '—'} · ${msg.email || 'no email on file'} · Login help`
+    : `${msg.name || '—'} · ${msg.phone || msg.email || 'no contact on file'}`;
   document.getElementById('messageReplyOriginal').innerHTML = `<strong>Their message</strong><div class="msg-detail-body" style="margin-top:6px">${esc(msg.message || '')}</div>`;
-  document.getElementById('messageReplyText').value = msg.board_reply || '';
-  document.getElementById('messageReplyNotify').checked = !msg.board_reply;
+  const hintEl = document.getElementById('messageReplyHint');
+  if (hintEl) {
+    hintEl.textContent = isLoginHelp
+      ? 'This person cannot access the portal. Your reply will be emailed to them.'
+      : 'Reply appears in the member portal when they are signed in. You can also email/text them.';
+    hintEl.style.display = 'block';
+  }
+  const replyText = document.getElementById('messageReplyText');
+  if (replyText) {
+    replyText.placeholder = isLoginHelp
+      ? 'Type your reply — this will be emailed to the member'
+      : 'Type your reply — appears under Messages from the Board on the member portal';
+    replyText.value = msg.board_reply || '';
+  }
+  const notifyCb = document.getElementById('messageReplyNotify');
+  const notifyLabel = document.getElementById('messageReplyNotifyLabel');
+  const notifyWrap = document.getElementById('messageReplyNotifyWrap');
+  if (notifyCb) {
+    notifyCb.checked = isLoginHelp ? true : !msg.board_reply;
+    notifyCb.disabled = isLoginHelp;
+  }
+  if (notifyLabel) {
+    notifyLabel.textContent = isLoginHelp
+      ? 'Email reply to member (required — they cannot sign in)'
+      : 'Email / text the member about this reply';
+  }
+  if (notifyWrap) notifyWrap.style.display = isLoginHelp ? 'block' : '';
+  const memberWrap = document.getElementById('messageReplyMemberWrap');
+  if (memberWrap) memberWrap.style.display = isLoginHelp ? 'none' : '';
   fillMessageReplyMemberSelect(msg.member_id || '');
   const err = document.getElementById('messageReplyErr');
   err.textContent = '';
@@ -5447,9 +5478,11 @@ function openMessageReply(id) {
 
 async function submitMessageReply() {
   if (!replyingMessageId) return;
+  const msg = CONTACT_MESSAGES.find(m => Number(m.id) === Number(replyingMessageId));
+  const isLoginHelp = msg && String(msg.source || '').toLowerCase() === 'portal-login';
   const reply = (document.getElementById('messageReplyText')?.value || '').trim();
   const memberId = document.getElementById('messageReplyMember')?.value || '';
-  const notify = document.getElementById('messageReplyNotify')?.checked !== false;
+  const notify = isLoginHelp || document.getElementById('messageReplyNotify')?.checked !== false;
   const err = document.getElementById('messageReplyErr');
   if (!reply) {
     err.textContent = 'Enter a reply message.';
@@ -5467,7 +5500,7 @@ async function submitMessageReply() {
     }
     closeModal('messageReplyModal');
     replyingMessageId = null;
-    showAdminToast('Reply posted to member profile.', 'ok');
+    showAdminToast(res?.message || (isLoginHelp ? 'Reply emailed to member.' : 'Reply posted to member profile.'), 'ok');
     if (currentView === 'messages') updateMessagesList();
     if (editingMemberId) loadMemberMessages(editingMemberId);
   } catch (e) {
