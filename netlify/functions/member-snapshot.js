@@ -51,7 +51,7 @@ function rankSnapshotMember(m) {
   return score;
 }
 
-function findSnapshotMember({ phone, email }) {
+function findSnapshotMembers({ phone, email }) {
   const digits = normPhone(phone);
   const emailLower = email ? String(email).trim().toLowerCase() : '';
   const pins = loadDevPins();
@@ -70,9 +70,13 @@ function findSnapshotMember({ phone, email }) {
       joined_date: null,
     });
   }
-  if (!matches.length) return null;
   matches.sort((a, b) => rankSnapshotMember(b) - rankSnapshotMember(a));
-  return matches[0];
+  return matches;
+}
+
+function findSnapshotMember({ phone, email }) {
+  const matches = findSnapshotMembers({ phone, email });
+  return matches[0] || null;
 }
 
 async function saveSnapshotPin(member, pinOrHash, isHash = false) {
@@ -89,6 +93,7 @@ async function clearSnapshotPin(member) {
 
 module.exports = {
   findSnapshotMember,
+  findSnapshotMembers,
   saveSnapshotPin,
   clearSnapshotPin,
   loadSnapshotMembers,

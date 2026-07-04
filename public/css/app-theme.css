@@ -339,6 +339,56 @@ body.app-portal .auth-wrap .pin-input.filled {
   margin-top: 4px;
 }
 
+.app-portal .pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.app-portal .pick-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(252, 221, 9, 0.22);
+  background: rgba(0, 0, 0, 0.18);
+  text-align: left;
+}
+
+.app-portal .pick-row--btn {
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.app-portal .pick-row--btn:hover,
+.app-portal .pick-row--btn:focus-visible {
+  border-color: var(--green);
+  background: rgba(7, 137, 48, 0.22);
+  outline: none;
+}
+
+.app-portal .pick-row--inactive {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.app-portal .pick-name {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.app-portal .pick-note {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 .app-portal .auth-card textarea.form-input {
   min-height: 72px;
   resize: vertical;

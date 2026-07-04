@@ -10,7 +10,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { getDb } = require('./db');
-const { findSnapshotMember, saveSnapshotPin, clearSnapshotPin, loadSnapshotMembers } = require('./member-snapshot');
+const { findSnapshotMember, findSnapshotMembers, saveSnapshotPin, clearSnapshotPin, loadSnapshotMembers } = require('./member-snapshot');
 const { logActivity } = require('./audit');
 const { adminAuthRequired, verifyAdminRequest } = require('./admin-auth');
 const {
@@ -82,10 +82,12 @@ function pickBestMemberMatch(rows) {
   return rows.slice().sort((a, b) => rankMemberForPortalAuth(b) - rankMemberForPortalAuth(a))[0];
 }
 
-async function findMemberInDb({ phone, email }) {
+const MEMBER_AUTH_SELECT = `id, member_number, first_name, last_name, full_name, paypal_name, email, mobile, home_phone, address, status, pin_hash, joined_date`;
+
+async function findMembersInDb({ phone, email }) {
   const db = getDb();
   const result = await db.query(
-    `SELECT id, member_number, first_name, last_name, full_name, paypal_name, email, mobile, home_phone, address, status, pin_hash, joined_date
+    `SELECT ${MEMBER_AUTH_SELECT}
      FROM members
      WHERE ($1::text IS NOT NULL AND (
        RIGHT(regexp_replace(COALESCE(mobile, ''), '\\D', '', 'g'), 10) = RIGHT(regexp_replace($1, '\\D', '', 'g'), 10)
@@ -94,19 +96,29 @@ async function findMemberInDb({ phone, email }) {
      OR ($2::text IS NOT NULL AND LOWER(email) = LOWER($2))`,
     [phone || null, email || null]
   );
-  return pickBestMemberMatch(result.rows);
+  return result.rows;
 }
 
-async function findMember({ phone, email }) {
+async function findMemberInDb({ phone, email }) {
+  const rows = await findMembersInDb({ phone, email });
+  return pickBestMemberMatch(rows);
+}
+
+async function findMembers({ phone, email }) {
   if (process.env.DATABASE_URL) {
     try {
-      const row = await findMemberInDb({ phone, email });
-      if (row) return row;
+      const rows = await findMembersInDb({ phone, email });
+      if (rows.length) return rows;
     } catch (error) {
       console.warn('DB member lookup failed, trying snapshot:', error.message);
     }
   }
-  return findSnapshotMember({ phone, email });
+  return findSnapshotMembers({ phone, email });
+}
+
+async function findMember({ phone, email }) {
+  const rows = await findMembers({ phone, email });
+  return pickBestMemberMatch(rows);
 }
 
 function findMemberById(id) {
@@ -198,13 +210,15 @@ async function submitPinResetRequest(body) {
   const phone = String(body.phone || '').trim();
   const email = String(body.email || '').trim();
   const notes = String(body.notes || '').trim().slice(0, 500) || null;
+  const memberId = body.memberId ?? body.member_id ?? null;
   if (!phone && !email) {
     return jsonResponse(400, { error: 'Phone or email is required.' });
   }
-  const member = await findMember({ phone, email });
-  if (!member) {
-    return jsonResponse(404, { error: 'Phone number not found. Contact (424) 547-5594 for help.' });
+  const resolved = await resolveAuthMember({ phone, email, memberId });
+  if (resolved.error) {
+    return jsonResponse(resolved.status, { error: resolved.error });
   }
+  const member = resolved.member;
   if (!member.pin_hash) {
     return jsonResponse(400, { error: 'No PIN is set on this account. Sign in with your phone number to create one.' });
   }
@@ -343,6 +357,68 @@ function isQaTestMember(member) {
   const email = String(member.email || '').trim().toLowerCase();
   if (email === QA_TEST_EMAIL) return true;
   return String(member.full_name || '').toLowerCase().includes('qa test');
+}
+
+function isActiveMember(member) {
+  return String(member.status || '').toLowerCase() === 'active';
+}
+
+function phoneMatchesMember(phone, member) {
+  const digits = normPhoneDigits(phone);
+  if (!digits) return false;
+  const mobile = normPhoneDigits(member.mobile);
+  const home = normPhoneDigits(member.home_phone);
+  return digits === mobile || digits === home;
+}
+
+function emailMatchesMember(email, member) {
+  if (!email) return false;
+  return String(member.email || '').trim().toLowerCase() === String(email).trim().toLowerCase();
+}
+
+function buildMemberPickerPayload(member) {
+  const first = portalFirstName(member);
+  const last = portalLastName(member);
+  return {
+    id: member.id,
+    displayName: `${first} ${last}`.trim() || 'Member',
+    first,
+    hasPin: !!member.pin_hash,
+    isActive: isActiveMember(member),
+  };
+}
+
+async function resolveAuthMember({ phone, email, memberId }) {
+  const members = (await findMembers({ phone, email })).filter((m) => !isQaTestMember(m));
+  if (!members.length) {
+    return { error: 'Member not found', status: 404 };
+  }
+
+  let member;
+  const id = memberId != null && memberId !== '' ? Number(memberId) : null;
+  if (id) {
+    member = members.find((m) => Number(m.id) === id);
+    if (!member) {
+      return { error: 'Account not found for this phone number.', status: 403 };
+    }
+  } else if (members.length === 1) {
+    member = members[0];
+  } else {
+    return { error: 'Select which account to access.', status: 400 };
+  }
+
+  if (phone && !phoneMatchesMember(phone, member) && !(email && emailMatchesMember(email, member))) {
+    return { error: 'Account not found for this phone number.', status: 403 };
+  }
+  if (email && !emailMatchesMember(email, member) && !(phone && phoneMatchesMember(phone, member))) {
+    return { error: 'Account not found for this email.', status: 403 };
+  }
+
+  if (!isActiveMember(member)) {
+    return { error: 'This account is inactive. Contact the board for help.', status: 403 };
+  }
+
+  return { member };
 }
 
 function portalFirstName(member) {
@@ -1086,16 +1162,24 @@ exports.handler = async (event, context) => {
       if (!phone && !email) {
         return jsonResponse(400, { error: 'Phone or email is required' });
       }
-      const member = await findMember({ phone, email });
+      const rows = (await findMembers({ phone, email })).filter((m) => !isQaTestMember(m));
+      const members = rows.map(buildMemberPickerPayload);
+      const activeMembers = members.filter((m) => m.isActive);
+      const singleActive = activeMembers.length === 1 && members.length === 1
+        ? rows.find((m) => Number(m.id) === Number(activeMembers[0].id))
+        : null;
       return jsonResponse(200, {
-        exists: !!member,
-        hasPin: !!member?.pin_hash,
-        member: member ? buildMemberPayload(member) : null
+        exists: members.length > 0,
+        canLogin: activeMembers.length > 0,
+        multiple: members.length > 1,
+        members,
+        hasPin: singleActive ? !!singleActive.pin_hash : undefined,
+        member: singleActive ? buildMemberPayload(singleActive) : null,
       });
     }
 
     if (event.httpMethod === 'POST' && path === '/create-pin') {
-      const { phone, email, pin } = body;
+      const { phone, email, pin, memberId, member_id } = body;
       if (!pin || !/^[0-9]{4,8}$/.test(pin)) {
         return jsonResponse(400, { error: 'PIN must be 4-8 digits' });
       }
@@ -1103,10 +1187,11 @@ exports.handler = async (event, context) => {
         return jsonResponse(400, { error: 'Phone or email is required' });
       }
 
-      const member = await findMember({ phone, email });
-      if (!member) {
-        return jsonResponse(404, { error: 'Member not found' });
+      const resolved = await resolveAuthMember({ phone, email, memberId: memberId ?? member_id });
+      if (resolved.error) {
+        return jsonResponse(resolved.status, { error: resolved.error });
       }
+      const member = resolved.member;
 
       const hadPin = !!member.pin_hash;
       await saveMemberPin(member, pin);
@@ -1130,7 +1215,7 @@ exports.handler = async (event, context) => {
     }
 
     if (event.httpMethod === 'POST' && path === '/verify-pin') {
-      const { phone, email, pin } = body;
+      const { phone, email, pin, memberId, member_id } = body;
       if (!pin) {
         return jsonResponse(400, { error: 'PIN is required' });
       }
@@ -1138,9 +1223,13 @@ exports.handler = async (event, context) => {
         return jsonResponse(400, { error: 'Phone or email is required' });
       }
 
-      const member = await findMember({ phone, email });
-      if (!member || !member.pin_hash) {
-        return jsonResponse(401, { valid: false, error: 'Member not found or PIN not set' });
+      const resolved = await resolveAuthMember({ phone, email, memberId: memberId ?? member_id });
+      if (resolved.error) {
+        return jsonResponse(resolved.status, { valid: false, error: resolved.error });
+      }
+      const member = resolved.member;
+      if (!member.pin_hash) {
+        return jsonResponse(401, { valid: false, error: 'PIN not set for this account' });
       }
 
       const valid = await bcrypt.compare(pin, member.pin_hash);

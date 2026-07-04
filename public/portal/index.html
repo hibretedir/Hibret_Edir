@@ -6,7 +6,7 @@
 <title>Hibret Edir Association — Member Portal</title>
 <link rel="stylesheet" href="/css/hibret.css?v=portal3">
 <link rel="stylesheet" href="/css/compat.css?v=portal9">
-<link rel="stylesheet" href="/css/app-theme.css?v=portal28">
+<link rel="stylesheet" href="/css/app-theme.css?v=portal29">
 </head>
 <body class="app-portal">
 
@@ -91,6 +91,26 @@
     <div style="height:16px"></div>
     <button class="btn-main" id="pinBtn" onclick="doPin()" disabled>Sign In</button>
     <button class="btn-link" type="button" onclick="openPinResetRequest()">Forgot PIN? Request a reset</button>
+    <button class="btn-link" onclick="authBackFromPin()">← Back</button>
+  </div>
+</div>
+
+<!-- ========== SCREEN: CHOOSE ACCOUNT (shared phone) ========== -->
+<div id="sPick" class="auth-wrap" style="display:none">
+  <div class="auth-bg"></div>
+  <div class="auth-card">
+    <div class="auth-card-lang" aria-label="Language">
+      <button class="lang-btn active" type="button" data-lang="en" onclick="setLang('en')">EN</button>
+      <button class="lang-btn" type="button" data-lang="am" onclick="setLang('am')">አማ</button>
+    </div>
+    <div class="auth-logo">
+      <img src="/logo.png" alt="Hibret Edir Logo">
+      <div class="auth-logo-text"><div class="name">Hibret Edir Association</div><div class="sub">Member Portal</div></div>
+    </div>
+    <h1 class="auth-title" id="pickTitle">Choose Account</h1>
+    <p class="auth-sub" id="pickSub">Multiple members use this phone number. Who is signing in?<span class="amh">በዚህ ስልክ ቁጥር የተመዘገቡ አባላት ከሁለት በላይ ናቸው። ማን ይግባ?</span></p>
+    <div class="error-msg" id="pickErr"></div>
+    <div id="pickList" class="pick-list"></div>
     <button class="btn-link" onclick="show('sPhone')">← Back</button>
   </div>
 </div>
@@ -162,7 +182,7 @@
       </div>
     </div>
     <button class="btn-main" onclick="doCreate()">Create PIN &amp; Sign In</button>
-    <button class="btn-link" onclick="show('sPhone')">← Back</button>
+    <button class="btn-link" onclick="authBackFromCreate()">← Back</button>
   </div>
 </div>
 
@@ -503,7 +523,7 @@ const MY_INVOICES = [];
 const MY_ACTIVITY = [];
 const MY_BOARD_MESSAGES = [];
 let EDAR_EVENTS = [];
-let me = null, myPhone = '', myBeneficiary = null, pendingBeneficiaryChange = null, beneficiaryImportPending = false, profEditKey = '', selMeth = null, uploadedFile = null, curTab = 'home';
+let me = null, myPhone = '', myMemberId = null, phoneMembers = [], pickMode = 'login', myBeneficiary = null, pendingBeneficiaryChange = null, beneficiaryImportPending = false, profEditKey = '', selMeth = null, uploadedFile = null, curTab = 'home';
 let notifReadAt = 0;
 const PORTAL_INVOICE_LIMIT = 150;
 const PORTAL_CACHE_TTL_MS = 60000;
@@ -908,13 +928,133 @@ function getMyInvs() {
 
 // SCREENS
 function show(id){
-  ['sPhone','sPin','sCreate','sConfirm','sPinReset'].forEach(s=>{
+  ['sPhone','sPin','sCreate','sConfirm','sPinReset','sPick'].forEach(s=>{
     const el=document.getElementById(s);
     if(el) el.style.display='none';
   });
   document.getElementById('portalApp').style.display='none';
   const el=document.getElementById(id);
   if(el) el.style.display='flex';
+}
+
+function authNeedsAccountPicker() {
+  return (phoneMembers || []).filter(m => m.isActive).length > 1;
+}
+
+function authBackFromPin() {
+  if (authNeedsAccountPicker()) show('sPick');
+  else show('sPhone');
+}
+
+function authBackFromCreate() {
+  if (authNeedsAccountPicker()) show('sPick');
+  else show('sPhone');
+}
+
+function renderAccountPicker(members, { mode = 'login' } = {}) {
+  const list = document.getElementById('pickList');
+  const title = document.getElementById('pickTitle');
+  const sub = document.getElementById('pickSub');
+  const err = document.getElementById('pickErr');
+  if (err) { err.classList.remove('show'); err.textContent = ''; }
+  if (title) {
+    title.textContent = mode === 'reset' ? 'Which account?' : 'Choose Account';
+  }
+  if (sub) {
+    sub.innerHTML = mode === 'reset'
+      ? 'Select the account that needs a PIN reset.<span class="amh">PIN ለመቀየር የሚፈልጉትን መለያ ይምረጡ</span>'
+      : 'Multiple members use this phone number. Who is signing in?<span class="amh">በዚህ ስልክ ቁጥር የተመዘገቡ አባላት ከሁለት በላይ ናቸው። ማን ይግቡ?</span>';
+  }
+  if (!list) return;
+  list.innerHTML = (members || []).map(m => {
+    if (!m.isActive) {
+      return `<div class="pick-row pick-row--inactive" aria-disabled="true">
+        <span class="pick-name">${escHtml(m.displayName)}</span>
+        <span class="pick-note">Inactive</span>
+      </div>`;
+    }
+    if (mode === 'reset' && !m.hasPin) {
+      return `<div class="pick-row pick-row--inactive" aria-disabled="true">
+        <span class="pick-name">${escHtml(m.displayName)}</span>
+        <span class="pick-note">No PIN set</span>
+      </div>`;
+    }
+    const note = mode === 'reset'
+      ? 'Request reset'
+      : (m.hasPin ? 'Enter PIN' : 'Set up PIN');
+    return `<button type="button" class="pick-row pick-row--btn" onclick="pickAccount(${m.id})">
+      <span class="pick-name">${escHtml(m.displayName)}</span>
+      <span class="pick-note">${note}</span>
+    </button>`;
+  }).join('');
+}
+
+function proceedToAuth(memberSummary) {
+  if (!memberSummary?.isActive) {
+    const err = document.getElementById('pickErr') || document.getElementById('phoneErr');
+    if (err) {
+      err.textContent = 'This account is inactive. Contact the board for help.';
+      err.classList.add('show');
+    }
+    return;
+  }
+  myMemberId = memberSummary.id;
+  me = { id: memberSummary.id, first: memberSummary.first, memberNumber: null };
+  if (memberSummary.hasPin) {
+    document.getElementById('pinTitle').textContent = 'Hi ' + (memberSummary.first || 'Member') + '! 👋';
+    document.getElementById('pinSub').textContent = 'Enter your 4-digit PIN to continue';
+    show('sPin');
+    ['p0','p1','p2','p3'].forEach(id => {
+      const el = document.getElementById(id);
+      el.value = '';
+      el.classList.remove('filled');
+    });
+    document.getElementById('pinErr').classList.remove('show');
+    document.getElementById('pinBtn').disabled = true;
+    setTimeout(() => document.getElementById('p0').focus(), 100);
+  } else {
+    show('sCreate');
+    ['n0','n1','n2','n3','c0','c1','c2','c3'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('createErr').classList.remove('show');
+    setTimeout(() => document.getElementById('n0').focus(), 100);
+  }
+}
+
+function pickAccount(memberId) {
+  const m = (phoneMembers || []).find(x => Number(x.id) === Number(memberId));
+  if (!m) return;
+  if (pickMode === 'reset') {
+    if (!m.isActive || !m.hasPin) return;
+    myMemberId = m.id;
+    submitPinResetForMember(m);
+    return;
+  }
+  proceedToAuth(m);
+}
+
+async function submitPinResetForMember(memberSummary) {
+  const phone = document.getElementById('pinResetPhone')?.value || myPhone || '';
+  const notes = document.getElementById('pinResetNotes')?.value || '';
+  const err = document.getElementById('pinResetErr');
+  const ok = document.getElementById('pinResetOk');
+  err.classList.remove('show');
+  try {
+    const result = await apiPost('auth/request-pin-reset', {
+      phone,
+      notes,
+      memberId: memberSummary?.id || myMemberId,
+    });
+    if (ok) {
+      ok.textContent = result.message || 'Request sent. The board will approve your reset soon.';
+      ok.style.display = 'block';
+    }
+    show('sPinReset');
+  } catch (error) {
+    if (ok) ok.style.display = 'none';
+    err.textContent = error.message || 'Could not send request. Call (424) 547-5594 for help.';
+    err.classList.add('show');
+    show('sPinReset');
+  }
 }
 
 function openPinResetRequest(){
@@ -942,8 +1082,23 @@ async function submitPinResetRequest(){
     return;
   }
   err.classList.remove('show');
+  myPhone = phone;
   try {
-    const result=await apiPost('auth/request-pin-reset',{ phone, notes });
+    if (!myMemberId) {
+      const check = await apiPost('auth/check-phone', { phone });
+      phoneMembers = check.members || [];
+      const resetCandidates = phoneMembers.filter(m => m.isActive && m.hasPin);
+      if (resetCandidates.length > 1) {
+        pickMode = 'reset';
+        renderAccountPicker(phoneMembers, { mode: 'reset' });
+        show('sPick');
+        return;
+      }
+      if (resetCandidates.length === 1) {
+        myMemberId = resetCandidates[0].id;
+      }
+    }
+    const result=await apiPost('auth/request-pin-reset',{ phone, notes, memberId: myMemberId });
     if(ok){
       ok.textContent=result.message||'Request sent. The board will approve your reset soon.';
       ok.style.display='block';
@@ -1069,21 +1224,27 @@ async function goPhone(){
       showPhoneHelp(p);
       return;
     }
-    me = result.member || null;
-    if(result.hasPin){
-      document.getElementById('pinTitle').textContent='Hi '+(me?.first||'Member')+'! 👋';
-      document.getElementById('pinSub').textContent='Enter your 4-digit PIN to continue';
-      show('sPin');
-      ['p0','p1','p2','p3'].forEach(id=>{const el=document.getElementById(id);el.value='';el.classList.remove('filled');});
-      document.getElementById('pinErr').classList.remove('show');
-      document.getElementById('pinBtn').disabled=true;
-      setTimeout(()=>document.getElementById('p0').focus(),100);
-    } else {
-      show('sCreate');
-      ['n0','n1','n2','n3','c0','c1','c2','c3'].forEach(id=>document.getElementById(id).value='');
-      document.getElementById('createErr').classList.remove('show');
-      setTimeout(()=>document.getElementById('n0').focus(),100);
+    phoneMembers = result.members || [];
+    const activeMembers = phoneMembers.filter(m => m.isActive);
+    if (!result.canLogin || activeMembers.length === 0) {
+      if (phoneMembers.length > 1) {
+        pickMode = 'login';
+        renderAccountPicker(phoneMembers);
+        show('sPick');
+        return;
+      }
+      err.textContent='This account is inactive. Contact the board for help.';
+      err.classList.add('show');
+      scrollAuthNotice(err);
+      return;
     }
+    if (phoneMembers.length > 1) {
+      pickMode = 'login';
+      renderAccountPicker(phoneMembers);
+      show('sPick');
+      return;
+    }
+    proceedToAuth(phoneMembers[0]);
   } catch (error) {
     console.error('Auth phone lookup failed:', error);
     err.textContent = 'Unable to verify your phone number right now. Please try again later.';
@@ -1108,7 +1269,7 @@ async function doPin(){
   const entered=getP('p');
   const errEl=document.getElementById('pinErr');
   try {
-    const result = await apiPost('auth/verify-pin',{ phone: myPhone, pin: entered });
+    const result = await apiPost('auth/verify-pin',{ phone: myPhone, pin: entered, memberId: myMemberId });
     if(result.valid){
       errEl.classList.remove('show');
       me = result.member || me;
@@ -1141,8 +1302,8 @@ async function doCreate(){
   if(np!==cp){err.classList.add('show');return;}
   err.classList.remove('show');
   try {
-    await apiPost('auth/create-pin',{ phone: myPhone, pin: np });
-    const verify = await apiPost('auth/verify-pin',{ phone: myPhone, pin: np });
+    await apiPost('auth/create-pin',{ phone: myPhone, pin: np, memberId: myMemberId });
+    const verify = await apiPost('auth/verify-pin',{ phone: myPhone, pin: np, memberId: myMemberId });
     if (!verify.valid) {
       throw new Error(verify.error || 'PIN verification failed after creation.');
     }
@@ -1163,7 +1324,7 @@ async function loginOK(){
   if(!me) return;
   document.body.classList.add('portal-logged-in');
   document.getElementById('portalApp').style.display='flex';
-  ['sPhone','sPin','sCreate'].forEach(s=>document.getElementById(s).style.display='none');
+  ['sPhone','sPin','sCreate','sPick'].forEach(s=>document.getElementById(s).style.display='none');
   setPortalLoading(true);
   try {
     await refreshPortalData({ scope: 'core', force: true });
@@ -1731,7 +1892,7 @@ async function saveCP(){
   if(np!==cp||np.length<4){err.classList.add('show');return;}
   err.classList.remove('show');
   try {
-    await apiPost('auth/create-pin',{ phone: myPhone, pin: np });
+    await apiPost('auth/create-pin',{ phone: myPhone, pin: np, memberId: me?.id || myMemberId });
     closeModal('cpModal');
     alert('PIN updated successfully!');
   } catch (error) {
@@ -1748,7 +1909,7 @@ document.querySelectorAll('.modal-ov').forEach(o=>o.addEventListener('click',e=>
 
 // SIGN OUT
 function doSignOut(){
-  me=null;myPhone='';
+  me=null;myPhone='';myMemberId=null;phoneMembers=[];pickMode='login';
   myBeneficiary=null;
   pendingBeneficiaryChange=null;
   beneficiaryImportPending=false;

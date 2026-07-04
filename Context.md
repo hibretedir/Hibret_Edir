@@ -1,9 +1,9 @@
 # Hibret Edir — Agent Context & Handoff
 
-**Last updated:** June 17, 2026 (board Access Management UX + mobile admin — deploy `ec09b90`)  
+**Last updated:** July 3, 2026 (shared-phone portal account picker + CRM cell import — pending deploy)  
 **Purpose:** Onboard a new Cursor agent quickly. Read this file first, then `HIBRET_EDIR_PROJECT_HANDOFF (1).md` for deeper business rules and by-laws.
 
-**Current focus (next agent):** **Twilio SMS** — buy number, set `TWILIO_*` on Netlify, `npm run test:notify -- --send`. Then **production smoke-test** (invite email + SMS; board Access Management on phone + PC). **Database:** local `.env` `DATABASE_URL` points at **Render Postgres** — `npm run db:migrate` from your laptop **is** production DB ops. Confirm **`ADMIN_AUTH_ENABLED=true`** and **`BOARD_SUPER_ADMIN_EMAILS`** on Netlify. SendGrid is **done** — see **`docs/notifications-setup.md`**. QA playbook: **`docs/system-validation-playbook.md`**. **Local mobile testing:** `npm run dev` → phone browser `http://<PC-LAN-IP>:8888/admin/` or `/portal/` (no push needed for layout/tap testing).
+**Current focus (next agent):** **Twilio SMS** — buy number, set `TWILIO_*` on Netlify, `npm run test:notify -- --send`. Then **production smoke-test** (invite email + SMS; board Access Management on phone + PC; **portal shared-phone picker** on a duplicate-number family). **Database:** local `.env` `DATABASE_URL` points at **Render Postgres** — `npm run db:migrate` from your laptop **is** production DB ops. Confirm **`ADMIN_AUTH_ENABLED=true`** and **`BOARD_SUPER_ADMIN_EMAILS`** on Netlify. SendGrid is **done** — see **`docs/notifications-setup.md`**. QA playbook: **`docs/system-validation-playbook.md`**. **Local mobile testing:** `npm run dev` → phone browser `http://<PC-LAN-IP>:8888/admin/` or `/portal/` (no push needed for layout/tap testing).
 
 ---
 
@@ -108,6 +108,8 @@ hibretedir/
 │   ├── set_event_announcement.js  # CLI backfill prayer/burial/payment on events.notes (legacy; prefer Admin → Announce)
 │   ├── fix_board_permissions_regression.js  # One-off repair if board_perms regressed
 │   ├── fix_qa_phone_collision.js  # Move QA test members off a real member's phone (prod DB one-off)
+│   ├── annotate_member_cell_review.py  # Match Excel cell list → CRM; build board review xlsx
+│   ├── apply_member_cell_updates.py      # Apply approved mobile updates from review file (shared phones OK)
 │   ├── sync_board_member_names.js # Link board logins → CRM member_number; member_number roster only (no hardcoded emails)
 │   ├── build_invoice_snapshot.py
 │   ├── build_members_snapshot.py
@@ -285,10 +287,10 @@ Base URL: `/.netlify/functions/<name>`
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | `/config` | — | `{ adminAuthRequired, memberAuthRequired }` |
-| POST | `/check-phone` | — | Member lookup; `rankMemberForPortalAuth()` prefers active real members over QA test rows when phones collide |
-| POST | `/create-pin` | — | Set bcrypt PIN |
-| POST | `/verify-pin` | — | Returns member JWT |
-| POST | `/request-pin-reset` | — | Creates `pin_reset_requests` row |
+| POST | `/check-phone` | — | Returns all CRM matches for phone/email: `{ exists, canLogin, multiple, members[] }` with `displayName`, `hasPin`, `isActive` per row; QA test rows excluded |
+| POST | `/create-pin` | — | Set bcrypt PIN on **selected** member (`memberId` required when multiple matches); inactive blocked |
+| POST | `/verify-pin` | — | Returns member JWT; `memberId` required when multiple matches; PIN is per-member (not shared across family on same phone) |
+| POST | `/request-pin-reset` | — | Creates `pin_reset_requests` row; accepts `memberId` when phone matches multiple accounts |
 | GET/POST | `/pin-reset-requests/*` | Admin | List / approve / reject |
 | POST | `/admin/reset-pin` | Admin | Clear PIN from member modal |
 | GET | `/me` | Member JWT | Current member |
@@ -402,9 +404,10 @@ Placeholders show `—` until API loads. Regenerate static JSON: `python scripts
 - **Profile** — legacy CRM rows may have join **dates** in `address` column; `portal.js` `normalizePortalAddress()` + portal UI show “Not on file” instead of a date
 - **Beneficiary** — `beneficiary_import_pending` for paper members until board imports digital record
 - **Contact Us** — phone/email always synced from logged-in `me` (readonly); cleared on sign-out
-- **Portal auth** — `rankMemberForPortalAuth()` in `auth.js` / `member-snapshot.js` prefers real members over QA test rows when phones collide
+- **Portal auth (July 3)** — When a phone matches **multiple** CRM members, portal shows **Choose Account** (display name only). Each member has a **separate PIN**; `create-pin` / `verify-pin` / PIN reset require `memberId`. **Inactive** accounts appear labeled but cannot sign in or set a PIN. Single match skips picker. QA test rows hidden from picker (`isQaTestMember`). CSS `app-theme.css` portal29.
+- **Portal auth (legacy)** — `rankMemberForPortalAuth()` still used only when a single auto-pick fallback is needed internally; no longer auto-picks for login when multiple real members share a phone.
 - Receipt upload, profile edit, beneficiary change request, PIN reset
-- Nav brand link (logo + “Back to Main Site”) — no persistent gold border bleeding into tab bar (`app-theme.css` portal28)
+- Nav brand link (logo + “Back to Main Site”) — no persistent gold border bleeding into tab bar (`app-theme.css` portal29)
 
 ### Board Admin Page (`public/admin/index.html`)
 
@@ -639,6 +642,13 @@ From by-laws / handoff:
 
 ## 12. Recent session changelog
 
+### July 3, 2026 — Shared-phone portal login + CRM cell import
+
+- **Shared phone picker** — `check-phone` returns all matches; new portal screen **Choose Account** when `members.length > 1`; display name only (no member # on picker). **Inactive** rows shown as non-clickable. **Separate PIN per member** — `memberId` on `create-pin`, `verify-pin`, change-PIN modal, and PIN reset when ambiguous.
+- **Known duplicate mobiles (Render CRM, July 2026):** #178 Yared / #179 Nunu (`424-436-7048`); #46 Dawit / #224 Etenat; #91 Mik / #92 Almaz; #172 Metasebia / #225 Bizuayhu. Shared numbers are intentional (family); portal now disambiguates.
+- **CRM cell import (ops, applied to Render):** Board Excel `data/members cell number.xlsx` → `scripts/annotate_member_cell_review.py` (match PayPal-style name, sort A–Z, annotate DB columns) → board review → `scripts/apply_member_cell_updates.py` applied **25** `mobile` updates; backups in `data/mobile_backup_*.csv` (gitignored). Shared phones allowed on apply (log only).
+- **PayPal sync date (June 17, `b48d782`):** Admin “Report as of” no longer reverts to stale `invoices-snapshot.json` date.
+
 ### June 17, 2026 — Board Access Management UX + mobile admin (`ec09b90`)
 
 - **Access Management** — Invite at top; per-member Remove (deactivate, stays in list), Re-add, reset password, update email; tier presets (Restricted → Approver) with gold **active** button state; Read-only preset clears all perms
@@ -828,14 +838,14 @@ From by-laws / handoff:
 
 ---
 
-## 15. Next agent priorities (June 17, 2026)
+## 15. Next agent priorities (July 3, 2026)
 
 1. **Twilio SMS** — Buy US SMS number; add `TWILIO_*` to Netlify; set `DEMO_QA_PHONE=3105550199`; `npm run test:notify -- --send`.
-2. **Production smoke-test** — Portal on real phone (instant tabs, EN/አማ toggle); **Access Management** on phone + PC (invite, tier presets, save, deactivate/re-add); board login with alias email; Restricted advisor (Tsehaye); confirm `ADMIN_AUTH_ENABLED` + `BOARD_SUPER_ADMIN_EMAILS` on Netlify.
+2. **Production smoke-test** — Portal on real phone (instant tabs, EN/አማ toggle, **shared-phone account picker** on duplicate family number); **Access Management** on phone + PC; board login with alias email; Restricted advisor (Tsehaye); confirm `ADMIN_AUTH_ENABLED` + `BOARD_SUPER_ADMIN_EMAILS` on Netlify.
 3. **EVT-06** — Admin create event + bulk PayPal invoices to all active members.
 4. **EVT-08** — Payment reminders.
 5. **Optional portal** — Extend Amharic to dynamic invoice card strings; one-off script to clear date-like `address` values in CRM for legacy members.
 
-**Done this cycle:** Board Access Management (invite, deactivate/re-add, update email, mobile-simplified UI, tier highlight); CRM name auto-fill on board invite; admin logout + public mobile nav fixes; member portal mobile perf (`21e1514`). Deployed `ec09b90`.
+**Done this cycle:** Shared-phone portal account picker (separate PINs, inactive blocked); CRM cell import scripts + 25 mobile updates on Render; PayPal sync date fix (`b48d782`); board Access Management (`ec09b90`); portal mobile perf (`21e1514`).
 
-**Do not regress:** Portal tabs must stay instant (no full `refreshPortalData()` on every tap); `DEMO_QA_PHONE` must not match a real member; Board `display_name` must never UPDATE `members` (except read-only backfill from CRM when empty); sync script must not overwrite non-empty `display_name` without `--force-names`; Security views super-admin only; Restricted scope limits to Members CRM; deactivated board members stay in Access Management list; Meridian showcase; waiting list order; current announcement uses `event_number`.
+**Do not regress:** Portal tabs must stay instant (no full `refreshPortalData()` on every tap); shared-phone login must always show account picker when multiple CRM rows match (never silent auto-pick); PINs are per `member_id` not per phone; inactive members cannot portal-login; `DEMO_QA_PHONE` must not match a real member; Board `display_name` must never UPDATE `members` (except read-only backfill from CRM when empty); sync script must not overwrite non-empty `display_name` without `--force-names`; Security views super-admin only; Restricted scope limits to Members CRM; deactivated board members stay in Access Management list; Meridian showcase; waiting list order; current announcement uses `event_number`.
