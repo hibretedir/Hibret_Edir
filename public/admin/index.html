@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/css/admin-tracker.css?v=admin70">
+<link rel="stylesheet" href="/css/admin-tracker.css?v=admin73">
 <link rel="stylesheet" href="/css/admin-tracker-mh.css?v=1">
 </head>
 <body class="app-admin tracker">
@@ -365,7 +365,7 @@
     </div>
     <div class="modal-footer">
       <button class="btn" type="button" onclick="closeModal('messageReplyModal')">Cancel</button>
-      <button class="btn primary" type="button" onclick="submitMessageReply()">Post Reply</button>
+      <button class="btn primary" type="button" onclick="submitMessageReply()">Send Reply</button>
     </div>
   </div>
 </div>
@@ -458,6 +458,7 @@
   </div>
 </div>
 
+<script src="/js/datetime-la.js"></script>
 <script>
 const MEMBERS = [];
 const INVOICES = [];
@@ -549,6 +550,8 @@ let appFilter = 'pending';
 let boardOpsFilter = 'pending';
 let receiptFilter = 'pending';
 let messagesFilter = 'contact';
+let inboxFilter = 'all';
+let selectedInboxMessageId = null;
 let replyingMessageId = null;
 const PAYPAL_SYNC_KEY = 'hibret_paypal_last_sync';
 const ADMIN_CACHE_KEY = 'hibret_admin_boot_cache_v3';
@@ -803,11 +806,7 @@ function boardActorLabel() {
 }
 
 function boardNoteStampPrefix() {
-  const dt = new Date().toLocaleString('en-US', {
-    month: 'short', day: 'numeric', year: 'numeric',
-    hour: 'numeric', minute: '2-digit', hour12: true,
-  });
-  return `[${dt} — ${boardActorLabel()}]`;
+  return `[${fmtNowLA()} — ${boardActorLabel()}]`;
 }
 
 function paypalSyncHint(paypal) {
@@ -1110,7 +1109,7 @@ function parseJourneyInvoiceSummary(ev) {
 }
 
 function renderMemberJourneyItemHtml(ev) {
-  const when = ev.at ? String(ev.at).replace('T', ' ').slice(0, 16) : '—';
+  const when = fmtDateTimeLA(ev.at);
   const typeSlug = String(ev.type || 'event').replace(/[^a-z0-9_-]/gi, '');
   const typeLabel = String(ev.type || 'event').replace(/_/g, ' ');
 
@@ -1512,7 +1511,7 @@ function renderMemberApplicationReadOnlyHtml(app, member) {
 
   return `
     <div class="member-app-meta">
-      <span>Submitted ${esc(fmtDate(app.submitted_at))}</span>
+      <span>Submitted ${esc(fmtDateTimeLA(app.submitted_at))}</span>
       <span>Status: ${esc(app.status || '—')}</span>
       ${app.id ? `<button type="button" class="tracker-mark-btn" onclick="closeModal('memberModal');openApplicationReview(${app.id})">Open in Applications</button>` : ''}
     </div>
@@ -1531,7 +1530,7 @@ function renderMemberApplicationReadOnlyHtml(app, member) {
         <h4>Identification</h4>
         <div class="review-field"><span>Member CA ID</span>${renderIdDocPreview(idDocs.member)}</div>
         ${app.spouse_full_name ? `<div class="review-field"><span>Spouse CA ID</span>${renderIdDocPreview(idDocs.spouse)}</div>` : ''}
-        ${sig?.name ? `<div class="review-field"><span>Signature</span><strong>${esc(sig.name)}</strong> <span class="review-auto">· ${esc(sig.signed_at ? fmtDate(sig.signed_at) : '—')}</span></div>` : ''}
+        ${sig?.name ? `<div class="review-field"><span>Signature</span><strong>${esc(sig.name)}</strong> <span class="review-auto">· ${esc(sig.signed_at ? fmtDateTimeLA(sig.signed_at) : '—')}</span></div>` : ''}
       </div>
     </div>
     <div class="review-grid" style="margin-top:12px">
@@ -1720,11 +1719,6 @@ function fmtMoney(n) {
   return '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function fmtDate(d) {
-  if (!d) return '—';
-  return String(d).split(' ')[0].split('T')[0];
-}
-
 function dedupeInvoicesByNumber(list) {
   const byNum = new Map();
   for (const inv of list || []) {
@@ -1747,14 +1741,7 @@ function invoicePreferRank(inv) {
 }
 
 function formatPayPalSyncDate(iso) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleDateString('en-US', {
-    timeZone: 'America/Los_Angeles',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  return fmtDateShortLA(iso);
 }
 
 function getStoredPayPalSyncIso() {
@@ -2956,10 +2943,172 @@ function switchPayoutFilter(f) {
 
 function switchMessagesFilter(f) {
   messagesFilter = f;
+  selectedInboxMessageId = null;
   document.querySelectorAll('.tracker-tab[data-messages-filter]').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.messagesFilter === f);
   });
   updateMessagesList();
+}
+
+function switchInboxFilter(f) {
+  inboxFilter = f;
+  updateMessagesList();
+}
+
+function contactMessageSourceLabel(m) {
+  const src = String(m?.source || 'website').toLowerCase();
+  if (src === 'portal-login') return 'Login help';
+  if (src === 'portal') return 'Portal';
+  return 'Website';
+}
+
+function contactMessageSourceClass(m) {
+  const src = String(m?.source || 'website').toLowerCase();
+  if (src === 'portal-login') return 'inbox-src-login';
+  if (src === 'portal') return 'inbox-src-portal';
+  return 'inbox-src-web';
+}
+
+function parseBoardReplies(boardReply) {
+  const text = String(boardReply || '').trim();
+  if (!text) return [];
+  const parts = text.split(/\n\n\[\[FOLLOWUP:[^\]]+\]\]\n/);
+  const stampRe = /\n\n\[\[FOLLOWUP:([^\]]+)\]\]\n/g;
+  const stamps = [...text.matchAll(stampRe)].map(m => m[1]);
+  return parts.map((body, i) => ({
+    body: body.trim(),
+    label: i === 0 ? 'Board' : 'Board follow-up',
+    stamp: i === 0 ? null : (stamps[i - 1] || null),
+  })).filter(p => p.body);
+}
+
+function renderBoardReplyThreadHtml(boardReply, repliedAt) {
+  const replies = parseBoardReplies(boardReply);
+  if (!replies.length) return '';
+  return replies.map((r, i) => `
+    <section class="inbox-msg inbox-msg--out">
+      <div class="inbox-msg-hd"><strong>${esc(r.label)}</strong><span>${esc(r.stamp ? fmtDateTimeLA(r.stamp) : fmtDateTimeLA(repliedAt))}</span></div>
+      <div class="inbox-msg-body">${esc(r.body)}</div>
+    </section>`).join('');
+}
+
+function getFilteredContactMessages() {
+  if (inboxFilter === 'needs-reply') return CONTACT_MESSAGES.filter(m => !m.board_reply);
+  if (inboxFilter === 'replied') return CONTACT_MESSAGES.filter(m => !!m.board_reply);
+  return CONTACT_MESSAGES.slice();
+}
+
+function ensureInboxSelection(filtered) {
+  if (!filtered.length) {
+    selectedInboxMessageId = null;
+    return;
+  }
+  const isMobile = window.matchMedia('(max-width: 900px)').matches;
+  const inList = filtered.some(m => Number(m.id) === Number(selectedInboxMessageId));
+  if (!inList) {
+    selectedInboxMessageId = isMobile ? null : filtered[0].id;
+  }
+}
+
+function selectInboxMessage(id) {
+  selectedInboxMessageId = id;
+  updateMessagesList();
+}
+
+function clearInboxSelection() {
+  selectedInboxMessageId = null;
+  updateMessagesList();
+}
+
+function renderInboxListHtml(filtered) {
+  if (!filtered.length) {
+    return '<div class="inbox-empty">No messages in this folder.</div>';
+  }
+  return `<ul class="inbox-list" role="list">${filtered.map(m => {
+    const active = Number(m.id) === Number(selectedInboxMessageId);
+    const unreplied = !m.board_reply;
+    const preview = String(m.message || '').replace(/\s+/g, ' ').trim();
+    const sub = [contactMessageSourceLabel(m), m.email || m.phone || ''].filter(Boolean).join(' · ');
+    return `<li>
+      <button type="button" class="inbox-item${active ? ' is-active' : ''}${unreplied ? ' is-unread' : ''}" onclick="selectInboxMessage(${m.id})" aria-current="${active ? 'true' : 'false'}">
+        <div class="inbox-item-row">
+          <span class="inbox-item-name">${esc(m.name || 'Unknown')}</span>
+          <span class="inbox-item-date">${esc(fmtDateTimeLA(m.created_at))}</span>
+        </div>
+        <div class="inbox-item-sub"><span class="inbox-src ${contactMessageSourceClass(m)}">${esc(contactMessageSourceLabel(m))}</span>${m.member_number ? ` · #${esc(m.member_number)}` : ''}</div>
+        <div class="inbox-item-preview">${esc(preview.slice(0, 120))}${preview.length > 120 ? '…' : ''}</div>
+        <div class="inbox-item-foot">
+          <span class="inbox-item-status ${unreplied ? 'needs-reply' : 'replied'}">${unreplied ? 'Needs reply' : 'Replied'}</span>
+        </div>
+      </button>
+    </li>`;
+  }).join('')}</ul>`;
+}
+
+function renderInboxReadHtml(msg) {
+  if (!msg) {
+    return `<div class="inbox-read-empty">
+      <div class="inbox-read-empty-icon">✉</div>
+      <p>Select a message to read</p>
+    </div>`;
+  }
+  const isLoginHelp = String(msg.source || '').toLowerCase() === 'portal-login';
+  const replyBtn = adminCanReplyMessages()
+    ? `<button type="button" class="inbox-reply-btn" onclick="openMessageReply(${msg.id})">Reply to Member</button>`
+    : '';
+  const boardThread = msg.board_reply
+    ? renderBoardReplyThreadHtml(msg.board_reply, msg.replied_at)
+    : '';
+  return `
+    <div class="inbox-read">
+      <button type="button" class="inbox-back-btn" onclick="clearInboxSelection()">← Inbox</button>
+      <header class="inbox-read-hd">
+        <div class="inbox-read-subject">${esc(msg.name || 'Unknown')}${msg.member_number ? ` <span class="inbox-read-member">#${esc(msg.member_number)}</span>` : ''}</div>
+        <div class="inbox-read-meta">
+          <span class="inbox-src ${contactMessageSourceClass(msg)}">${esc(contactMessageSourceLabel(msg))}</span>
+          ${msg.email ? `<span class="inbox-read-email">${esc(msg.email)}</span>` : ''}
+          ${msg.phone ? `<span class="inbox-read-phone">${esc(msg.phone)}</span>` : ''}
+          <span class="inbox-read-date">${esc(fmtDateTimeLA(msg.created_at))}</span>
+        </div>
+        ${isLoginHelp ? '<p class="inbox-read-note">Login help — reply is emailed; member cannot sign in to read it here.</p>' : ''}
+      </header>
+      <article class="inbox-thread">
+        <section class="inbox-msg inbox-msg--in">
+          <div class="inbox-msg-hd"><strong>${esc(msg.name || 'Member')}</strong><span>${esc(fmtDateTimeLA(msg.created_at))}</span></div>
+          <div class="inbox-msg-body">${esc(msg.message || '')}</div>
+        </section>
+        ${boardThread || `
+        <section class="inbox-msg inbox-msg--pending">
+          <p>No reply yet.${adminCanReplyMessages() ? ' Use Reply to respond.' : ''}</p>
+        </section>`}
+      </article>
+      ${replyBtn ? `<footer class="inbox-read-ft">${replyBtn}</footer>` : ''}
+    </div>`;
+}
+
+function renderContactInboxHtml() {
+  const filtered = getFilteredContactMessages();
+  ensureInboxSelection(filtered);
+  const selected = filtered.find(m => Number(m.id) === Number(selectedInboxMessageId))
+    || CONTACT_MESSAGES.find(m => Number(m.id) === Number(selectedInboxMessageId))
+    || null;
+  const needsCount = CONTACT_MESSAGES.filter(m => !m.board_reply).length;
+  const hasSelection = selectedInboxMessageId != null;
+  return `
+    <div class="tracker-banner tracker-intro-banner tracker-banner--compact">Public Contact Us, signed-in portal messages, and <strong>login help</strong> (email reply only). Pick a message on the left — thread on the right.</div>
+    <div class="inbox-layout${hasSelection ? ' has-selection' : ''}">
+      <aside class="inbox-list-panel" aria-label="Message list">
+        <div class="inbox-toolbar">
+          <button type="button" class="inbox-filter${inboxFilter === 'all' ? ' active' : ''}" onclick="switchInboxFilter('all')">All (${CONTACT_MESSAGES.length})</button>
+          <button type="button" class="inbox-filter${inboxFilter === 'needs-reply' ? ' active' : ''}" onclick="switchInboxFilter('needs-reply')">Needs reply (${needsCount})</button>
+          <button type="button" class="inbox-filter${inboxFilter === 'replied' ? ' active' : ''}" onclick="switchInboxFilter('replied')">Replied (${CONTACT_MESSAGES.length - needsCount})</button>
+        </div>
+        ${renderInboxListHtml(filtered)}
+      </aside>
+      <section class="inbox-read-panel" aria-label="Message thread">
+        ${renderInboxReadHtml(selected)}
+      </section>
+    </div>`;
 }
 
 async function switchInvFilter(f) {
@@ -4527,7 +4676,7 @@ async function openApplicationReview(id) {
         ${(() => {
           const sig = app.applicant_signature;
           if (!sig?.name) return '';
-          const when = sig.signed_at ? fmtDate(sig.signed_at) : '—';
+          const when = sig.signed_at ? fmtDateTimeLA(sig.signed_at) : '—';
           return `<div class="review-field"><span>Signature</span><strong>${esc(sig.name)}</strong> <span class="review-auto">· ${esc(when)}</span></div>`;
         })()}
       </div>
@@ -4990,7 +5139,7 @@ async function openPayoutReview(id) {
   const cl = p.review_checklist || {};
   const auto = cl.auto || {};
   const approvals = (p.board_approvals || []).map(a =>
-    `<div class="payout-approval-row"><span>${esc(a.email || 'Board')}</span><span>${esc(String(a.at || '').slice(0, 16).replace('T', ' '))}</span></div>`
+    `<div class="payout-approval-row"><span>${esc(a.email || 'Board')}</span><span>${esc(fmtDateTimeLA(a.at))}</span></div>`
   ).join('') || '<span class="review-auto">No board approvals yet</span>';
 
   document.getElementById('payoutModalTitle').textContent = p.deceased_name || 'Payout Case';
@@ -5334,38 +5483,10 @@ function renderMessagesBodyHtml() {
         </table>` : '<div class="tracker-empty">No PIN reset requests yet. Run <code>npm run db:migrate</code> if the table is missing.</div>'}
       </div>`;
   }
-  {
-    const rows = CONTACT_MESSAGES.length ? CONTACT_MESSAGES.map(m => {
-      const src = String(m.source || 'website').toLowerCase();
-      const srcLabel = src === 'portal-login' ? 'Login help' : src === 'portal' ? 'Portal' : 'Website';
-      const srcClass = src === 'portal' || src === 'portal-login' ? 'paid' : '';
-      const statusLabel = m.board_reply ? 'Replied' : (m.status === 'new' ? 'New' : esc(m.status || '—'));
-      const statusClass = m.board_reply ? 'paid' : 'warn';
-      const memberHint = m.member_id
-        ? `<div class="tracker-member-email">Member #${esc(m.member_number || m.member_id)}</div>`
-        : '';
-      return `
-      <tr class="data-row admin-mobile-card">
-        <td class="admin-m-col-head"><div class="tracker-member-name">${esc(m.name || '—')}</div>${memberHint}<div class="tracker-member-email">${esc(m.email || '—')}</div><div class="msg-preview">${esc(m.message || '').slice(0, 160)}${(m.message || '').length > 160 ? '…' : ''}</div></td>
-        <td data-label="Phone">${esc(m.phone || '—')}</td>
-        <td data-label="Source"><span class="tracker-status ${srcClass}"><span class="tracker-status-dot"></span>${srcLabel}</span></td>
-        <td data-label="Status"><span class="tracker-status ${statusClass}"><span class="tracker-status-dot"></span>${statusLabel}</span></td>
-        <td data-label="Received"><span class="tracker-date">${esc(fmtDate(m.created_at))}</span></td>
-        <td class="admin-m-col-action" data-label="Reply">${adminCanReplyMessages() ? `<button type="button" class="tracker-mark-btn" onclick="openMessageReply(${m.id})">${m.board_reply ? 'Edit reply' : 'Reply'}</button>` : (m.board_reply ? 'Replied' : '—')}</td>
-      </tr>
-      <tr class="data-row msg-detail-row">
-        <td colspan="7"><div class="msg-detail-body">${esc(m.message || '')}${m.board_reply ? `<div class="msg-reply-block"><div class="msg-reply-head"><strong>Board reply</strong><span class="msg-reply-date">(${esc(fmtDate(m.replied_at))})</span></div><div class="msg-reply-text">${esc(m.board_reply)}</div></div>` : ''}</div></td>
-      </tr>`;
-    }).join('') : '';
-    return `
-      <div class="tracker-banner tracker-intro-banner">Messages from the public Contact Us form and the <strong>Member Portal</strong>. <strong>Login help</strong> requests cannot sign in — replies are <strong>emailed</strong> to the address they provide. Signed-in portal messages also appear under Home → Messages from the Board.</div>
-      <div class="tracker-table-wrap">
-        ${CONTACT_MESSAGES.length ? `<table class="tracker-table admin-mobile-table">
-          <thead><tr><th>From</th><th>Phone</th><th>Source</th><th>Status</th><th>Message</th><th>Received</th><th></th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>` : '<div class="tracker-empty">No contact messages yet. Run <code>npm run db:migrate</code> if the inbox table is missing.</div>'}
-      </div>`;
+  if (!CONTACT_MESSAGES.length) {
+    return '<div class="tracker-empty">No contact messages yet. Run <code>npm run db:migrate</code> if the inbox table is missing.</div>';
   }
+  return renderContactInboxHtml();
 }
 
 function updateMessagesList() {
@@ -5433,31 +5554,42 @@ function openMessageReply(id) {
   const msg = CONTACT_MESSAGES.find(m => Number(m.id) === Number(id));
   if (!msg) return;
   const isLoginHelp = String(msg.source || '').toLowerCase() === 'portal-login';
+  const hasReply = !!String(msg.board_reply || '').trim();
   replyingMessageId = id;
-  document.getElementById('messageReplyTitle').textContent = msg.board_reply ? 'Edit Reply' : 'Reply to Member';
+  document.getElementById('messageReplyTitle').textContent = hasReply ? 'Send Follow-up' : 'Reply to Member';
   document.getElementById('messageReplySub').textContent = isLoginHelp
     ? `${msg.name || '—'} · ${msg.email || 'no email on file'} · Login help`
     : `${msg.name || '—'} · ${msg.phone || msg.email || 'no contact on file'}`;
-  document.getElementById('messageReplyOriginal').innerHTML = `<strong>Their message</strong><div class="msg-detail-body" style="margin-top:6px">${esc(msg.message || '')}</div>`;
+  const priorReplies = parseBoardReplies(msg.board_reply);
+  const priorHtml = priorReplies.length
+    ? `<strong>Previous board ${priorReplies.length > 1 ? 'messages' : 'reply'}</strong>${priorReplies.map(r => `
+        <div class="msg-detail-body" style="margin-top:8px;border-left:3px solid var(--green);padding-left:10px">
+          <div style="font-size:10px;color:var(--tk-muted);margin-bottom:4px">${esc(r.label)}${r.stamp ? ' · ' + esc(fmtDateTimeLA(r.stamp)) : ''}</div>
+          ${esc(r.body)}
+        </div>`).join('')}`
+    : '';
+  document.getElementById('messageReplyOriginal').innerHTML = `<strong>Their message</strong><div class="msg-detail-body" style="margin-top:6px">${esc(msg.message || '')}</div>${priorHtml}`;
   const hintEl = document.getElementById('messageReplyHint');
   if (hintEl) {
     hintEl.textContent = isLoginHelp
       ? 'This person cannot access the portal. Your reply will be emailed to them.'
-      : 'Reply appears in the member portal when they are signed in. You can also email/text them.';
+      : hasReply
+        ? 'This adds a new follow-up — previous replies stay on the thread. Email/text sends only this new message.'
+        : 'Reply appears in the member portal when they are signed in. You can also email/text them.';
     hintEl.style.display = 'block';
   }
   const replyText = document.getElementById('messageReplyText');
   if (replyText) {
-    replyText.placeholder = isLoginHelp
-      ? 'Type your reply — this will be emailed to the member'
-      : 'Type your reply — appears under Messages from the Board on the member portal';
-    replyText.value = msg.board_reply || '';
+    replyText.placeholder = hasReply
+      ? 'Type your follow-up message…'
+      : (isLoginHelp ? 'Type your reply — this will be emailed to the member' : 'Type your reply — appears under Messages from the Board on the member portal');
+    replyText.value = '';
   }
   const notifyCb = document.getElementById('messageReplyNotify');
   const notifyLabel = document.getElementById('messageReplyNotifyLabel');
   const notifyWrap = document.getElementById('messageReplyNotifyWrap');
   if (notifyCb) {
-    notifyCb.checked = isLoginHelp ? true : !msg.board_reply;
+    notifyCb.checked = true;
     notifyCb.disabled = isLoginHelp;
   }
   if (notifyLabel) {
@@ -5500,6 +5632,7 @@ async function submitMessageReply() {
     }
     closeModal('messageReplyModal');
     replyingMessageId = null;
+    if (res?.contact_message?.id) selectedInboxMessageId = res.contact_message.id;
     showAdminToast(res?.message || (isLoginHelp ? 'Reply emailed to member.' : 'Reply posted to member profile.'), 'ok');
     if (currentView === 'messages') updateMessagesList();
     if (editingMemberId) loadMemberMessages(editingMemberId);
@@ -5519,14 +5652,23 @@ async function loadMemberMessages(memberId) {
       el.innerHTML = '<div style="font-size:12px;color:var(--tk-muted)">No contact messages linked to this member yet.</div>';
       return;
     }
-    el.innerHTML = msgs.map(m => `
+    el.innerHTML = msgs.map(m => {
+      const replies = parseBoardReplies(m.board_reply);
+      const replyHtml = replies.length
+        ? replies.map(r => `
+        <div class="msg-reply-block">
+          <div class="msg-reply-head"><strong>${esc(r.label)}</strong>${r.stamp ? `<span class="msg-reply-date">(${esc(fmtDateTimeLA(r.stamp))})</span>` : (m.replied_at ? `<span class="msg-reply-date">(${esc(fmtDateTimeLA(m.replied_at))})</span>` : '')}</div>
+          <div class="msg-reply-text">${esc(r.body)}</div>
+        </div>`).join('')
+        : '';
+      return `
       <div class="msg-member-thread">
-        <div style="font-size:10px;color:var(--tk-muted)">${esc(fmtDate(m.created_at))} · ${esc(m.source || 'contact')}</div>
+        <div style="font-size:10px;color:var(--tk-muted)">${esc(fmtDateTimeLA(m.created_at))} · ${esc(m.source || 'contact')}</div>
         <div style="font-size:12px;margin:4px 0">${esc(m.message || '')}</div>
-        ${m.board_reply
-          ? `<div class="msg-reply-block"><div class="msg-reply-head"><strong>Board reply</strong><span class="msg-reply-date">(${esc(fmtDate(m.replied_at))})</span></div><div class="msg-reply-text">${esc(m.board_reply)}</div></div>`
-          : `<button type="button" class="tracker-mark-btn" style="margin-top:6px" onclick="openMessageReply(${m.id})">Reply</button>`}
-      </div>`).join('');
+        ${replyHtml}
+        ${adminCanReplyMessages() ? `<button type="button" class="tracker-mark-btn" style="margin-top:6px" onclick="openMessageReply(${m.id})">${replies.length ? 'Send follow-up' : 'Reply'}</button>` : ''}
+      </div>`;
+    }).join('');
   } catch {
     el.innerHTML = '<div style="font-size:12px;color:var(--tk-muted)">Could not load messages.</div>';
   }
@@ -5551,7 +5693,7 @@ async function adminResetMemberPin() {
 function renderActivityView() {
   const stats = getStats();
   const rows = ACTIVITY.length ? ACTIVITY.map(a => {
-    const when = a.created_at ? String(a.created_at).replace('T', ' ').slice(0, 16) : '—';
+    const when = fmtDateTimeLA(a.created_at);
     const who = esc(a.actor_label || a.actor_type || '—');
     const what = esc(a.summary || a.action || '—');
     const entity = esc(a.entity_type || a.table_name || '');
@@ -5564,7 +5706,7 @@ function renderActivityView() {
 
   document.getElementById('mainArea').innerHTML = `
     ${trackerHeaderHtml(stats)}
-    <div class="tracker-banner tracker-intro-banner">Every board and member change is logged here. Waiting list → application → CRM → invoices stay synced automatically.</div>
+    <div class="tracker-banner tracker-intro-banner">Every board and member change is logged here. Times shown in Pacific (Los Angeles). Waiting list → application → CRM → invoices stay synced automatically.</div>
     <div class="tracker-table-wrap">
       ${ACTIVITY.length ? `<table class="tracker-table admin-mobile-table">
         <thead><tr><th>When</th><th>Who</th><th>What</th></tr></thead>
@@ -5726,7 +5868,7 @@ function renderBoardAccessDetailPanel(b, canManage) {
   }
 
   const st = boardAccessStatusLabel(b);
-  const when = b.created_at ? String(b.created_at).replace('T', ' ').slice(0, 10) : '—';
+  const when = fmtDate(b.created_at);
   const isSelf = adminUser && Number(adminUser.id) === Number(b.id);
   const canEditPerms = canManage && b.is_active && !b.is_super_admin && !isSelf;
 
@@ -6082,7 +6224,7 @@ function renderMonitorHealthDashboardPanel(d) {
       </div>
       <div class="mh-health-grid">${healthCards}</div>
       <div class="mh-meta-row">
-        <span>Updated ${esc(d.generated_at ? new Date(d.generated_at).toLocaleString() : '—')}</span>
+        <span>Updated ${esc(d.generated_at ? fmtDateTimeLA(d.generated_at) : '—')}</span>
         <button type="button" class="btn secondary mh-step-btn" onclick="refreshMonitorHealth()">↻ Refresh</button>
         <a href="${esc(d.links?.showcase || '/docs/automation-showcase.html')}" target="_blank" rel="noopener">Meridian showcase ↗</a>
       </div>

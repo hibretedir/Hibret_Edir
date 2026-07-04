@@ -1,4 +1,5 @@
 const { getDb } = require('./db');
+const { toDateOnlyString } = require('./datetime-la');
 const { notifyProfileUpdate, notifyBeneficiaryUpdate, notifyBeneficiaryChangeRequested } = require('./notify');
 const { getActivityLog, getMemberJourney, logActivity } = require('./audit');
 const { getApplicationForMember } = require('./apply');
@@ -383,7 +384,7 @@ function buildInvoicePayload(row) {
     || row.member_paypal_name
     || row.member_full_name
     || '';
-  const dateStr = row.date ? row.date.toISOString().slice(0, 19).replace('T', ' ') : null;
+  const dateStr = toDateOnlyString(row.date) || null;
   const daysSinceSent = invoiceDaysSinceSent(dateStr, row.status);
   const daysOverdue = computeDaysPastDue(dateStr, row.status);
   return {
@@ -942,19 +943,6 @@ function formatDeceasedMemberLabel(eventNumber, deceasedName) {
   const name = String(deceasedName || '').trim();
   if (!name) return '';
   return eventNumber != null && eventNumber !== '' ? `#${eventNumber} ${name}` : name;
-}
-
-function toDateOnlyString(value) {
-  if (!value) return '';
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return value.toISOString().slice(0, 10);
-  }
-  const raw = String(value).trim();
-  const iso = raw.match(/^(\d{4}-\d{2}-\d{2})/);
-  if (iso) return iso[1];
-  const parsed = new Date(raw);
-  if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
-  return '';
 }
 
 function mapDeceasedMemberRow(row) {

@@ -10,6 +10,7 @@ const {
   hasPerm,
 } = require('./board-permissions');
 const { outstandingInvoiceSql } = require('./payment-methods');
+const { toDateOnlyString } = require('./datetime-la');
 
 const headers = {
   'Access-Control-Allow-Origin': '*',
@@ -192,7 +193,7 @@ async function fetchActiveMembers(db) {
 }
 
 function mapOutstandingInvoiceRow(row) {
-  const dateStr = row.date ? row.date.toISOString().slice(0, 19).replace('T', ' ') : null;
+  const dateStr = toDateOnlyString(row.date) || null;
   const amountDue = Number(row.amount_due || 0) > 0
     ? Number(row.amount_due)
     : Number(row.amount || 0);

@@ -4,6 +4,7 @@ const {
   recordPayPalInvoicePayment,
   isPayPalInvoiceClosedStatus,
 } = require('./paypal-client');
+const { fmtDateTimeLA } = require('./datetime-la');
 
 function mapToPayPalPaymentMethod(method) {
   const m = String(method || '').trim().toLowerCase();
@@ -35,7 +36,7 @@ function buildPayPalPaymentTrailNote(row, options = {}) {
   if (method) parts.push(String(method));
   if (options.source) parts.push(String(options.source));
   if (options.approvedBy) parts.push(`Approved by ${options.approvedBy}`);
-  const when = options.approvedAt || new Date().toISOString().slice(0, 16).replace('T', ' ');
+  const when = options.approvedAt ? fmtDateTimeLA(new Date(options.approvedAt)) : fmtDateTimeLA(new Date());
   parts.push(when);
   const detail = String(options.note || row.paid_note || '').trim();
   const header = parts.join(' · ');

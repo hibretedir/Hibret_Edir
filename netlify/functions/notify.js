@@ -427,6 +427,123 @@ async function notifyApplicationApproved(db, app, member) {
   });
 }
 
+function escapeHtmlEmail(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** Branded HTML + plain text for board replies to contact / portal messages. */
+function buildBoardReplyEmail({ memberName, reply, isLoginHelp = false, showPortalLink = false, portalUrl = null }) {
+  const name = String(memberName || 'Member').trim() || 'Member';
+  const replyBody = String(reply || '').trim();
+  const siteUrl = getPublicSiteUrl();
+  const portalHref = portalUrl || `${siteUrl}/portal/`;
+
+  let introPlain;
+  let footerPlain;
+  if (isLoginHelp) {
+    introPlain = 'The Hibret Edir board replied to your member portal login help request:';
+    footerPlain = 'If you still need help signing in, reply to this email or call (424) 547-5594.';
+  } else if (showPortalLink) {
+    introPlain = 'The board replied to your message:';
+    footerPlain = `You can also view this in the Member Portal:\n${portalHref}`;
+  } else {
+    introPlain = 'The Hibret Edir board replied to your message:';
+    footerPlain = 'If you have questions, reply to this email or call (424) 547-5594.';
+  }
+
+  const text = [
+    `Hello ${name},`,
+    '',
+    introPlain,
+    '',
+    replyBody,
+    '',
+    footerPlain,
+  ].join('\n');
+
+  const introHtml = isLoginHelp
+    ? 'The Hibret Edir board replied to your <strong>login help</strong> request:'
+    : showPortalLink
+      ? 'The board replied to your message:'
+      : 'The Hibret Edir board replied to your message:';
+
+  const footerHtml = isLoginHelp
+    ? 'If you still need help signing in, reply to this email or call <a href="tel:4245475594" style="color:#078930;text-decoration:none;font-weight:600;">(424) 547-5594</a>.'
+    : showPortalLink
+      ? 'You can also read this thread anytime in the member portal.'
+      : 'If you have questions, reply to this email or call <a href="tel:4245475594" style="color:#078930;text-decoration:none;font-weight:600;">(424) 547-5594</a>.';
+
+  const portalButton = showPortalLink
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px 0 0;">
+        <tr><td style="border-radius:8px;background:#078930;">
+          <a href="${escapeHtmlEmail(portalHref)}" style="display:inline-block;padding:12px 22px;font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;">Open Member Portal</a>
+        </td></tr>
+      </table>`
+    : '';
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hibret Edir</title>
+</head>
+<body style="margin:0;padding:0;background:#eef2ee;font-family:Arial,Helvetica,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#eef2ee;padding:28px 14px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:580px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #d8e3d8;box-shadow:0 8px 28px rgba(26,46,26,0.08);">
+          <tr>
+            <td style="background:linear-gradient(135deg,#065a22 0%,#078930 100%);padding:22px 26px;text-align:center;">
+              <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#fcdd09;font-weight:700;">Hibret Edir Association</div>
+              <div style="margin-top:6px;font-size:22px;line-height:1.25;font-weight:700;color:#ffffff;">Message from the Board</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:26px 26px 8px;font-size:15px;line-height:1.65;color:#1a2e1a;">
+              <p style="margin:0 0 14px;">Hello <strong>${escapeHtmlEmail(name)}</strong>,</p>
+              <p style="margin:0 0 18px;color:#4a554a;">${introHtml}</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 26px 22px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f6faf6;border:1px solid #cfe0cf;border-left:4px solid #078930;border-radius:0 10px 10px 0;">
+                <tr>
+                  <td style="padding:18px 20px;font-size:15px;line-height:1.7;color:#1a2e1a;white-space:pre-wrap;font-family:Georgia,'Times New Roman',serif;">${escapeHtmlEmail(replyBody)}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:0 26px 26px;font-size:14px;line-height:1.65;color:#4a554a;">
+              <p style="margin:0 0 16px;">${footerHtml}</p>
+              ${portalButton}
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#1a2e1a;padding:18px 24px;text-align:center;font-size:12px;line-height:1.6;color:#b8c4b8;">
+              <div style="margin-bottom:6px;color:#eef4ee;font-weight:600;">Hibret Edir Association · Los Angeles</div>
+              <a href="tel:4245475594" style="color:#fcdd09;text-decoration:none;">(424) 547-5594</a>
+              &nbsp;·&nbsp;
+              <a href="mailto:hibretedirtext@gmail.com" style="color:#fcdd09;text-decoration:none;">hibretedirtext@gmail.com</a>
+              &nbsp;·&nbsp;
+              <a href="${escapeHtmlEmail(siteUrl)}" style="color:#fcdd09;text-decoration:none;">hibretedir.com</a>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  return { text, html };
+}
+
 async function notifyApplicationRejected(db, app, notes) {
   const name = app.member_full_name || 'Applicant';
   await notifyMember({
@@ -445,6 +562,7 @@ module.exports = {
   sendSms,
   getNotifyConfig,
   getPublicSiteUrl,
+  buildBoardReplyEmail,
   logNotification,
   notifyMember,
   notifyBoard,

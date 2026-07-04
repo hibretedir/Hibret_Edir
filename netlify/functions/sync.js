@@ -3,9 +3,10 @@
  */
 
 const { logActivity } = require('./audit');
+const { fmtDateTimeLA } = require('./datetime-la');
 
 function stamp() {
-  return new Date().toISOString().slice(0, 16).replace('T', ' ');
+  return fmtDateTimeLA(new Date());
 }
 
 async function appendMemberNote(db, memberId, text, actorLabel) {

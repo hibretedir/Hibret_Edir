@@ -206,6 +206,7 @@
   </div>
 </main>
 
+<script src="/js/datetime-la.js"></script>
 <script>
 const APPLY_API = '/.netlify/functions/apply';
 let verifiedRecord = null;
@@ -340,7 +341,7 @@ updateFormPlaceholders(localStorage.getItem('hl') || 'en');
 function syncSignatureDate() {
   const el = document.getElementById('signatureDate');
   if (!el) return;
-  el.value = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+  el.value = fmtDateLong(new Date());
 }
 syncSignatureDate();
 

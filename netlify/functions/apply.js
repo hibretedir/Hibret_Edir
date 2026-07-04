@@ -11,6 +11,8 @@ const {
   notifyRegistrationInvoiceSent,
   notifyBoard,
   notifyMember,
+  buildBoardReplyEmail,
+  getPublicSiteUrl,
   notifyBeneficiaryChangeApproved,
   notifyBeneficiaryChangeRejected,
 } = require('./notify');
@@ -1458,6 +1460,29 @@ function buildContactMessageRow(row) {
   };
 }
 
+const BOARD_REPLY_FOLLOWUP_RE = /\n\n\[\[FOLLOWUP:([^\]]+)\]\]\n/g;
+
+function appendBoardReply(existing, newReply) {
+  const trimmed = String(newReply || '').trim();
+  const prior = String(existing || '').trim();
+  if (!prior) return trimmed;
+  const stamp = new Date().toISOString();
+  return `${prior}\n\n[[FOLLOWUP:${stamp}]]\n${trimmed}`;
+}
+
+function parseBoardReplies(boardReply) {
+  const text = String(boardReply || '').trim();
+  if (!text) return [];
+  const parts = text.split(/\n\n\[\[FOLLOWUP:[^\]]+\]\]\n/);
+  const stamps = [...text.matchAll(BOARD_REPLY_FOLLOWUP_RE)].map((m) => m[1]);
+  return parts.map((body, i) => ({
+    body: body.trim(),
+    label: i === 0 ? 'Board' : 'Board follow-up',
+    stamp: i === 0 ? null : (stamps[i - 1] || null),
+    isFollowup: i > 0,
+  })).filter((p) => p.body);
+}
+
 async function submitContactForm(body) {
   const name = String(body.name || '').trim();
   const message = String(body.message || '').trim();
@@ -1624,25 +1649,27 @@ async function replyContactMessage(id, body, actor) {
          status = 'replied'
      WHERE id = $4
      RETURNING id`,
-    [reply, actor?.board_member_id || null, memberId || null, id]
+    [appendBoardReply(msg.board_reply, reply), actor?.board_member_id || null, memberId || null, id]
   );
   if (!update.rows[0]) return json(500, { error: 'Could not save reply.' });
 
+  const isFollowup = !!String(msg.board_reply || '').trim();
   await logActivity(db, {
     actor_type: 'board',
     board_member_id: actor?.board_member_id || null,
     member_id: memberId || null,
     actor_label: actor?.actor_label || 'Board Admin',
-    action: 'message.reply',
+    action: isFollowup ? 'message.followup_reply' : 'message.reply',
     entity_type: 'contact_messages',
     record_id: id,
-    summary: `Board replied to message from ${msg.name || 'member'}`,
-    new_value: { reply: reply.slice(0, 500), contact_message_id: id },
+    summary: isFollowup
+      ? `Board sent follow-up to ${msg.name || 'member'}`
+      : `Board replied to message from ${msg.name || 'member'}`,
+    new_value: { reply: reply.slice(0, 500), contact_message_id: id, followup: isFollowup },
   });
 
   const isLoginHelp = String(msg.source || '').toLowerCase() === 'portal-login';
   const notifyMemberFlag = isLoginHelp || body.notify_member !== false;
-  const mustEmail = isLoginHelp || (!memberId && !msg.member_id);
 
   if (notifyMemberFlag) {
     let memberRow = null;
@@ -1666,36 +1693,17 @@ async function replyContactMessage(id, body, actor) {
     const subject = isLoginHelp
       ? 'Hibret Edir — reply to your login help request'
       : 'Hibret Edir — reply from the board';
-    let text;
-    let sms;
-    if (isLoginHelp || mustEmail) {
-      text = [
-        `Hello ${memberName},`,
-        '',
-        isLoginHelp
-          ? 'The Hibret Edir board replied to your member portal login help request:'
-          : 'The Hibret Edir board replied to your message:',
-        '',
-        reply,
-        '',
-        isLoginHelp
-          ? 'If you still need help signing in, reply to this email or call (424) 547-5594.'
-          : 'If you have questions, reply to this email or call (424) 547-5594.',
-      ].join('\n');
-      sms = `Hibret Edir: ${reply.slice(0, 140)}${reply.length > 140 ? '…' : ''}`;
-    } else {
-      text = [
-        `Hello ${memberName},`,
-        '',
-        'The board replied to your message:',
-        '',
-        reply,
-        '',
-        'Sign in to the Member Portal → Home → Messages from the Board to view your message history.',
-        process.env.URL ? `${process.env.URL}/portal/` : '',
-      ].filter(Boolean).join('\n');
-      sms = 'Hibret Edir: The board replied to your message. Sign in to the member portal to read it.';
-    }
+    const showPortalLink = !isLoginHelp && String(msg.source || '').toLowerCase() === 'portal';
+    const { text, html } = buildBoardReplyEmail({
+      memberName,
+      reply,
+      isLoginHelp,
+      showPortalLink,
+      portalUrl: `${getPublicSiteUrl()}/portal/`,
+    });
+    const sms = showPortalLink
+      ? 'Hibret Edir: The board replied to your message. Sign in to the member portal to read it.'
+      : `Hibret Edir: ${reply.slice(0, 140)}${reply.length > 140 ? '…' : ''}`;
     if (recipientEmail) {
       await notifyMember({
         db,
@@ -1704,6 +1712,7 @@ async function replyContactMessage(id, body, actor) {
         phone: isLoginHelp ? null : (memberRow?.mobile || msg.phone),
         subject,
         text,
+        html,
         smsText: isLoginHelp ? null : sms,
       });
     } else if (memberRow || msg.phone) {
@@ -1714,6 +1723,7 @@ async function replyContactMessage(id, body, actor) {
         phone: memberRow?.mobile || msg.phone,
         subject,
         text,
+        html,
         smsText: sms,
       });
     }
@@ -1731,8 +1741,8 @@ async function replyContactMessage(id, body, actor) {
   return json(200, {
     ok: true,
     message: isLoginHelp
-      ? 'Reply emailed to the member.'
-      : 'Reply posted to the member profile.',
+      ? (isFollowup ? 'Follow-up emailed to the member.' : 'Reply emailed to the member.')
+      : (isFollowup ? 'Follow-up posted and member notified.' : 'Reply posted to the member profile.'),
     contact_message: buildContactMessageRow(refreshed.rows[0]),
   });
 }

@@ -515,6 +515,7 @@
   </div>
 </div>
 
+<script src="/js/datetime-la.js"></script>
 <script>
 const API_BASE = '/.netlify/functions';
 const TOKEN_KEY = 'hibret_portal_token';
@@ -1463,7 +1464,7 @@ function renderInvs(list){
     return `<div class="inv-card">
       <div class="inv-bar">
         <span class="inv-bar-name">${inv.item}</span>
-        <span class="inv-bar-date">${inv.date.split(' ')[0]}</span>
+        <span class="inv-bar-date">${fmtDate(inv.date)}</span>
       </div>
       <div class="inv-body">
         <div class="inv-for">Paying for: <strong>${decName}</strong></div>
@@ -1680,7 +1681,7 @@ async function submitReceiptUpload(personName){
     <div class="cd-row"><span class="cd-lbl">Member</span><span class="cd-val">${me.first} ${me.last}</span></div>
     <div class="cd-row"><span class="cd-lbl">Paying for</span><span class="cd-val">${personLabel}</span></div>
     <div class="cd-row"><span class="cd-lbl">Method</span><span class="cd-val">${selMeth}</span></div>
-    <div class="cd-row"><span class="cd-lbl">Submitted</span><span class="cd-val">${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span></div>`;
+    <div class="cd-row"><span class="cd-lbl">Submitted</span><span class="cd-val">${fmtDateLong(new Date())}</span></div>`;
   document.getElementById('portalApp').style.display='none';
   document.getElementById('sConfirm').style.display='flex';
   rmFile();
@@ -1701,16 +1702,31 @@ function readFileAsBase64(file){
   });
 }
 
+function parseBoardReplies(boardReply) {
+  const text = String(boardReply || '').trim();
+  if (!text) return [];
+  const parts = text.split(/\n\n\[\[FOLLOWUP:[^\]]+\]\]\n/);
+  const stampRe = /\n\n\[\[FOLLOWUP:([^\]]+)\]\]\n/g;
+  const stamps = [...text.matchAll(stampRe)].map(m => m[1]);
+  return parts.map((body, i) => ({
+    body: body.trim(),
+    label: i === 0 ? 'Board reply' : 'Board follow-up',
+    stamp: i === 0 ? null : (stamps[i - 1] || null),
+  })).filter(p => p.body);
+}
+
 // NOTIFICATIONS
 function buildLiveNotifications() {
   const items = [];
   for (const msg of MY_BOARD_MESSAGES.filter(m => m.board_reply)) {
-    const when = msg.replied_at ? String(msg.replied_at).replace('T', ' ').slice(0, 10) : '';
+    const replies = parseBoardReplies(msg.board_reply);
+    const latest = replies[replies.length - 1];
+    const when = fmtDateTimeLA(msg.replied_at);
     items.push({
       type: 'green',
       icon: '✉️',
-      title: 'Reply from the Board',
-      msg: String(msg.board_reply).slice(0, 120) + (String(msg.board_reply).length > 120 ? '…' : ''),
+      title: latest?.label === 'Board follow-up' ? 'Follow-up from the Board' : 'Reply from the Board',
+      msg: String(latest?.body || msg.board_reply).slice(0, 120) + (String(latest?.body || msg.board_reply).length > 120 ? '…' : ''),
       time: when,
     });
   }
@@ -1726,7 +1742,7 @@ function buildLiveNotifications() {
       icon: overdue > 45 ? '•' : '📢',
       title,
       msg: `$${Number(inv.amount_due || 110).toFixed(2)} outstanding${overdue > 0 ? ` · ${overdue} days since sent` : ''}`,
-      time: inv.date ? String(inv.date).split(' ')[0] : '',
+      time: inv.date ? fmtDate(inv.date) : '',
     });
   }
   return items;
@@ -1740,14 +1756,23 @@ function renderBoardMessages() {
     return;
   }
   el.innerHTML = MY_BOARD_MESSAGES.map(m => {
-    const sent = m.created_at ? String(m.created_at).replace('T', ' ').slice(0, 16) : '';
-    const replied = m.replied_at ? String(m.replied_at).replace('T', ' ').slice(0, 16) : '';
+    const sent = fmtDateTimeLA(m.created_at);
+    const replied = fmtDateTimeLA(m.replied_at);
+    const replies = parseBoardReplies(m.board_reply);
+    const replyHtml = replies.length
+      ? replies.map(r => `
+      <div class="board-msg-board">
+        <div class="board-msg-head">
+          <span class="board-msg-label">${escHtml(r.label)}</span>
+          ${r.stamp ? `<span class="board-msg-date">(${escHtml(fmtDateTimeLA(r.stamp))})</span>` : (m.replied_at ? `<span class="board-msg-date">(${escHtml(replied)})</span>` : '')}
+        </div>
+        <div class="board-msg-text">${escHtml(r.body)}</div>
+      </div>`).join('')
+      : '<div class="board-msg-pending">Waiting for board reply…</div>';
     return `<div class="board-msg-thread">
       <div class="board-msg-meta">${sent}${m.source === 'portal' ? ' · Portal' : ''}</div>
       <div class="board-msg-you"><span class="board-msg-label">You</span>${escHtml(m.message || '')}</div>
-      ${m.board_reply
-        ? `<div class="board-msg-board"><div class="board-msg-head"><span class="board-msg-label">Board reply</span>${replied ? `<span class="board-msg-date">(${escHtml(replied.slice(0, 10))})</span>` : ''}</div><div class="board-msg-text">${escHtml(m.board_reply)}</div></div>`
-        : '<div class="board-msg-pending">Waiting for board reply…</div>'}
+      ${replyHtml}
     </div>`;
   }).join('');
 }
@@ -1762,7 +1787,7 @@ function renderNotifs(){
     <div style="margin-bottom:20px">
       <h3 style="font-size:14px;margin:0 0 10px;color:var(--gray)">Account History</h3>
       ${MY_ACTIVITY.slice(0, 15).map(a => {
-        const when = a.created_at ? String(a.created_at).replace('T',' ').slice(0,16) : '';
+        const when = fmtDateTimeLA(a.created_at);
         return `<div class="notif-card info" style="margin-bottom:8px">
           <div class="notif-body">
             <div class="notif-title">${a.summary || a.action || 'Update'}</div>

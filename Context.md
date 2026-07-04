@@ -1,9 +1,9 @@
 # Hibret Edir — Agent Context & Handoff
 
-**Last updated:** July 3, 2026 (shared-phone picker, login-help email replies, CRM cell import)  
+**Last updated:** July 3, 2026 (Messages inbox, HTML reply emails, follow-up policy, LA timezone sitewide)  
 **Purpose:** Onboard a new Cursor agent quickly. Read this file first, then `HIBRET_EDIR_PROJECT_HANDOFF (1).md` for deeper business rules and by-laws.
 
-**Current focus (next agent):** **Twilio SMS** — buy number, set `TWILIO_*` on Netlify, `npm run test:notify -- --send`. Then **production smoke-test**: shared-phone account picker; **portal login-help** (wrong number → required email → board reply emailed); board Access Management on phone + PC. **Database:** local `.env` `DATABASE_URL` points at **Render Postgres** — `npm run db:migrate` from your laptop **is** production DB ops. Confirm **`ADMIN_AUTH_ENABLED=true`** and **`BOARD_SUPER_ADMIN_EMAILS`** on Netlify. SendGrid is **done** — see **`docs/notifications-setup.md`**. QA playbook: **`docs/system-validation-playbook.md`**. **Local mobile testing:** `npm run dev` → phone browser `http://<PC-LAN-IP>:8888/admin/` or `/portal/`.
+**Current focus (next agent):** **Twilio SMS** — buy number, set `TWILIO_*` on Netlify, `npm run test:notify -- --send`. Then **production smoke-test**: shared-phone account picker; **portal login-help** (wrong number → required email → board reply emailed); Admin **Messages** email inbox + follow-up replies; board Access Management on phone + PC. **Database:** local `.env` `DATABASE_URL` points at **Render Postgres** — `npm run db:migrate` from your laptop **is** production DB ops. Confirm **`ADMIN_AUTH_ENABLED=true`** and **`BOARD_SUPER_ADMIN_EMAILS`** on Netlify. SendGrid is **done** — see **`docs/notifications-setup.md`**. QA playbook: **`docs/system-validation-playbook.md`**. **Local mobile testing:** `npm run dev` → phone browser `http://<PC-LAN-IP>:8888/admin/` or `/portal/`. **All user-visible dates/times** display in **Pacific (America/Los_Angeles)** via `public/js/datetime-la.js` + `netlify/functions/datetime-la.js`.
 
 ---
 
@@ -52,6 +52,8 @@ hibretedir/
 │   │   ├── admin-tracker.css
 │   │   ├── compat.css
 │   │   └── hibret.css
+│   └── js/
+│       └── datetime-la.js         # Shared Pacific (LA) date/time formatters for admin, portal, application
 │   └── admin/invoices-snapshot.json  # Offline invoice fallback for admin
 ├── netlify/functions/
 │   ├── auth.js                    # PIN, board login, PIN reset requests
@@ -78,6 +80,7 @@ hibretedir/
 │   ├── invoice-stats-cache.js     # 60s TTL cache for admin invoice stats
 │   ├── board-notes.js             # Board note merge helpers
 │   ├── board-permissions.js       # Granular board perms (17 keys), tiers, restricted CRM scope
+│   ├── datetime-la.js             # Server-side Pacific date/time + calendar-date helpers
 │   └── member-snapshot.js         # Static member export + dev PIN file
 ├── db/schema.sql                  # PostgreSQL schema + idempotent migrations
 ├── docs/
@@ -329,7 +332,7 @@ Base URL: `/.netlify/functions/<name>`
 | GET | `/current-announcement` | — | Latest Active event (by **`event_number` DESC**) or no-collection memorial; venues from `notes` JSON |
 | GET | `/waiting-list/status` | — | Live queue; `added` only if `Added as Member` |
 | POST | `/waiting-list`, `/contact` | — | Public forms; `/contact` accepts `source`: `website`, `portal`, **`portal-login`** (phone not found on sign-in) |
-| POST | `/contact-messages/:id/reply` | Admin (`messages` perm) | Save board reply; email/text member via `notifyMember()` |
+| POST | `/contact-messages/:id/reply` | Admin (`messages` perm) | Append board reply (follow-ups append; no edit/delete); email/text member via `notifyMember()` with branded HTML |
 | POST | `/verify`, `/membership` | — | Application gate (must be `Invited to Apply`) |
 | GET | `/waiting-list` | Admin | Full queue + slot math |
 | POST | `/waiting-list/:id/invite` | Admin | Send invitation |
@@ -342,7 +345,7 @@ Base URL: `/.netlify/functions/<name>`
 | POST | `/demo-qa/test-notify` | Admin | Send test email to `DEMO_QA_EMAIL` (NTF-01) |
 | POST | `/demo-qa/reset` | Admin | Reset QA demo cycle (DEMO_QA_EMAIL only) |
 
-**Contact messages (`contact_messages`):** Sources: **website** (public Contact Us), **portal** (signed-in member), **portal-login** (cannot sign in — phone not found). On submit, board is emailed via SendGrid. On board reply: signed-in portal messages also appear under Home → **Messages from the Board**; **portal-login** users cannot see portal replies — board reply is **emailed** to the address they provided (**email required** for `portal-login`). Admin Messages tab labels login help; reply modal forces email notify for login help. CSS `admin-tracker.css` admin70 (reply hint).
+**Contact messages (`contact_messages`):** Sources: **website** (public Contact Us), **portal** (signed-in member), **portal-login** (cannot sign in — phone not found). On submit, board is emailed via SendGrid. On board reply: signed-in portal messages also appear under Home → **Messages from the Board**; **portal-login** users cannot see portal replies — board reply is **emailed** to the address they provided (**email required** for `portal-login`). Admin Messages tab labels login help; reply modal forces email notify for login help. **Communication policy:** append-only — second+ replies **append** to `board_reply` with `[[FOLLOWUP:ISO]]` markers; no delete/edit UI or API; email sends **only new follow-up text**. Branded HTML reply emails via `notify.js` `buildBoardReplyEmail()`. CSS `admin-tracker.css` **admin73** (email inbox + gold reply button).
 
 **Membership onboarding (live):** invite → apply → board review (3 checks) → **Approve & Send Invoice** → PayPal registration fee → **member created automatically on PayPal paid** (sync or completion job). **Mark Registration Paid** / **Approve & Add to CRM** = fallback for Zelle/BofA. See **`docs/membership-onboarding-workflow.md`** and **`docs/system-validation-playbook.md`**.
 
@@ -409,7 +412,8 @@ Placeholders show `—` until API loads. Regenerate static JSON: `python scripts
 - **Portal auth (legacy)** — `rankMemberForPortalAuth()` still used only when a single auto-pick fallback is needed internally; no longer auto-picks for login when multiple real members share a phone.
 - **Profile** — legacy CRM rows may have join **dates** in `address` column; `portal.js` `normalizePortalAddress()` + portal UI show “Not on file” instead of a date
 - **Beneficiary** — `beneficiary_import_pending` for paper members until board imports digital record
-- **Contact Us (signed in)** — phone/email always synced from logged-in `me` (readonly); cleared on sign-out; replies visible in portal + optional email/SMS
+- **Contact Us (signed in)** — phone/email always synced from logged-in `me` (readonly); cleared on sign-out; replies visible in portal + optional email/SMS; portal parses follow-up thread bubbles (`parseBoardReplies`)
+- **Timestamps (July 3)** — all portal datetime displays use `public/js/datetime-la.js` → Pacific (Los Angeles)
 - Receipt upload, profile edit, beneficiary change request, PIN reset
 - Nav brand link (logo + “Back to Main Site”) — no persistent gold border bleeding into tab bar (`app-theme.css` portal29)
 
@@ -443,7 +447,9 @@ Placeholders show `—` until API loads. Regenerate static JSON: `python scripts
 
 **PayPal:** **Sync PayPal** on Invoices tab (batched POST). Stats cache invalidated after sync and member changes.
 
-**Messages (Admin → Messages → Contact):** PIN reset requests + contact inbox. **Login help** rows (`source=portal-login`) — member could not sign in; reply is **emailed only** (full reply text, no “sign in to portal” wording). Reply modal shows hint + locked “email reply” for login help.
+**Messages (Admin → Messages → Contact):** Email-style **split-pane inbox** (list + reading pane; filters All / Needs reply / Replied; mobile: list → tap → thread with ← Inbox back). PIN reset requests + contact inbox. **Login help** rows (`source=portal-login`) — member could not sign in; reply is **emailed only** (full reply text, no “sign in to portal” wording). Reply modal: **Reply to Member** / **Send Follow-up** (always empty textarea; multiple green reply bubbles in thread). Branded HTML emails (`buildBoardReplyEmail`). Gold **Reply** button left-aligned in reading pane footer. **Timestamps:** Pacific (LA) via `datetime-la.js`.
+
+**Activity log & timestamps (July 3):** All admin datetime displays (Activity log, member journey, board access, payouts, QA dashboard, message threads, board note stamps) use **`America/Los_Angeles`**. Activity log banner notes “Times shown in Pacific (Los Angeles).” Server: `netlify/functions/datetime-la.js` for invoice sent dates (`toDateOnlyString` — fixes UTC off-by-one on DATE columns), sync note stamps, follow-up invoice dates, PayPal approval notes.
 
 **Approval view (three top tabs):**
 
@@ -648,6 +654,14 @@ From by-laws / handoff:
 
 ## 12. Recent session changelog
 
+### July 3, 2026 — Messages inbox, HTML replies, follow-up policy, LA timezone
+
+- **Admin Messages inbox (`admin73`)** — Email-style split pane: message list + reading pane; filters **All / Needs reply / Replied**; mobile list → thread with back nav. Clearer who replied (Board vs Board follow-up bubbles).
+- **HTML board reply emails** — `notify.js` `buildBoardReplyEmail()` — green/gold branded HTML + plain text; `apply.js` passes `html` to `notifyMember()`.
+- **Append-only follow-ups** — No delete/edit on board replies. Second+ replies **append** via `appendBoardReply()` + `[[FOLLOWUP:ISO]]` delimiter; email sends **only new text**; portal + admin parse multiple reply bubbles (`parseBoardReplies()`).
+- **Reply button UX** — Gold gradient, larger, left-aligned in inbox reading pane footer.
+- **Pacific timezone sitewide** — `public/js/datetime-la.js` loaded on admin, portal, application; `fmtDate`, `fmtDateTimeLA`, `fmtNowLA`. Fixes UTC timestamps appearing ~7–8 hours ahead. Server helper `netlify/functions/datetime-la.js` for invoice dates, sync stamps, PayPal approval notes, follow-up markers.
+
 ### July 3, 2026 — Shared-phone portal login + CRM cell import + login-help email
 
 - **Shared phone picker** — `check-phone` returns all matches; new portal screen **Choose Account** when `members.length > 1`; display name only (no member # on picker). **Inactive** rows shown as non-clickable. **Separate PIN per member** — `memberId` on `create-pin`, `verify-pin`, change-PIN modal, and PIN reset when ambiguous.
@@ -655,7 +669,7 @@ From by-laws / handoff:
 - **Known duplicate mobiles (Render CRM, July 2026):** #178 Yared / #179 Nunu (`424-436-7048`); #46 Dawit / #224 Etenat; #91 Mik / #92 Almaz; #172 Metasebia / #225 Bizuayhu. Shared numbers are intentional (family); portal now disambiguates.
 - **CRM cell import (ops, applied to Render):** Board Excel `data/members cell number.xlsx` → `scripts/annotate_member_cell_review.py` (match PayPal-style name, sort A–Z, annotate DB columns) → board review → `scripts/apply_member_cell_updates.py` applied **25** `mobile` updates; backups in `data/mobile_backup_*.csv` (gitignored). Shared phones allowed on apply (log only).
 - **PayPal sync date (June 17, `b48d782`):** Admin “Report as of” no longer reverts to stale `invoices-snapshot.json` date.
-- **Deploy:** `97b47df` (picker + cell scripts); login-help email in follow-up commit same day.
+- **Deploy:** `97b47df` (picker + cell scripts); `c2d5de2` (login-help email).
 
 ### June 17, 2026 — Board Access Management UX + mobile admin (`ec09b90`)
 
@@ -821,6 +835,8 @@ From by-laws / handoff:
 | Board login with alternate email fails | Run `sync_board_member_names.js --apply`; check `board_member_emails` |
 | Same-day waiting list order wrong | Run `python scripts/fix_waiting_list_order.py --apply` with registration order file in `data/` |
 | Portal slow on mobile / every tap waits | Fixed June 17 — hard-refresh; if old build, confirm `21e1514` deployed; tabs should be instant with brief bar only on first Notifications open |
+| Activity log / admin times look wrong (ahead of LA) | Hard-refresh admin; confirm `public/js/datetime-la.js` loads; times should show Pacific e.g. `Jul 3, 2026, 8:49 PM` |
+| Invoice sent date off by one day | Fixed July 2026 — `toDateOnlyString()` uses LA timezone in `datetime-la.js` / `portal.js` |
 | Portal login shows wrong member name | Phone collision — set `DEMO_QA_PHONE=3105550199`; run `fix_qa_phone_collision.js` on DB if QA still shares a real phone |
 | Profile address shows a date | Legacy CRM data in `address` — `normalizePortalAddress()` in `portal.js`; field editable to real address |
 | Netlify build failed secrets scan | Hardcoded emails in scripts — use env vars / member_number roster (`sync_board_member_names.js` fixed June 17) |
@@ -849,11 +865,11 @@ From by-laws / handoff:
 ## 15. Next agent priorities (July 3, 2026)
 
 1. **Twilio SMS** — Buy US SMS number; add `TWILIO_*` to Netlify; set `DEMO_QA_PHONE=3105550199`; `npm run test:notify -- --send`.
-2. **Production smoke-test** — Portal: shared-phone picker; login-help flow (bad phone → email required → admin reply → check inbox); instant tabs + EN/አማ; **Access Management** on phone + PC; confirm `ADMIN_AUTH_ENABLED` + `BOARD_SUPER_ADMIN_EMAILS` on Netlify.
+2. **Production smoke-test** — Portal: shared-phone picker; login-help flow (bad phone → email required → admin reply → check inbox); Admin **Messages** inbox + follow-up reply; verify **LA timestamps** on Activity log; instant tabs + EN/አማ; **Access Management** on phone + PC; confirm `ADMIN_AUTH_ENABLED` + `BOARD_SUPER_ADMIN_EMAILS` on Netlify.
 3. **EVT-06** — Admin create event + bulk PayPal invoices to all active members.
 4. **EVT-08** — Payment reminders.
 5. **Optional portal** — Extend Amharic to dynamic invoice card strings; one-off script to clear date-like `address` values in CRM for legacy members.
 
-**Done this cycle:** Shared-phone account picker; login-help required email + board reply by email; CRM cell import (25 mobiles on Render); PayPal sync date fix (`b48d782`); board Access Management (`ec09b90`); portal mobile perf (`21e1514`).
+**Done this cycle:** Messages email inbox; HTML board reply emails; append-only follow-up replies; Pacific timezone sitewide; shared-phone account picker; login-help required email + board reply by email; CRM cell import (25 mobiles on Render); PayPal sync date fix (`b48d782`); board Access Management (`ec09b90`); portal mobile perf (`21e1514`).
 
-**Do not regress:** Portal tabs must stay instant (no full `refreshPortalData()` on every tap); shared-phone login must always show account picker when multiple CRM rows match (never silent auto-pick); PINs are per `member_id` not per phone; inactive members cannot portal-login; **portal-login help must require email and email replies** (not portal-only); `DEMO_QA_PHONE` must not match a real member; Board `display_name` must never UPDATE `members` (except read-only backfill from CRM when empty); sync script must not overwrite non-empty `display_name` without `--force-names`; Security views super-admin only; Restricted scope limits to Members CRM; deactivated board members stay in Access Management list; Meridian showcase; waiting list order; current announcement uses `event_number`.
+**Do not regress:** Portal tabs must stay instant (no full `refreshPortalData()` on every tap); shared-phone login must always show account picker when multiple CRM rows match (never silent auto-pick); PINs are per `member_id` not per phone; inactive members cannot portal-login; **portal-login help must require email and email replies** (not portal-only); **board replies are append-only** (no edit/delete); **all displayed times must stay Pacific (LA)**; `DEMO_QA_PHONE` must not match a real member; Board `display_name` must never UPDATE `members` (except read-only backfill from CRM when empty); sync script must not overwrite non-empty `display_name` without `--force-names`; Security views super-admin only; Restricted scope limits to Members CRM; deactivated board members stay in Access Management list; Meridian showcase; waiting list order; current announcement uses `event_number`.
