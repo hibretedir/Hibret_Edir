@@ -459,6 +459,7 @@
 </div>
 
 <script src="/js/datetime-la.js"></script>
+<script src="/js/phone-format.js"></script>
 <script>
 const MEMBERS = [];
 const INVOICES = [];
@@ -797,6 +798,17 @@ async function apiPut(path, body = {}) {
 
 function esc(s) {
   return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+}
+
+/** YYYY-MM-DD for <input type="date"> from DB date/timestamp. */
+function formatJoinedDateInput(value) {
+  const s = String(value || '').trim();
+  if (!s) return '';
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (m) return m[1];
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
 }
 
 const BOARD_NOTE_STAMP_RE = /^\[[\w\s,:\d/APMapm]+ — [^\]]+\]\s/;
@@ -1558,8 +1570,10 @@ function renderMemberProfileFormHtml(m) {
       <div><label style="font-size:11px;color:var(--tk-muted)">First</label><input class="field-input" id="ef_first" value="${esc(m.first)}"${ro}></div>
       <div><label style="font-size:11px;color:var(--tk-muted)">Last</label><input class="field-input" id="ef_last" value="${esc(m.last)}"${ro}></div>
       <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tk-muted)">Email</label><input class="field-input" id="ef_email" value="${esc(m.email)}"${ro}></div>
-      <div><label style="font-size:11px;color:var(--tk-muted)">Mobile</label><input class="field-input" id="ef_mobile" value="${esc(m.mobile)}"${ro}></div>
-      <div><label style="font-size:11px;color:var(--tk-muted)">Spouse cell</label><input class="field-input" id="ef_home" value="${esc(m.home)}"${ro} placeholder="Spouse mobile number"></div>
+      <div><label style="font-size:11px;color:var(--tk-muted)">Mobile</label><input class="field-input" id="ef_mobile" type="tel" inputmode="tel" maxlength="12" placeholder="xxx-xxx-xxxx" value="${esc(formatPhoneUS(m.mobile))}" oninput="fmtPhone(this)"${ro}></div>
+      <div><label style="font-size:11px;color:var(--tk-muted)">Spouse cell</label><input class="field-input" id="ef_home" type="tel" inputmode="tel" maxlength="12" placeholder="xxx-xxx-xxxx" value="${esc(formatPhoneUS(m.home))}" oninput="fmtPhone(this)"${ro}></div>
+      <div><label style="font-size:11px;color:var(--tk-muted)">Joined date</label><input class="field-input" id="ef_joined_date" type="date" value="${esc(formatJoinedDateInput(m.joined_date))}"${ro}>
+      <p style="font-size:10px;color:var(--tk-muted);margin:6px 0 0">From the signed application — shown as “Since YYYY” on the membership card.</p></div>
       <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tk-muted)">Address</label><input class="field-input" id="ef_address" value="${esc(m.address)}"${ro}></div>
       <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tk-muted)">Board notes (conversations, reminders)</label><textarea class="field-input" id="ef_notes" rows="4" placeholder="Call log, payment reminders, follow-ups…">${esc(m.notes || '')}</textarea>${boardNotesFieldHint()}</div>
       <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tk-muted)">Legacy application (Google Drive)</label><input class="field-input" id="ef_application_drive_url" type="url" placeholder="https://drive.google.com/..." value="${esc(m.application_drive_url || '')}"${ro}>
@@ -6767,7 +6781,8 @@ function adminPhoneCell(phone) {
   const raw = String(phone || '').trim();
   if (!raw) return '—';
   const digits = raw.replace(/\D/g, '');
-  return `<a class="tracker-phone-link follow-up-phone-link" href="tel:${esc(digits)}">${esc(raw)}</a>`;
+  const display = typeof formatPhoneUS === 'function' ? formatPhoneUS(raw) : raw;
+  return `<a class="tracker-phone-link follow-up-phone-link" href="tel:${esc(digits)}">${esc(display)}</a>`;
 }
 
 function followUpMemberLabel(m) {
@@ -7314,11 +7329,12 @@ async function saveMemberEdit() {
         spouse_name: spouse,
         paypal_name: paypal,
         email: document.getElementById('ef_email').value,
-        mobile: document.getElementById('ef_mobile').value,
-        home: document.getElementById('ef_home').value,
+        mobile: formatPhoneUS(document.getElementById('ef_mobile').value),
+        home: formatPhoneUS(document.getElementById('ef_home').value),
         address: document.getElementById('ef_address').value,
         notes: readBoardNotesField('ef_notes', memberNotesBaseline),
         application_drive_url: document.getElementById('ef_application_drive_url')?.value?.trim() || '',
+        joined_date: document.getElementById('ef_joined_date')?.value || null,
       };
     })()
     : {

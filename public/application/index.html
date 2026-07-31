@@ -57,7 +57,7 @@
           <div class="fg">
             <label class="en">Phone *</label>
             <label class="am">ስልክ *</label>
-            <input type="tel" name="phone" id="verifyPhone" placeholder="(xxx) xxx-xxxx">
+            <input type="tel" name="phone" id="verifyPhone" placeholder="xxx-xxx-xxxx" maxlength="12" inputmode="tel" oninput="fmtPhone(this)">
           </div>
         </div>
         <button type="submit" class="btn-verify"><span class="en">Verify waiting list →</span><span class="am">ዝርዝር ያረጋግጡ →</span></button>
@@ -118,11 +118,11 @@
             <div class="fg"><label class="en">Zip</label><label class="am">ዚፕ</label><input type="text" name="zip" id="memZip"></div>
           </div>
           <div class="fg-row">
-            <div class="fg"><label class="en">Spouse cell</label><label class="am">የባለቤት ስልክ</label><input type="tel" name="home_phone" placeholder="Spouse mobile (optional)"></div>
-            <div class="fg"><label class="en">Office Phone</label><label class="am">የቢሮ ስልክ</label><input type="tel" name="office_phone"></div>
+            <div class="fg"><label class="en">Spouse cell</label><label class="am">የባለቤት ስልክ</label><input type="tel" name="home_phone" placeholder="xxx-xxx-xxxx" maxlength="12" inputmode="tel" oninput="fmtPhone(this)"></div>
+            <div class="fg"><label class="en">Office Phone</label><label class="am">የቢሮ ስልክ</label><input type="tel" name="office_phone" maxlength="12" inputmode="tel" placeholder="xxx-xxx-xxxx" oninput="fmtPhone(this)"></div>
           </div>
           <div class="fg-row">
-            <div class="fg"><label class="en">Cell</label><label class="am">ሞባይል</label><input type="tel" name="cell_phone" id="memCell"></div>
+            <div class="fg"><label class="en">Cell</label><label class="am">ሞባይል</label><input type="tel" name="cell_phone" id="memCell" maxlength="12" inputmode="tel" placeholder="xxx-xxx-xxxx" oninput="fmtPhone(this)"></div>
             <div class="fg"><label class="en">Email</label><label class="am">ኢሜይል</label><input type="email" name="email" id="memEmail"></div>
           </div>
         </section>
@@ -149,7 +149,7 @@
             <div class="fg"><label class="en">Relationship *</label><label class="am">ግንኙነት *</label><input type="text" name="ben_m_rel" required></div>
           </div>
           <div class="fg-row">
-            <div class="fg"><label class="en">Phone *</label><label class="am">ስልክ *</label><input type="tel" name="ben_m_phone" required></div>
+            <div class="fg"><label class="en">Phone *</label><label class="am">ስልክ *</label><input type="tel" name="ben_m_phone" required maxlength="12" inputmode="tel" placeholder="xxx-xxx-xxxx" oninput="fmtPhone(this)"></div>
             <div class="fg"><label class="en">Email *</label><label class="am">ኢሜይል *</label><input type="email" name="ben_m_email" required></div>
           </div>
           <div class="fg"><label class="en">Address *</label><label class="am">አድራሻ *</label><input type="text" name="ben_m_address" required></div>
@@ -161,7 +161,7 @@
             <div class="fg"><label class="en">Relationship</label><label class="am">ግንኙነት</label><input type="text" name="ben_s_rel"></div>
           </div>
           <div class="fg-row">
-            <div class="fg"><label class="en">Phone</label><label class="am">ስልክ</label><input type="tel" name="ben_s_phone"></div>
+            <div class="fg"><label class="en">Phone</label><label class="am">ስልክ</label><input type="tel" name="ben_s_phone" maxlength="12" inputmode="tel" placeholder="xxx-xxx-xxxx" oninput="fmtPhone(this)"></div>
             <div class="fg"><label class="en">Email</label><label class="am">ኢሜይል</label><input type="email" name="ben_s_email"></div>
           </div>
           <div class="fg"><label class="en">Address</label><label class="am">አድራሻ</label><input type="text" name="ben_s_address"></div>
@@ -207,6 +207,7 @@
 </main>
 
 <script src="/js/datetime-la.js"></script>
+<script src="/js/phone-format.js"></script>
 <script>
 const APPLY_API = '/.netlify/functions/apply';
 let verifiedRecord = null;
@@ -227,7 +228,7 @@ function setLang(l) {
 }
 
 const FORM_PLACEHOLDERS = {
-  verifyPhone: { en: '(xxx) xxx-xxxx', am: '(xxx) xxx-xxxx' },
+  verifyPhone: { en: 'xxx-xxx-xxxx', am: 'xxx-xxx-xxxx' },
   child_name: { en: 'Full name', am: 'ሙሉ ስም' },
   child_dob: { en: 'MM/DD/YYYY', am: 'MM/DD/YYYY' },
 };
@@ -323,7 +324,7 @@ function buildEmergencyBlocks() {
           <div class="fg"><label class="en">Relationship</label><label class="am">ግንኙነት</label><input type="text" name="ec_rel_${i}"></div>
         </div>
         <div class="fg-row">
-          <div class="fg"><label class="en">Phone${req}</label><label class="am">ስልክ${req}</label><input type="tel" name="ec_phone_${i}"></div>
+          <div class="fg"><label class="en">Phone${req}</label><label class="am">ስልክ${req}</label><input type="tel" name="ec_phone_${i}" maxlength="12" inputmode="tel" placeholder="xxx-xxx-xxxx" oninput="fmtPhone(this)"></div>
           <div class="fg"><label class="en">Email</label><label class="am">ኢሜይል</label><input type="email" name="ec_email_${i}"></div>
         </div>
         <div class="fg"><label class="en">Address</label><label class="am">አድራሻ</label><input type="text" name="ec_address_${i}"></div>
@@ -660,6 +661,8 @@ async function submitMembership(e) {
     if (submitBtn) submitBtn.disabled = false;
   }
 }
+
+if (typeof bindPhoneInputs === 'function') bindPhoneInputs(document);
 </script>
 </body>
 </html>

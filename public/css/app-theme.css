@@ -776,6 +776,8 @@ body.app-portal:not(.lang-am) .auth-wrap .amh {
   overflow: hidden;
 }
 
+.app-portal .portal-nav-name { color: #fff; }
+
 .app-portal .portal-load-bar {
   height: 2px;
   max-width: 600px;
@@ -1687,4 +1689,180 @@ body.app-admin {
 
 .app-portal .board-messages-card {
   margin-bottom: 0;
+}
+
+/* Digital membership card (Profile) — matches mockup: rich green, gold border, dove watermark */
+.app-portal .membership-card {
+  position: relative;
+  overflow: hidden;
+  margin: 0 0 14px;
+  padding: 22px 22px 18px;
+  min-height: 210px;
+  border-radius: 18px;
+  color: #f8fafc;
+  background:
+    radial-gradient(90% 70% at 12% 18%, rgba(255, 255, 255, 0.08), transparent 50%),
+    radial-gradient(80% 90% at 88% 70%, rgba(252, 221, 9, 0.16), transparent 55%),
+    radial-gradient(60% 50% at 50% 100%, rgba(0, 0, 0, 0.25), transparent 60%),
+    linear-gradient(155deg, #023516 0%, #045a22 38%, #067a2c 68%, #04501e 100%);
+  border: 2px solid #d4af37;
+  box-shadow:
+    0 14px 36px rgba(2, 30, 12, 0.45),
+    0 0 0 1px rgba(252, 221, 9, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    inset 0 -18px 40px rgba(0, 0, 0, 0.22);
+}
+
+/* Large dove / logo watermark (the bird) on the right */
+.app-portal .mc-watermark {
+  position: absolute;
+  right: -18px;
+  bottom: -28px;
+  width: 210px;
+  height: 210px;
+  object-fit: contain;
+  opacity: 0.18;
+  filter: grayscale(0.15) brightness(1.35) contrast(1.05);
+  pointer-events: none;
+  z-index: 0;
+  transform: rotate(-8deg);
+}
+
+.app-portal .mc-sheen {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(118deg, transparent 42%, rgba(252, 221, 9, 0.09) 49%, transparent 58%),
+    repeating-linear-gradient(
+      -18deg,
+      transparent,
+      transparent 11px,
+      rgba(255, 255, 255, 0.015) 11px,
+      rgba(255, 255, 255, 0.015) 12px
+    );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.app-portal .mc-top {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+  margin-bottom: 18px;
+  position: relative;
+  z-index: 1;
+}
+
+.app-portal .mc-logo {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #fff;
+  border: 2.5px solid #f0d060;
+  box-shadow:
+    0 6px 16px rgba(0, 0, 0, 0.35),
+    0 0 0 3px rgba(252, 221, 9, 0.2);
+  justify-self: start;
+}
+
+.app-portal .mc-org {
+  text-align: center;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  min-width: 0;
+}
+
+.app-portal .mc-badge-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  justify-self: end;
+  align-self: start;
+  padding-top: 2px;
+}
+
+.app-portal .mc-badge {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  color: #f5d76e;
+  text-transform: uppercase;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+.app-portal .mc-since {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  white-space: nowrap;
+}
+
+.app-portal .mc-name {
+  position: relative;
+  z-index: 1;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 32px;
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: -0.01em;
+  color: #fff;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  margin: 0 0 10px;
+  max-width: 72%;
+}
+
+.app-portal .mc-number {
+  position: relative;
+  z-index: 1;
+  font-size: 19px;
+  font-weight: 700;
+  color: #f5d76e;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  margin: 0 0 6px;
+}
+
+.app-portal .mc-meta {
+  position: relative;
+  z-index: 1;
+  font-size: 15px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.88);
+  margin: 0 0 20px;
+}
+
+.app-portal .mc-foot {
+  position: relative;
+  z-index: 1;
+  padding-top: 14px;
+  border-top: 1px solid rgba(212, 175, 55, 0.55);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.app-portal .profile-section-title {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+@media (max-width: 420px) {
+  .app-portal .membership-card { min-height: 196px; padding: 18px 16px 14px; }
+  .app-portal .mc-name { font-size: 26px; max-width: 78%; }
+  .app-portal .mc-logo { width: 58px; height: 58px; }
+  .app-portal .mc-org { font-size: 13px; letter-spacing: 0.02em; }
+  .app-portal .mc-number { font-size: 17px; }
+  .app-portal .mc-meta { font-size: 14px; }
+  .app-portal .mc-watermark { width: 170px; height: 170px; right: -24px; bottom: -36px; }
 }

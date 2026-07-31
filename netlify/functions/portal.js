@@ -494,7 +494,8 @@ async function updateMember(data, actor) {
     paypal_name: 'paypal_name',
     notes: 'notes',
     application_drive_url: 'application_drive_url',
-    status: 'status'
+    status: 'status',
+    joined_date: 'joined_date'
   };
 
   const fields = [];
@@ -506,6 +507,10 @@ async function updateMember(data, actor) {
       let value = key === 'email' ? String(data[key]).trim().toLowerCase() : data[key];
       if (key === 'application_drive_url') {
         value = String(value || '').trim() || null;
+      }
+      if (key === 'joined_date') {
+        const raw = String(value || '').trim();
+        value = raw ? raw.slice(0, 10) : null;
       }
       if (key === 'spouse_name') {
         value = String(value || '').trim() || null;

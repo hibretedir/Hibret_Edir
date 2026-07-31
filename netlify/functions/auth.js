@@ -450,7 +450,8 @@ function buildMemberPayload(member) {
     home: member.home_phone,
     address: member.address,
     status: member.status,
-    joinedDate: member.joined_date
+    joinedDate: member.joined_date,
+    joined_date: member.joined_date
   };
 }
 

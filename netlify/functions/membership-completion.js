@@ -88,6 +88,14 @@ async function completeMembershipFromApplication(db, applicationId, actor, optio
   const mobile = row.cell_phone || row.home_phone || row.wl_phone;
   const email = (row.email || row.wl_email || '').trim().toLowerCase() || null;
   const address = formatAddress(row);
+  const joinedRaw = row.submitted_at || row.created_at || null;
+  let joinedDate = null;
+  if (joinedRaw) {
+    const d = new Date(joinedRaw);
+    if (!Number.isNaN(d.getTime())) {
+      joinedDate = d.toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+    }
+  }
 
   const nextNum = await db.query(`SELECT COALESCE(MAX(member_number), 0) + 1 AS num FROM members`);
   const memberNumber = nextNum.rows[0].num;
@@ -96,8 +104,8 @@ async function completeMembershipFromApplication(db, applicationId, actor, optio
     `INSERT INTO members (
       member_number, status, first_name, last_name, full_name, paypal_name,
       email, mobile, home_phone, address, joined_date, notes
-    ) VALUES ($1, 'Active', $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_DATE, $10)
-    RETURNING id, member_number, first_name, last_name, full_name, email, mobile, home_phone, address, status`,
+    ) VALUES ($1, 'Active', $2, $3, $4, $5, $6, $7, $8, $9, COALESCE(NULLIF($10, '')::date, CURRENT_DATE), $11)
+    RETURNING id, member_number, first_name, last_name, full_name, email, mobile, home_phone, address, status, joined_date`,
     [
       memberNumber,
       names.first_name,
@@ -108,6 +116,7 @@ async function completeMembershipFromApplication(db, applicationId, actor, optio
       mobile,
       row.home_phone || null,
       address,
+      joinedDate,
       row.notes
         ? `Approved from application #${row.id}. ${row.notes}`
         : `Approved from application #${row.id}.`,

@@ -405,6 +405,7 @@ Placeholders show `—` until API loads. Regenerate static JSON: `python scripts
 
 - Invoices from DB with recipient-name matching + event dedupe
 - **Deaths Paid** = count of **paid event invoices** (unique events)
+- **Digital membership card (July 30)** — Profile tab live card (logo, name, member #, status, joined year); CSS `app-theme.css` **portal30**
 - Notifications built from live unpaid invoices + board message replies + activity (no mock array)
 - **Instant tab switches (June 17)** — Home / Invoices / Profile / etc. render from in-memory cache immediately; background fetch only when tab data is missing or stale (60s TTL). Lazy-load: activity + board messages only when Notifications / Board Messages opened; events when Upload opened. Invoice fetch capped at **150** per request (was 2500). Thin gold loading bar under nav during background refresh.
 - **Bilingual logged-in UI (June 17)** — `PORTAL_I18N` + `pt()` helper; EN/አማ toggle updates portal screens (not auth-only)
@@ -617,7 +618,7 @@ Auth, portal, admin CRM, applications, waiting list, notifications, audit, payou
 | `events.js` | No admin “create event → auto ~197 invoices” via PayPal API (EVT-06) |
 | Automated payment reminders | Not started |
 | Twilio SMS bot | Not started |
-| Welcome email + digital membership card | Not started (approve notify exists; no card asset) |
+| Welcome email + digital membership card | Portal **digital card** live on Profile (July 30); welcome email asset still optional |
 | 4-month waiting period tracking | Not started |
 | Reporting (event collection, delinquency) | Not started |
 | Receipt storage at scale | Base64 in Postgres OK for now |

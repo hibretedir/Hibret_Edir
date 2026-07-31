@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Hibret Edir Association — Member Portal</title>
 <link rel="stylesheet" href="/css/hibret.css?v=portal3">
-<link rel="stylesheet" href="/css/compat.css?v=portal9">
-<link rel="stylesheet" href="/css/app-theme.css?v=portal29">
+<link rel="stylesheet" href="/css/compat.css?v=portal11">
+<link rel="stylesheet" href="/css/app-theme.css?v=portal36">
 </head>
 <body class="app-portal">
 
@@ -32,7 +32,7 @@
       <label class="form-label">Mobile Phone <span class="amh">ሞባይል</span></label>
       <div class="phone-wrap">
         <div class="phone-prefix">+1</div>
-        <input type="tel" class="form-input" id="phoneInp" placeholder="(xxx) xxx-xxxx"
+        <input type="tel" class="form-input" id="phoneInp" placeholder="xxx-xxx-xxxx"
           inputmode="tel" maxlength="12"
           oninput="fmtPhone(this)" onkeydown="if(event.key==='Enter')goPhone()">
       </div>
@@ -135,7 +135,7 @@
       <label class="form-label">Mobile Phone <span class="amh">ሞባይል</span></label>
       <div class="phone-wrap">
         <div class="phone-prefix">+1</div>
-        <input type="tel" class="form-input" id="pinResetPhone" placeholder="(xxx) xxx-xxxx"
+        <input type="tel" class="form-input" id="pinResetPhone" placeholder="xxx-xxx-xxxx"
           inputmode="tel" maxlength="12" oninput="fmtPhone(this)">
       </div>
     </div>
@@ -343,12 +343,30 @@
 
     <!-- PROFILE -->
     <div class="screen" id="tProfile">
-      <div class="profile-card">
-        <div class="profile-hd">
-          <div class="profile-av" id="profAv">?</div>
-          <div class="profile-nm" id="profNm">Member</div>
-          <div class="profile-since"><span class="en">Hibret Edir Member</span><span class="am">ሕብረት እድር አባል</span></div>
+      <article class="membership-card" id="membershipCard" aria-label="Digital membership card">
+        <img src="/logo.png" alt="" class="mc-watermark" aria-hidden="true">
+        <div class="mc-sheen" aria-hidden="true"></div>
+        <div class="mc-top">
+          <img src="/logo.png" alt="Hibret Edir" class="mc-logo" width="72" height="72">
+          <div class="mc-org">
+            <span class="en">Hibret Edir Association</span>
+            <span class="am">ሕብረት እድር</span>
+          </div>
+          <div class="mc-badge-wrap">
+            <span class="mc-badge" id="mcBadge">MEMBER</span>
+            <span class="mc-since" id="mcSince"></span>
+          </div>
         </div>
+        <div class="mc-name" id="mcName">—</div>
+        <div class="mc-number" id="mcNumber">Member #—</div>
+        <div class="mc-meta" id="mcMeta">—</div>
+        <div class="mc-foot">
+          <span class="en">Hibret Edir Association · Greater Los Angeles</span>
+          <span class="am">ሕብረት እድር · ሎስ አንጀለስ</span>
+        </div>
+      </article>
+      <div class="profile-card">
+        <h3 class="profile-section-title"><span class="en">Contact details</span><span class="am">የመገኛ መረጃ</span></h3>
         <div id="profFields"></div>
       </div>
       <div class="ben-card">
@@ -467,7 +485,7 @@
       </div>
       <div class="form-group">
         <label class="form-label">Phone Number</label>
-        <input type="tel" class="form-input" id="bPhone" placeholder="(xxx) xxx-xxxx">
+        <input type="tel" class="form-input" id="bPhone" placeholder="xxx-xxx-xxxx" maxlength="12" inputmode="tel" oninput="fmtPhone(this)">
       </div>
       <div class="form-group">
         <label class="form-label">Relationship</label>
@@ -516,6 +534,7 @@
 </div>
 
 <script src="/js/datetime-la.js"></script>
+<script src="/js/phone-format.js"></script>
 <script>
 const API_BASE = '/.netlify/functions';
 const TOKEN_KEY = 'hibret_portal_token';
@@ -555,6 +574,16 @@ function portalLang(){
 const PORTAL_I18N = {
   hello: { en: n => `Hello, ${n}! 👋`, am: n => `ሰላም ${n}! 👋` },
   memberStatus: { en: (s, n) => `${s} Member · #${n}`, am: (s, n) => `${s} አባል · #${n}` },
+  memberCardLabel: { en: 'MEMBER', am: 'አባል' },
+  memberCardNumber: { en: n => `Member #${n}`, am: n => `አባል #${n}` },
+  memberCardSince: {
+    en: year => (year ? `Since ${year}` : ''),
+    am: year => (year ? `ከ ${year}` : ''),
+  },
+  memberCardMeta: {
+    en: (status) => status,
+    am: (status) => status,
+  },
   statusActive: { en: 'Active', am: 'ንቁ' },
   statusInactive: { en: 'Inactive', am: 'እንቅስቃሴ የለውም' },
   notOnFile: { en: 'Not on file', am: 'በፋይል ላይ የለም' },
@@ -1120,14 +1149,8 @@ function backPortal(){
   });
 }
 
-// PHONE FORMAT
-function fmtPhone(inp){
-  let v=inp.value.replace(/\D/g,'');
-  if(v.length>=7) v=v.slice(0,3)+'-'+v.slice(3,6)+'-'+v.slice(6,10);
-  else if(v.length>=4) v=v.slice(0,3)+'-'+v.slice(3);
-  inp.value=v;
-}
-function normPhone(p){return p.replace(/\D/g,'').slice(-10)}
+// PHONE FORMAT — see /js/phone-format.js (fmtPhone, formatPhoneUS)
+function normPhone(p){return phoneDigits(p)}
 
 function isLegacyDateInAddressField(value){
   const s=String(value||'').trim();
@@ -1139,6 +1162,7 @@ function profileFieldDisplay(key, raw){
   const v=String(raw||'').trim();
   if(!v) return pt('notOnFile');
   if(key==='address' && isLegacyDateInAddressField(v)) return pt('notOnFile');
+  if(key==='mobile' || key==='home') return formatPhoneUS(v) || v;
   return v;
 }
 
@@ -1347,15 +1371,52 @@ async function loginOK(){
   }
 }
 
+function membershipJoinYear(m) {
+  const raw = m?.joined_date || m?.joinedDate || m?.created_at || '';
+  const s = String(raw).trim();
+  if (!s) return '';
+  const y = s.match(/^(\d{4})/);
+  if (y) return y[1];
+  const d = new Date(s);
+  if (!Number.isNaN(d.getTime())) {
+    return d.toLocaleDateString('en-US', { timeZone: 'America/Los_Angeles', year: 'numeric' });
+  }
+  return '';
+}
+
+function renderMembershipCard() {
+  const m = me;
+  if (!m) return;
+  const name = [m.first, m.last].filter(Boolean).join(' ').trim()
+    || m.full_name
+    || 'Member';
+  const num = m.memberNumber || m.member_number || m.id || '—';
+  const status = memberStatusLabel(m.status) || '—';
+  const year = membershipJoinYear(m);
+  const badge = document.getElementById('mcBadge');
+  const sinceEl = document.getElementById('mcSince');
+  const nameEl = document.getElementById('mcName');
+  const numEl = document.getElementById('mcNumber');
+  const metaEl = document.getElementById('mcMeta');
+  if (badge) badge.textContent = pt('memberCardLabel');
+  if (sinceEl) {
+    const sinceText = pt('memberCardSince', year);
+    sinceEl.textContent = sinceText;
+    sinceEl.style.display = sinceText ? '' : 'none';
+  }
+  if (nameEl) nameEl.textContent = name;
+  if (numEl) numEl.textContent = pt('memberCardNumber', num);
+  if (metaEl) metaEl.textContent = pt('memberCardMeta', status);
+}
+
 // RENDER
 function renderPortal(){
   const m=me;
   const init=(m.first[0]||'?')+(m.last[0]||'');
   document.getElementById('avBtn').textContent=init;
   document.getElementById('gName').textContent=pt('hello', m.first);
-  document.getElementById('gStatus').textContent=pt('memberStatus', memberStatusLabel(m.status), m.memberNumber||m.id);
-  document.getElementById('profAv').textContent=init;
-  document.getElementById('profNm').textContent=m.first+' '+m.last;
+  document.getElementById('gStatus').textContent=pt('memberStatus', memberStatusLabel(m.status), m.memberNumber||m.member_number||m.id);
+  renderMembershipCard();
 
   const myInvs=getMyInvs();
   const unpaid=myInvs.filter(i=>isInvoiceOutstanding(i));
@@ -1835,7 +1896,7 @@ function renderBeneficiary(){
   show.innerHTML=`
     <div class="pf-row" style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px">
       <div class="pf-left"><div class="pf-ico">🙏</div>
-      <div><div class="pf-lbl">${myBeneficiary.relationship||pt('beneficiary')}</div><div class="pf-val">${myBeneficiary.name}</div><div style="font-size:12px;color:var(--gray);margin-top:2px">${myBeneficiary.phone||''}</div></div></div>
+      <div><div class="pf-lbl">${myBeneficiary.relationship||pt('beneficiary')}</div><div class="pf-val">${myBeneficiary.name}</div><div style="font-size:12px;color:var(--gray);margin-top:2px">${formatPhoneUS(myBeneficiary.phone||'')}</div></div></div>
       <button class="pf-edit-btn" onclick="openBenEdit()">${pt('edit')}</button>
     </div>
     ${pendingBeneficiaryChange ? `<div class="ben-pending-banner">⏳ ${pt('benPending')}${pendingBeneficiaryChange.payload?.name ? `: <strong>${pendingBeneficiaryChange.payload.name}</strong>` : ''}</div>` : ''}`;
@@ -1849,9 +1910,18 @@ function openProfEdit(key, label){
   document.getElementById('profEditLbl').textContent = label;
   const inp = document.getElementById('profEditVal');
   inp.type = key === 'email' ? 'email' : (key === 'mobile' || key === 'home' ? 'tel' : 'text');
-  inp.value = displayVal;
-  inp.placeholder = key === 'address' ? pt('addressPlaceholder') : label;
+  inp.value = (key === 'mobile' || key === 'home') ? formatPhoneUS(displayVal) : displayVal;
+  inp.placeholder = key === 'address' ? pt('addressPlaceholder') : (key === 'mobile' || key === 'home' ? 'xxx-xxx-xxxx' : label);
   inp.setAttribute('autocomplete', key === 'address' ? 'street-address' : 'off');
+  if (key === 'mobile' || key === 'home') {
+    inp.setAttribute('inputmode', 'tel');
+    inp.setAttribute('maxlength', '12');
+    inp.oninput = () => fmtPhone(inp);
+  } else {
+    inp.removeAttribute('inputmode');
+    inp.removeAttribute('maxlength');
+    inp.oninput = null;
+  }
   document.getElementById('profEditErr').classList.remove('show');
   openModal('profEditModal');
 }
@@ -1867,7 +1937,9 @@ async function saveProfField(){
   err.classList.remove('show');
   try {
     const payload = {};
-    payload[profEditKey] = val;
+    payload[profEditKey] = (profEditKey === 'mobile' || profEditKey === 'home')
+      ? formatPhoneUS(val)
+      : val;
     const result = await apiPatch('portal/profile', payload);
     if (result.member) me = result.member;
     markPortalFetched('profile');
@@ -1884,7 +1956,7 @@ async function saveProfField(){
 function openBenEdit(){
   if(myBeneficiary){
     document.getElementById('bName').value = myBeneficiary.name || '';
-    document.getElementById('bPhone').value = myBeneficiary.phone || '';
+    document.getElementById('bPhone').value = formatPhoneUS(myBeneficiary.phone || '');
     document.getElementById('bRel').value = myBeneficiary.relationship || '';
   }
   document.querySelector('#benModal .sheet-title').textContent = myBeneficiary ? 'Edit Beneficiary' : 'Add Beneficiary';
@@ -1898,7 +1970,7 @@ async function saveBen(){
   const rl=document.getElementById('bRel').value;
   if(!nm||!ph||!rl){alert('Please fill in all fields.');return;}
   try {
-    const result = await apiPut('portal/beneficiary', { name: nm, phone: ph, relationship: rl });
+    const result = await apiPut('portal/beneficiary', { name: nm, phone: formatPhoneUS(ph), relationship: rl });
     if (result.pending) {
       pendingBeneficiaryChange = { payload: { name: nm, phone: ph, relationship: rl }, status: 'Pending' };
       closeModal('benModal');

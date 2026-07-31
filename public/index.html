@@ -714,6 +714,7 @@
   </div>
 </footer>
 
+<script src="/js/phone-format.js"></script>
 <script>
 const NAV_SECTIONS = new Set(['announcement','about','howitworks','payment','bylaws','apply','waitingliststatus','contact']);
 let wlStatusEntries = [];
@@ -1506,6 +1507,7 @@ async function loadMemberStats() {
 
 loadMemberStats();
 loadCurrentAnnouncement();
+if (typeof bindPhoneInputs === 'function') bindPhoneInputs(document);
 
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {
