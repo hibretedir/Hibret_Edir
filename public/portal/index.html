@@ -1384,12 +1384,19 @@ function membershipJoinYear(m) {
   return '';
 }
 
+function membershipCardName(m) {
+  const paypal = String(m?.paypal_name || '').trim();
+  if (paypal) return paypal;
+  const fl = [m?.first, m?.last].filter(Boolean).join(' ').trim();
+  if (fl) return fl;
+  const primary = String(m?.full_name || '').split('/')[0].trim();
+  return primary || 'Member';
+}
+
 function renderMembershipCard() {
   const m = me;
   if (!m) return;
-  const name = [m.first, m.last].filter(Boolean).join(' ').trim()
-    || m.full_name
-    || 'Member';
+  const name = membershipCardName(m);
   const num = m.memberNumber || m.member_number || m.id || '—';
   const status = memberStatusLabel(m.status) || '—';
   const year = membershipJoinYear(m);

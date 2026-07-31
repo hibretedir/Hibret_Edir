@@ -309,7 +309,8 @@
     </div>
     <div class="modal-body" id="modalMemberBody"></div>
     <div class="modal-footer">
-      <button class="btn danger" type="button" onclick="adminResetMemberPin()">Reset PIN</button>
+      <button class="btn danger" type="button" id="memberResetPinBtn" onclick="adminResetMemberPin()">Reset PIN</button>
+      <button class="btn" type="button" id="memberMakeSpousePrimaryBtn" onclick="adminMakeSpousePrimary()" style="display:none">Make spouse primary</button>
       <button class="btn" type="button" onclick="closeModal('memberModal')">Close</button>
       <button class="btn primary" type="button" onclick="saveMemberEdit()">Save Changes</button>
     </div>
@@ -1565,7 +1566,7 @@ function renderMemberProfileFormHtml(m) {
   const ro = fieldReadonlyAttr();
   return `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-      <div><label style="font-size:11px;color:var(--tk-muted)">Member name (PayPal / primary)</label><input class="field-input" id="ef_paypal_name" value="${esc(m.paypal_name || names.paypal)}"${ro}></div>
+      <div><label style="font-size:11px;color:var(--tk-muted)">Name on digital ID (PayPal / primary)</label><input class="field-input" id="ef_paypal_name" value="${esc(m.paypal_name || names.paypal)}"${ro}></div>
       <div><label style="font-size:11px;color:var(--tk-muted)">Spouse</label><input class="field-input" id="ef_spouse_name" value="${esc(spouse)}" placeholder="Optional"${ro}></div>
       <div><label style="font-size:11px;color:var(--tk-muted)">First</label><input class="field-input" id="ef_first" value="${esc(m.first)}"${ro}></div>
       <div><label style="font-size:11px;color:var(--tk-muted)">Last</label><input class="field-input" id="ef_last" value="${esc(m.last)}"${ro}></div>
@@ -6604,12 +6605,55 @@ async function resetBoardPassword(id) {
 function syncMemberModalWriteAccess() {
   const full = adminCanWriteAll();
   const notes = adminCanWriteNotes();
-  const pinBtn = document.querySelector('#memberModal .modal-footer .btn.danger');
+  const pinBtn = document.getElementById('memberResetPinBtn');
+  const spouseBtn = document.getElementById('memberMakeSpousePrimaryBtn');
   const saveBtn = document.querySelector('#memberModal .modal-footer .btn.primary');
   if (pinBtn) pinBtn.style.display = adminHasPerm('reset_pin') ? '' : 'none';
+  if (spouseBtn) {
+    const m = MEMBERS.find(x => x.id === editingMemberId);
+    const hasSpouse = !!(m && memberSpouseName(m));
+    spouseBtn.style.display = full && hasSpouse ? '' : 'none';
+  }
   if (saveBtn) {
     saveBtn.style.display = full || notes ? '' : 'none';
     saveBtn.textContent = full ? 'Save Changes' : 'Save Notes';
+  }
+}
+
+async function adminMakeSpousePrimary() {
+  if (!editingMemberId) return;
+  if (!adminCanWriteAll()) {
+    showAdminToast('You need edit-member permission for spouse succession.', 'warn');
+    return;
+  }
+  const m = getMemberData(MEMBERS.find(x => x.id === editingMemberId) || {});
+  const spouse = memberSpouseName(m);
+  const primary = memberDisplayNames(m).paypal || m.first || 'primary';
+  if (!spouse) {
+    alert('No spouse on file for this membership.');
+    return;
+  }
+  if (!confirm(
+    `Make ${spouse} the primary member?\n\n`
+    + `• Name on digital ID becomes: ${spouse}\n`
+    + `• Former primary kept as spouse: ${primary}\n`
+    + `• Mobile ↔ Spouse cell will swap\n`
+    + `• Member #${m.member_number || m.id} stays the same\n\n`
+    + 'Use this when the primary has died and the surviving spouse continues the membership.'
+  )) return;
+  try {
+    const result = await apiPost('portal/member/make-spouse-primary', { id: editingMemberId });
+    if (result.member) {
+      const idx = MEMBERS.findIndex(x => x.id === editingMemberId);
+      if (idx !== -1) MEMBERS[idx] = { ...MEMBERS[idx], ...result.member };
+    }
+    showAdminToast(result.message || 'Spouse is now primary.', 'success');
+    await openMemberDetail(editingMemberId, { tab: 'profile' });
+    invalidateAdminCaches();
+    updateSidebar();
+    if (currentView === 'members') render();
+  } catch (e) {
+    alert(e.message || 'Could not make spouse primary.');
   }
 }
 
