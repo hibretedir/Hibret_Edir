@@ -28,15 +28,26 @@ function parseJsonField(value, fallback) {
 function splitMemberName(full) {
   const text = String(full || '').trim();
   if (!text) return { first_name: 'Member', last_name: 'Unknown', full_name: 'Member Unknown' };
-  const parts = text.split(/\s+/);
+  // Prefer primary only when legacy "Primary/Spouse" was typed into one field
+  const primary = text.includes('/') ? text.split('/')[0].trim() : text;
+  const parts = primary.split(/\s+/).filter(Boolean);
   if (parts.length === 1) {
-    return { first_name: parts[0], last_name: parts[0], full_name: parts[0] };
+    return { first_name: parts[0], last_name: parts[0], full_name: primary };
   }
   return {
     first_name: parts[0],
     last_name: parts.slice(1).join(' '),
-    full_name: text,
+    full_name: primary,
   };
+}
+
+function resolveSpouseName(row) {
+  const explicit = String(row.spouse_full_name || '').trim();
+  if (explicit) return explicit;
+  const full = String(row.member_full_name || row.wl_full_name || '');
+  if (!full.includes('/')) return null;
+  const rest = full.split('/').slice(1).join('/').trim();
+  return rest || null;
 }
 
 function formatAddress(app) {
@@ -85,6 +96,7 @@ async function completeMembershipFromApplication(db, applicationId, actor, optio
   };
 
   const names = splitMemberName(row.member_full_name || row.wl_full_name);
+  const spouseName = resolveSpouseName(row);
   const mobile = row.cell_phone || row.home_phone || row.wl_phone;
   const email = (row.email || row.wl_email || '').trim().toLowerCase() || null;
   const address = formatAddress(row);
@@ -100,17 +112,20 @@ async function completeMembershipFromApplication(db, applicationId, actor, optio
   const nextNum = await db.query(`SELECT COALESCE(MAX(member_number), 0) + 1 AS num FROM members`);
   const memberNumber = nextNum.rows[0].num;
 
+  await db.query(`ALTER TABLE members ADD COLUMN IF NOT EXISTS spouse_name VARCHAR(200)`);
+
   const memberInsert = await db.query(
     `INSERT INTO members (
-      member_number, status, first_name, last_name, full_name, paypal_name,
+      member_number, status, first_name, last_name, full_name, spouse_name, paypal_name,
       email, mobile, home_phone, address, joined_date, notes
-    ) VALUES ($1, 'Active', $2, $3, $4, $5, $6, $7, $8, $9, COALESCE(NULLIF($10, '')::date, CURRENT_DATE), $11)
-    RETURNING id, member_number, first_name, last_name, full_name, email, mobile, home_phone, address, status, joined_date`,
+    ) VALUES ($1, 'Active', $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE(NULLIF($11, '')::date, CURRENT_DATE), $12)
+    RETURNING id, member_number, first_name, last_name, full_name, spouse_name, email, mobile, home_phone, address, status, joined_date`,
     [
       memberNumber,
       names.first_name,
       names.last_name,
-      row.member_full_name || names.full_name,
+      names.full_name,
+      spouseName,
       names.full_name,
       email,
       mobile,

@@ -1,9 +1,9 @@
 # Hibret Edir — Agent Context & Handoff
 
-**Last updated:** July 30, 2026 (waiting list Pass for non-responders)  
+**Last updated:** July 31, 2026 (in-Admin scanned PDFs + daily/Application-tab sync)  
 **Purpose:** Onboard a new Cursor agent quickly. Read this file first, then `HIBRET_EDIR_PROJECT_HANDOFF (1).md` for deeper business rules and by-laws.
 
-**Current focus (next agent):** **Twilio SMS** — buy number, set `TWILIO_*` on Netlify, `npm run test:notify -- --send`. Then **production smoke-test**: shared-phone account picker; **portal login-help** (wrong number → required email → board reply emailed); Admin **Messages** email inbox + follow-up replies; board Access Management on phone + PC. **Database:** local `.env` `DATABASE_URL` points at **Render Postgres** — `npm run db:migrate` from your laptop **is** production DB ops. Confirm **`ADMIN_AUTH_ENABLED=true`** and **`BOARD_SUPER_ADMIN_EMAILS`** on Netlify. SendGrid is **done** — see **`docs/notifications-setup.md`**. QA playbook: **`docs/system-validation-playbook.md`**. **Local mobile testing:** `npm run dev` → phone browser `http://<PC-LAN-IP>:8888/admin/` or `/portal/`. **All user-visible dates/times** display in **Pacific (America/Los_Angeles)** via `public/js/datetime-la.js` + `netlify/functions/datetime-la.js`.
+**Current focus (next agent):** **Push/deploy** today’s scan-preview work if not live yet. Then **Twilio SMS** — buy number, set `TWILIO_*` on Netlify, `npm run test:notify -- --send`. Production smoke-test: shared-phone picker; portal login-help; Admin Messages; Access Management. **Database:** local `.env` `DATABASE_URL` = Render — `npm run db:migrate` is production DB ops. Confirm **`ADMIN_AUTH_ENABLED=true`** and **`BOARD_SUPER_ADMIN_EMAILS`** on Netlify. SendGrid is **done**. QA: **`docs/system-validation-playbook.md`**. Local: `npm run dev` → `http://localhost:8888/admin/` or `/portal/`. Dates/times: Pacific via `datetime-la.js`.
 
 ---
 
@@ -207,6 +207,17 @@ See `.env.example`. Critical ones:
 
 Notifications **skip gracefully** when Twilio is unset; email sends when SendGrid is configured.
 
+### Scanned membership applications (Google Drive)
+
+**Parent folder:** [Membership Applications](https://drive.google.com/drive/folders/1RC-veuhY2VqR_XdcgUz0u5hYIhc60Yev) (`1RC-veuhY2VqR_XdcgUz0u5hYIhc60Yev`)
+
+- One subfolder per member: `#52 Behailu Aklilu` (member number + first/last)
+- Drop the scanned PDF in that folder — **watchers/agents import automatically**; do not ask the board to paste links or run import commands
+- **In-Admin PDF preview** — `members.application_scan` (JSONB); Application tab embeds the scan (no Drive/Adobe)
+- **Auto-sync:** once/day Pacific (`npm run sync:scans:daily` / `npm run dev`) + Application-tab catch-up. Shared: `scripts/lib/application-scan-sync.js`
+- Drive URL remains optional backup on Profile (`application_drive_url`)
+- Env: `APPLICATION_SCANS_ROOT`, `APPLICATION_SCANS_POLL_MS`, `GOOGLE_DRIVE_APPLICATIONS_FOLDER_ID`
+
 ---
 
 ## 5. Database
@@ -217,7 +228,7 @@ Notifications **skip gracefully** when Twilio is unset; email sends when SendGri
 
 | Table | Purpose |
 |-------|---------|
-| `members` | CRM — includes `pin_hash`, `spouse_name`, `application_drive_url` |
+| `members` | CRM — `pin_hash`, `spouse_name`, `paypal_name` (digital ID name), `joined_date`, `application_drive_url`, **`application_scan`** (JSONB in-Admin PDF preview; multi-file via `files[]`) |
 | `beneficiaries` | Death beneficiary per member (primary) |
 | `events` | Funeral events (deceased name, event #, amount); `notes` = JSON for public announcement (venues, `collect_dues`, spouse status, optional `announcement_text`) |
 | `memorial_announcements` | No-collection memorials (no PayPal funeral event); `notes` = same JSON shape as events |
@@ -645,19 +656,51 @@ From by-laws / handoff:
 
 ## 11. Agent conventions
 
-1. **Minimal diffs** — vanilla JS + CSS; match existing patterns.
-2. **Bilingual** — `.en` / `.am` pairs on public and portal strings.
-3. **Mobile first** — most members use phones.
-4. **Do not commit or push** unless the user explicitly asks.
-5. **Do not commit** `.env`, secrets, or `data/` exports.
-6. **Database:** timeouts via `db.js`; run `npm run db:migrate` after schema changes.
-7. **Production:** `ADMIN_AUTH_ENABLED=true`, `CRON_SECRET` set on Netlify.
-8. **Restart dev server** after new API routes.
-9. **Showcase deploy:** After editing `docs/automation-showcase.html`, copy to `public/docs/automation-showcase.html` — Netlify publishes `public/` only.
+### Autonomy (mandatory for every agent)
+
+The board operator expects the agent to **figure it out and make it happen**. Do **not** hand them steps you can run yourself.
+
+1. **Execute, don’t delegate** — Run scripts, query DB/DriveFS, import PDFs, fill CRM fields, wire APIs. Report results; don’t ask them to paste links or run commands unless blocked.
+2. **Exhaust options before asking** — Local Drive paths, DriveFS sqlite metadata, `.env`, existing scripts, Netlify functions, Admin APIs. Only escalate when truly stuck (missing secret, irreversible choice, product ambiguity).
+3. **Automate recurring work** — Never leave “tell me when you drop a PDF” as the workflow. Prefer Application-tab sync, batch sync, or optional `npm run watch:scans` — not a constant 60s poller unless explicitly wanted.
+4. **Simple product path first** — In-Admin PDF preview (`application_scan`), not Drive → Adobe permission theater.
+5. **Verify before “done”** — Operator will stop testing and rely on agent work. Confirm failing state → fix → re-check the same acceptance criteria (DB/API/disk/logs). Watch for jobs that overwrite fixes. Prefer assert scripts (e.g. `node scripts/verify_sara_dual_scans.js`) over “hard refresh and tell me.”
+6. **Minimal diffs** — vanilla JS + CSS; match existing patterns.
+7. **Bilingual** — `.en` / `.am` pairs on public and portal strings.
+8. **Mobile first** — most members use phones.
+9. **Do not commit or push** unless the user explicitly asks.
+10. **Do not commit** `.env`, secrets, `folders.tsv`, or `data/` exports.
+11. **Database:** timeouts via `db.js`; run `npm run db:migrate` after schema changes.
+12. **Production:** `ADMIN_AUTH_ENABLED=true`, `CRON_SECRET` set on Netlify.
+13. **Restart dev server** after new API routes.
+14. **Showcase deploy:** After editing `docs/automation-showcase.html`, copy to `public/docs/automation-showcase.html` — Netlify publishes `public/` only.
+
+### Scanned applications automation
+
+- **Folder:** `G:/My Drive/Social/Hibret Edir/Members Scanned Applications/#N Name/*.pdf`
+- **CRM:** `members.application_scan` (JSONB) → Admin → Member → **Application** embeds PDF
+- **Auto-import:**
+  1. **Once per Pacific day** — `npm run sync:scans:daily` (also kicked off by `npm run dev`). Stamp: `data/application-scan-sync-day.txt`.
+  2. **On Application tab open** — catch-up sync so same-day drops still appear.
+  3. Optional: `npm run watch:scans` (poller) or Windows Task Scheduler pointing at `npm run sync:scans:daily`.
+- **Shared logic:** `scripts/lib/application-scan-sync.js`
+- **Netlify cron:** `application-scan-sync` daily `15 14 * * *` UTC (no-ops without local Drive path)
 
 ---
 
 ## 12. Recent session changelog
+
+### July 31, 2026 — In-Admin scanned PDF + auto-import
+
+- Drive folder links alone were too heavy (Drive → Adobe). Scans store in `members.application_scan` and preview inside Admin → Member → **Application**.
+- **Multi-file:** `application_scan.files[]`. Admin loads each PDF via `GET portal/member/application-scan?memberId=&index=` as **binary PDF** (blob URL iframe) — not giant JSON data-URLs (those timed out ~30s).
+- Application tab: **metadata first**, then progressive hydrate + Retry; shared sliding `he-load-bar` on loaders.
+- **Sync cadence:** once/Pacific day (`npm run sync:scans:daily` / kicked by `npm run dev`) + catch-up when Application tab opens. **No 60s poller** by default. Sync must not shrink multi-file scans when DriveFS briefly lists one file.
+- CRM names: keep primary + `spouse_name` separate (don’t rebuild `Primary/Spouse` into `full_name` on Save). Membership completion splits slash names + sets `spouse_name`.
+- Phones: Application displays format `xxx-xxx-xxxx`; submit/normalize spouse cell like Cell.
+- Portal login: **mobile or spouse cell (`home_phone`)** opens the same membership; **one shared PIN** per member row.
+- Verify: `node scripts/verify_sara_dual_scans.js` + `node scripts/verify_sara_scan_http.js`
+- Agent rules: **execute don’t delegate**; **verify before claiming done** (`.cursor/rules/execute-dont-delegate.mdc`).
 
 ### July 30, 2026 — Waiting list Pass for non-responders
 

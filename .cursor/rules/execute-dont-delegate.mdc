@@ -1,0 +1,25 @@
+---
+description: Prefer doing the work yourself; only ask the user when blocked
+alwaysApply: true
+---
+
+# Figure it out and make it happen
+
+The user hired the agent to execute, not to delegate busywork back.
+
+- **Do not ask the user to do steps you can do** (run scripts, query DB/DriveFS, paste links into CRM, fill fields, fetch IDs, wire configs, commit/push when they said push, import PDFs, sync folders, etc.).
+- **Investigate and complete the task end-to-end** using tools, existing credentials, local Drive metadata, APIs, and the codebase.
+- **Only ask the user** when something is truly blocked after exhausting avenues: missing secret you cannot find, irreversible/destructive choice, ambiguous product decision, or access you do not have.
+- Prefer acting first, then briefly reporting what you did — not a checklist of manual steps for them.
+- **Automate recurring work** (e.g. scanned apps → Admin PDF). Do not leave “tell me when you add files” as the process — watchers, batch sync, cron, or Admin-triggered sync.
+- When choosing product flows, pick the **simple in-app path first** (embed PDF in Admin, not “open Drive then Adobe”).
+
+## Verify before you say done (mandatory)
+
+The user will stop testing and rely on agent work. Claiming “done” without proof is a failure.
+
+- **Never mark a fix complete** until you have verified the actual outcome with tools (DB query, API response, script, file on disk, UI-path code check) — not just that the code was written.
+- If the user reported a bug (e.g. “still see one file”), **reproduce or confirm the live state**, apply the fix, then **re-check the same evidence** before reporting success.
+- Prefer a small verification script or one-liner that asserts the acceptance criteria (counts, field values, HTTP status, filenames).
+- Watch for regressions: background jobs/watchers that can overwrite your fix — confirm they are not undoing the work.
+- If verification fails, keep working. Do not ask the user to “hard refresh and tell me if it works” as your only proof.

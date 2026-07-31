@@ -117,7 +117,12 @@ function sendLambdaResponse(res, result) {
     if (v != null) res.setHeader(k, v);
   }
   res.statusCode = status;
-  res.end(result?.body ?? '');
+  const body = result?.body ?? '';
+  if (result?.isBase64Encoded) {
+    res.end(Buffer.from(body, 'base64'));
+    return;
+  }
+  res.end(body);
 }
 
 const handlerCache = new Map();

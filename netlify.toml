@@ -21,6 +21,13 @@
   schedule = "0 * * * *"
   timeout = 30
 
+# Once daily (UTC 14:15 ≈ 7:15 AM Pacific) — imports Drive scans when
+# APPLICATION_SCANS_ROOT is readable. On Netlify without Drive it no-ops.
+# Local: also runs once/day via `npm run dev` / `npm run sync:scans:daily`.
+[functions."application-scan-sync"]
+  schedule = "15 14 * * *"
+  timeout = 60
+
 # Full batched PayPal pull (invoked by paypal-sync-scheduled or CRON_SECRET)
 
 [functions."paypal-sync-background"]

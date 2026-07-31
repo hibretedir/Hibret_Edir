@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/css/admin-tracker.css?v=admin74">
+<link rel="stylesheet" href="/css/admin-tracker.css?v=admin79">
 <link rel="stylesheet" href="/css/admin-tracker-mh.css?v=1">
 </head>
 <body class="app-admin tracker">
@@ -1478,21 +1478,100 @@ function renderIdDocPreview(doc) {
   return '<span class="review-auto">On file</span>';
 }
 
+function displayPhone(value) {
+  if (value == null || value === '') return '';
+  if (typeof formatPhoneUS === 'function') {
+    const formatted = formatPhoneUS(value);
+    if (formatted) return formatted;
+  }
+  return String(value);
+}
+
+/** When applicants typed "Primary/Spouse" in one name field, split for display. */
+function splitApplicationHouseholdNames(app) {
+  const spouse = String(app?.spouse_full_name || '').trim();
+  const full = String(app?.member_full_name || '').trim();
+  if (spouse) return { memberName: full || '—', spouseName: spouse };
+  if (full.includes('/')) {
+    const parts = full.split('/').map((p) => p.trim()).filter(Boolean);
+    return {
+      memberName: parts[0] || '—',
+      spouseName: parts.slice(1).join(' / ') || '—',
+    };
+  }
+  return { memberName: full || '—', spouseName: '—' };
+}
+
 function renderBeneficiaryPanel(ben, title) {
   if (!ben?.name) return '';
   return `<div class="review-panel">
     <h4>${title}</h4>
     <div class="review-field"><span>Name</span><strong>${esc(ben.name)}</strong></div>
     <div class="review-field"><span>Relationship</span><strong>${esc(ben.relationship || '—')}</strong></div>
-    <div class="review-field"><span>Phone</span><strong>${esc(ben.phone || '—')}</strong></div>
+    <div class="review-field"><span>Phone</span><strong>${esc(displayPhone(ben.phone) || '—')}</strong></div>
     ${ben.email ? `<div class="review-field"><span>Email</span><strong>${esc(ben.email)}</strong></div>` : ''}
     ${ben.address ? `<div class="review-field"><span>Address</span><strong>${esc(ben.address)}</strong></div>` : ''}
   </div>`;
 }
 
-function renderMemberApplicationReadOnlyHtml(app, member) {
+function renderMemberScannedAppHtml(scanOrList, driveUrl, { memberId } = {}) {
+  const scans = Array.isArray(scanOrList)
+    ? scanOrList
+    : (scanOrList ? [scanOrList] : []);
+  if (!scans.length) {
+    if (!driveUrl) return '';
+    return `<div class="member-app-scan-panel">
+      <h4>Scanned application</h4>
+      <p class="review-auto">No in-app scan yet. Drive folder is linked for backup.</p>
+      <a class="btn secondary" href="${esc(driveUrl)}" target="_blank" rel="noopener">Open Drive folder ↗</a>
+    </div>`;
+  }
+  const blocks = scans.map((scan, idx) => {
+    const fileIndex = scan.index != null ? scan.index : idx;
+    const slotId = `memberScanSlot-${fileIndex}`;
+    const hasPreview = !!scan.preview;
+    const isPdf = String(scan.mime_type || '').includes('pdf')
+      || String(scan.preview || '').startsWith('data:application/pdf');
+    let preview;
+    if (hasPreview) {
+      preview = isPdf
+        ? `<iframe class="member-app-scan-pdf" src="${scan.preview}" title="${esc(scan.filename || 'Scanned application')}"></iframe>`
+        : `<img class="member-app-scan-img" src="${scan.preview}" alt="${esc(scan.filename || 'Scanned application')}">`;
+    } else {
+      preview = `<div class="member-app-scan-loading" id="${slotId}" data-scan-member="${esc(String(memberId || ''))}" data-scan-index="${fileIndex}" data-scan-mime="${esc(scan.mime_type || '')}" data-scan-name="${esc(scan.filename || '')}">
+        ${heLoadBarHtml()}
+        <div class="review-auto" style="margin-top:8px">Loading ${esc(scan.filename || 'file')}…</div>
+      </div>`;
+    }
+    return `<div class="member-app-scan-file">
+      <div class="member-app-scan-hd">
+        <h4>${scans.length > 1 ? `File ${idx + 1}` : 'Scanned application'}</h4>
+        <span class="review-auto">${esc(scan.filename || 'application.pdf')}${scan.byte_size ? ` · ${Math.round(scan.byte_size / 1024)} KB` : ''}</span>
+      </div>
+      <div class="member-app-scan-preview">${preview}</div>
+    </div>`;
+  }).join('');
+  return `<div class="member-app-scan-panel">
+    ${scans.length > 1 ? `<div class="member-app-scan-count">${scans.length} scanned files</div>` : ''}
+    ${blocks}
+    ${driveUrl ? `<a class="btn secondary" style="margin-top:10px;display:inline-block" href="${esc(driveUrl)}" target="_blank" rel="noopener">Open Drive folder ↗</a>` : ''}
+  </div>`;
+}
+
+function renderMemberApplicationReadOnlyHtml(app, member, extras = {}) {
+  const scans = extras.scanned_applications?.length
+    ? extras.scanned_applications
+    : (extras.scanned_application ? [extras.scanned_application] : []);
+  const drive = extras.application_drive_url || member?.application_drive_url || '';
+  const scanHtml = renderMemberScannedAppHtml(scans, drive, { memberId: member?.id || extras.memberId });
+
   if (!app) {
-    const drive = member?.application_drive_url;
+    if (scanHtml) {
+      return `<div class="member-app-legacy">
+        <p class="review-auto" style="margin-bottom:12px">No digital online application — showing the scanned paper application below.</p>
+        ${scanHtml}
+      </div>`;
+    }
     return `<div class="tracker-empty">
       ${drive
         ? `<p>No digital application on file for this member.</p>
@@ -1508,6 +1587,7 @@ function renderMemberApplicationReadOnlyHtml(app, member) {
   const children = (app.children || []).filter(c => c?.name || c?.dob);
   const emergency = (app.emergency_contacts || []).filter(c => c?.name || c?.phone);
   const sig = app.applicant_signature;
+  const household = splitApplicationHouseholdNames(app);
   const childrenHtml = children.length
     ? children.map(c => `<div class="review-field"><span>${esc(c.name || 'Child')}</span><strong>${esc(c.dob || '—')}</strong></div>`).join('')
     : '<p class="review-auto">No children listed.</p>';
@@ -1516,34 +1596,41 @@ function renderMemberApplicationReadOnlyHtml(app, member) {
       <div class="member-ec-block">
         <div class="review-field"><span>Name</span><strong>${esc(c.name || '—')}</strong></div>
         <div class="review-field"><span>Relationship</span><strong>${esc(c.relationship || '—')}</strong></div>
-        <div class="review-field"><span>Phone</span><strong>${esc(c.phone || '—')}</strong></div>
+        <div class="review-field"><span>Phone</span><strong>${esc(displayPhone(c.phone) || '—')}</strong></div>
         ${c.email ? `<div class="review-field"><span>Email</span><strong>${esc(c.email)}</strong></div>` : ''}
         ${c.address ? `<div class="review-field"><span>Address</span><strong>${esc(c.address)}</strong></div>` : ''}
       </div>`).join('')
     : '<p class="review-auto">None listed.</p>';
+  const hasCaIdUpload = !!(idDocs.member || idDocs.spouse);
+  const idHint = !hasCaIdUpload && scans.length
+    ? '<p class="review-auto" style="margin-top:8px">No California ID <em>photo</em> was uploaded with the online application — use the scanned paper above. (This is separate from the digital membership card / member # on Profile.)</p>'
+    : '';
 
   return `
+    ${scanHtml}
     <div class="member-app-meta">
       <span>Submitted ${esc(fmtDateTimeLA(app.submitted_at))}</span>
       <span>Status: ${esc(app.status || '—')}</span>
       ${app.id ? `<button type="button" class="tracker-mark-btn" onclick="closeModal('memberModal');openApplicationReview(${app.id})">Open in Applications</button>` : ''}
     </div>
+    <p class="review-auto" style="margin:0 0 12px">Fields below are from the <strong>online application</strong> (not OCR from the scan).</p>
     <div class="review-grid">
       <div class="review-panel">
         <h4>Member</h4>
-        <div class="review-field"><span>Full name</span><strong>${esc(app.member_full_name || '—')}</strong></div>
-        <div class="review-field"><span>Spouse</span><strong>${esc(app.spouse_full_name || '—')}</strong></div>
+        <div class="review-field"><span>Full name</span><strong>${esc(household.memberName)}</strong></div>
+        <div class="review-field"><span>Spouse</span><strong>${esc(household.spouseName)}</strong></div>
         <div class="review-field"><span>Email</span><strong>${esc(app.email || '—')}</strong></div>
-        <div class="review-field"><span>Cell</span><strong>${esc(app.cell_phone || '—')}</strong></div>
-        <div class="review-field"><span>Spouse cell</span><strong>${esc(app.home_phone || '—')}</strong></div>
-        ${app.office_phone ? `<div class="review-field"><span>Office</span><strong>${esc(app.office_phone)}</strong></div>` : ''}
+        <div class="review-field"><span>Cell</span><strong>${esc(displayPhone(app.cell_phone) || '—')}</strong></div>
+        <div class="review-field"><span>Spouse cell</span><strong>${esc(displayPhone(app.home_phone) || '—')}</strong></div>
+        ${app.office_phone ? `<div class="review-field"><span>Office</span><strong>${esc(displayPhone(app.office_phone))}</strong></div>` : ''}
         <div class="review-field"><span>Address</span><strong>${esc([app.address, app.city, app.state, app.zip].filter(Boolean).join(', ') || '—')}</strong></div>
       </div>
       <div class="review-panel">
-        <h4>Identification</h4>
-        <div class="review-field"><span>Member CA ID</span>${renderIdDocPreview(idDocs.member)}</div>
-        ${app.spouse_full_name ? `<div class="review-field"><span>Spouse CA ID</span>${renderIdDocPreview(idDocs.spouse)}</div>` : ''}
+        <h4>California ID photos</h4>
+        <div class="review-field"><span>Member CA ID photo</span>${renderIdDocPreview(idDocs.member)}</div>
+        ${household.spouseName && household.spouseName !== '—' ? `<div class="review-field"><span>Spouse CA ID photo</span>${renderIdDocPreview(idDocs.spouse)}</div>` : ''}
         ${sig?.name ? `<div class="review-field"><span>Signature</span><strong>${esc(sig.name)}</strong> <span class="review-auto">· ${esc(sig.signed_at ? fmtDateTimeLA(sig.signed_at) : '—')}</span></div>` : ''}
+        ${idHint}
       </div>
     </div>
     <div class="review-grid" style="margin-top:12px">
@@ -1660,15 +1747,135 @@ function refreshMemberInvoicesTab(memberId, highlightInvoiceNum) {
   updateMemberDetailInvoiceTabCount(m);
 }
 
+let lastApplicationScanSyncAt = 0;
+let applicationScanSyncInFlight = null;
+
+/** Sync Drive scan folders → CRM when a member Application tab is opened (no background poller). */
+async function syncApplicationScansFromAdmin() {
+  if (applicationScanSyncInFlight) return applicationScanSyncInFlight;
+  const now = Date.now();
+  // Light throttle so rapid tab switches don't stack imports
+  if (now - lastApplicationScanSyncAt < 15000) return null;
+  lastApplicationScanSyncAt = now;
+  applicationScanSyncInFlight = (async () => {
+    try {
+      return await apiPost('portal/sync-application-scans', {});
+    } catch (_) {
+      /* local-only when Drive path exists; ignore on Netlify */
+      return null;
+    } finally {
+      applicationScanSyncInFlight = null;
+    }
+  })();
+  return applicationScanSyncInFlight;
+}
+
+function maybeSyncApplicationScans() {
+  return syncApplicationScansFromAdmin();
+}
+
+function heLoadBarHtml() {
+  return '<div class="he-load-bar" aria-hidden="true"><span></span></div>';
+}
+
+function trackerLoadingHtml(message, minHeight) {
+  const style = minHeight ? ` style="min-height:${minHeight}"` : '';
+  return `<div class="tracker-boot-loading"${style} role="status" aria-live="polite" aria-busy="true">
+    <div class="tracker-boot-spinner" aria-hidden="true"></div>
+    <div>${esc(message)}</div>
+    ${heLoadBarHtml()}
+  </div>`;
+}
+
+function memberApplicationLoadingHtml(message = 'Loading application…') {
+  return `<div class="member-app-loading" role="status" aria-live="polite" aria-busy="true">
+    <div class="member-app-loading-spinner" aria-hidden="true"></div>
+    <div class="member-app-loading-text">${esc(message)}</div>
+    ${heLoadBarHtml()}
+  </div>`;
+}
+
+async function hydrateMemberScanSlots(rootEl) {
+  if (!rootEl) return;
+  const slots = [...rootEl.querySelectorAll('.member-app-scan-loading[data-scan-member]')];
+  if (!slots.length) return;
+
+  const token = typeof getAdminToken === 'function' ? getAdminToken() : null;
+  const headers = {};
+  if (token) headers.Authorization = 'Bearer ' + token;
+
+  // Progressive: each file paints when ready (do not block on the slower sibling).
+  await Promise.allSettled(slots.map(async (slot) => {
+    const memberId = slot.getAttribute('data-scan-member');
+    const index = slot.getAttribute('data-scan-index');
+    const mime = slot.getAttribute('data-scan-mime') || 'application/pdf';
+    const name = slot.getAttribute('data-scan-name') || 'Scanned application';
+    if (!memberId || index == null) return;
+
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 45000);
+    try {
+      const url = `${API_BASE}/portal/member/application-scan?memberId=${encodeURIComponent(memberId)}&index=${encodeURIComponent(index)}`;
+      const res = await fetch(url, { method: 'GET', headers, signal: ctrl.signal });
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try {
+          const errBody = await res.json();
+          if (errBody?.error) msg = errBody.error;
+        } catch (_) { /* ignore */ }
+        throw new Error(msg);
+      }
+      const blob = await res.blob();
+      if (!blob || blob.size < 50) throw new Error('Empty scan payload');
+      const objectUrl = URL.createObjectURL(blob);
+      const isPdf = String(mime).includes('pdf') || String(blob.type || '').includes('pdf');
+      const node = isPdf
+        ? `<iframe class="member-app-scan-pdf" src="${objectUrl}" title="${esc(name)}"></iframe>`
+        : `<img class="member-app-scan-img" src="${objectUrl}" alt="${esc(name)}">`;
+      if (slot.isConnected) slot.outerHTML = node;
+    } catch (err) {
+      if (slot.isConnected) {
+        const why = err?.name === 'AbortError' ? 'timed out' : 'failed';
+        slot.innerHTML = `<p class="review-auto">Could not load ${esc(name)} (${why}). <button type="button" class="tracker-mark-btn" data-scan-retry="1">Retry</button></p>`;
+        const btn = slot.querySelector('[data-scan-retry]');
+        if (btn) {
+          btn.addEventListener('click', () => {
+            slot.innerHTML = `${heLoadBarHtml()}<div class="review-auto" style="margin-top:8px">Loading ${esc(name)}…</div>`;
+            slot.classList.add('member-app-scan-loading');
+            slot.setAttribute('data-scan-member', memberId);
+            slot.setAttribute('data-scan-index', index);
+            slot.setAttribute('data-scan-mime', mime);
+            slot.setAttribute('data-scan-name', name);
+            hydrateMemberScanSlots(slot.parentElement || rootEl);
+          });
+        }
+      }
+    } finally {
+      clearTimeout(timer);
+    }
+  }));
+}
+
 async function loadMemberApplicationTab(memberId) {
   const el = document.getElementById('memberTabApplication');
   if (!el) return;
   const raw = MEMBERS.find(x => x.id === memberId) || {};
   const m = getMemberData(raw);
-  el.innerHTML = '<div class="tracker-empty" style="padding:12px">Loading application…</div>';
+  el.innerHTML = memberApplicationLoadingHtml('Loading application…');
+  // Import any new Drive PDFs first (local host only), then load the tab.
+  await syncApplicationScansFromAdmin();
+  if (editingMemberId !== memberId || memberDetailTab !== 'application') return;
   try {
     const res = await apiGet('portal/member/application?memberId=' + memberId);
-    el.innerHTML = renderMemberApplicationReadOnlyHtml(res.application, m);
+    if (res.application_drive_url) m.application_drive_url = res.application_drive_url;
+    // Show form + file slots immediately; PDFs hydrate in the background.
+    el.innerHTML = renderMemberApplicationReadOnlyHtml(res.application, m, {
+      scanned_application: res.scanned_application || null,
+      scanned_applications: res.scanned_applications || [],
+      application_drive_url: res.application_drive_url || m.application_drive_url || '',
+      memberId,
+    });
+    void hydrateMemberScanSlots(el);
   } catch {
     el.innerHTML = '<div class="tracker-empty">Could not load application.</div>';
   }
@@ -2304,7 +2511,7 @@ async function fetchAdminData(options = {}) {
 }
 
 function showMainLoading(message = 'Loading…') {
-  document.getElementById('mainArea').innerHTML = `<div class="tracker-boot-loading"><div class="tracker-boot-spinner"></div><div>${esc(message)}</div></div>`;
+  document.getElementById('mainArea').innerHTML = trackerLoadingHtml(message);
 }
 
 function getStats() {
@@ -4732,13 +4939,13 @@ async function openApplicationReview(id) {
         <h4>Waiting List Record</h4>
         <div class="review-field"><span>Name</span><strong>${esc(app.waiting_list?.full_name || '—')}</strong></div>
         <div class="review-field"><span>Email</span><strong>${esc(app.waiting_list?.email || '—')}</strong></div>
-        <div class="review-field"><span>Phone</span><strong>${esc(app.waiting_list?.phone || '—')}</strong></div>
+        <div class="review-field"><span>Phone</span><strong>${esc(displayPhone(app.waiting_list?.phone) || '—')}</strong></div>
         <div class="review-field"><span>Address</span><strong>${esc(app.waiting_list?.address || '—')}</strong></div>
       </div>
       <div class="review-panel">
         <h4>Application</h4>
         <div class="review-field"><span>Full name</span><strong>${esc(app.member_full_name || '—')}</strong></div>
-        <div class="review-field"><span>Phone</span><strong>${esc(app.cell_phone || app.home_phone || '—')}</strong></div>
+        <div class="review-field"><span>Phone</span><strong>${esc(displayPhone(app.cell_phone || app.home_phone) || '—')}</strong></div>
         <div class="review-field"><span>Address</span><strong>${esc([app.address, app.city, app.state, app.zip].filter(Boolean).join(', ') || '—')}</strong></div>
         <div class="review-field"><span>Beneficiary</span><strong>${esc(ben.name || '—')}${ben.relationship ? ' (' + esc(ben.relationship) + ')' : ''}</strong></div>
         <div class="review-field"><span>California ID</span>${idPreview}</div>
@@ -5398,7 +5605,7 @@ function openReceiptReview(id) {
   if (!r) return;
   document.getElementById('receiptModalTitle').textContent = r.member_name || 'Receipt';
   document.getElementById('receiptModalSub').textContent = `Invoice #${r.invoice_number || '—'} · ${r.payment_method || '—'} · ${esc(r.status)}`;
-  document.getElementById('receiptModalBody').innerHTML = '<div class="tracker-boot-loading" style="min-height:120px"><div class="tracker-boot-spinner"></div><div>Loading receipt…</div></div>';
+  document.getElementById('receiptModalBody').innerHTML = trackerLoadingHtml('Loading receipt…', '120px');
   const approveBtn = document.getElementById('receiptApproveBtn');
   const rejectBtn = document.getElementById('receiptRejectBtn');
   const done = r.status === 'Approved' || r.status === 'Rejected';
@@ -7325,7 +7532,7 @@ async function openMemberDetail(id, options = {}) {
       <button type="button" class="tracker-tab member-detail-tab${tab === 'activity' ? ' active' : ''}" data-tab="activity" onclick="switchMemberDetailTab('activity')">Activity</button>
     </nav>
     <div id="memberTabProfile"${tab !== 'profile' ? ' hidden' : ''}>${renderMemberProfileFormHtml(m)}</div>
-    <div id="memberTabApplication"${tab !== 'application' ? ' hidden' : ''}><div class="tracker-empty" style="padding:12px">Loading application…</div></div>
+    <div id="memberTabApplication"${tab !== 'application' ? ' hidden' : ''}>${memberApplicationLoadingHtml('Loading application…')}</div>
     <div id="memberTabInvoices"${tab !== 'invoices' ? ' hidden' : ''}>${renderMemberAllInvoicesHtml(m, memberDetailHighlightInvoice)}</div>
     <div id="memberTabActivity"${tab !== 'activity' ? ' hidden' : ''} class="member-activity-panel">
       <section class="member-activity-section">
@@ -7380,7 +7587,7 @@ async function saveMemberEdit() {
         id: editingMemberId,
         first: document.getElementById('ef_first').value,
         last: document.getElementById('ef_last').value,
-        full_name: spouse ? `${paypal}/${spouse}` : paypal,
+        full_name: paypal,
         spouse_name: spouse,
         paypal_name: paypal,
         email: document.getElementById('ef_email').value,

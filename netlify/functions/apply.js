@@ -539,6 +539,22 @@ function normPhone(phone) {
   return digits.length >= 10 ? digits.slice(-10) : digits;
 }
 
+/** Store display format xxx-xxx-xxxx (US 10-digit). */
+function formatPhoneUS(phone) {
+  const ten = normPhone(phone);
+  if (!ten || ten.length !== 10) return phone ? String(phone).trim() : null;
+  return `${ten.slice(0, 3)}-${ten.slice(3, 6)}-${ten.slice(6)}`;
+}
+
+function splitSlashSpouse(memberFullName, spouseFullName) {
+  const spouse = String(spouseFullName || '').trim();
+  if (spouse) return spouse;
+  const full = String(memberFullName || '');
+  if (!full.includes('/')) return null;
+  const parts = full.split('/').map((p) => p.trim()).filter(Boolean);
+  return parts.length >= 2 ? parts.slice(1).join(' / ') : null;
+}
+
 function approxBase64Bytes(data) {
   if (!data) return 0;
   const pad = data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0;
@@ -1210,7 +1226,7 @@ async function submitMembership(body) {
 
   const row = wl.rows[0];
   const memberName = app.member_full_name?.trim() || row.full_name;
-  const spouseName = app.spouse_full_name?.trim() || null;
+  const spouseName = splitSlashSpouse(memberName, app.spouse_full_name);
   const applicant_role = 'primary';
 
   const idCheck = sanitizeIdDocumentsOptional(app.id_documents, spouseName);
@@ -1240,9 +1256,9 @@ async function submitMembership(body) {
       app.city?.trim() || null,
       app.state?.trim() || 'CA',
       app.zip?.trim() || null,
-      app.home_phone?.trim() || null,
-      app.office_phone?.trim() || null,
-      app.cell_phone?.trim() || row.phone,
+      formatPhoneUS(app.home_phone) || null,
+      formatPhoneUS(app.office_phone) || null,
+      formatPhoneUS(app.cell_phone) || formatPhoneUS(row.phone) || row.phone,
       app.email?.trim()?.toLowerCase() || row.email,
       JSON.stringify(app.children || []),
       JSON.stringify(app.beneficiary_member || null),

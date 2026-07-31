@@ -278,6 +278,7 @@ function prepareNetlifyCacheDir() {
 
 function runLocalDevServer() {
   console.log('Starting local dev server (Google Drive — Netlify functions bypass)...');
+  startDailyApplicationScanSync();
   const localDev = path.join(__dirname, 'dev-local.js');
   const child = spawn(process.execPath, [localDev], {
     cwd: ROOT,
@@ -289,6 +290,25 @@ function runLocalDevServer() {
     },
   });
   child.on('exit', (code) => process.exit(code ?? 0));
+}
+
+/** One-shot: import Drive scans at most once per Pacific day (no 60s poller). */
+function startDailyApplicationScanSync() {
+  const daily = path.join(__dirname, 'sync_application_scans_daily.js');
+  if (!fs.existsSync(daily)) return;
+  try {
+    const child = spawn(process.execPath, [daily], {
+      cwd: ROOT,
+      stdio: 'inherit',
+      env: { ...process.env },
+      detached: false,
+    });
+    child.on('error', (err) => {
+      console.warn('[scan-sync:daily] failed to start:', err.message);
+    });
+  } catch (err) {
+    console.warn('[scan-sync:daily] could not start:', err.message);
+  }
 }
 
 function runNetlify(bootstrapPath) {

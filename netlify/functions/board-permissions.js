@@ -163,7 +163,7 @@ function assertNotRestrictedMembersOnly(access, message) {
 
 function isPortalMembersCrmReadRoute(method, path) {
   if (method === 'GET' && (path === '/members' || path === '/member')) return true;
-  if (method === 'GET' && (path === '/member/application' || path === '/member/journey')) return true;
+  if (method === 'GET' && (path === '/member/application' || path === '/member/application-scan' || path === '/member/journey')) return true;
   return false;
 }
 

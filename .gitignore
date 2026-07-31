@@ -38,3 +38,5 @@ data/*
 !data/*.example.json
 # includes: members xlsx, waiting list xlsx, PayPal csv, unpaid_invoices.*, any future exports
 public/portal/members-snapshot.json
+
+folders.tsv

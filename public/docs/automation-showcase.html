@@ -143,9 +143,12 @@
     .progress-bar .fill::after {
       content: ''; position: absolute; inset: 0;
       background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
-      animation: shimmer 2s ease-in-out infinite;
+      animation: he-load-bar-slide 1.1s ease-in-out infinite;
     }
-    @keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(200%); } }
+    @keyframes he-load-bar-slide {
+      0% { transform: translateX(-120%); }
+      100% { transform: translateX(320%); }
+    }
 
     .workflow-main {
       display: grid; grid-template-columns: minmax(260px, 0.75fr) minmax(460px, 1.35fr);

@@ -272,6 +272,8 @@ sequenceDiagram
 | **Portal** | Member can request/set PIN |
 | **Logged** | Payment, approval, member creation — full chain in audit log |
 
+**Paper / scanned applications:** Store PDFs under the shared Drive parent [Membership Applications](https://drive.google.com/drive/folders/1RC-veuhY2VqR_XdcgUz0u5hYIhc60Yev) in folders named `#N First Last`. Link each folder in Admin CRM (`application_drive_url`). Bulk helper: `scripts/link_member_application_folders.js`.
+
 ---
 
 ### Trigger 7 — New member participates in Edir events

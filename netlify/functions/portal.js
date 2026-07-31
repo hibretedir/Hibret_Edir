@@ -49,6 +49,91 @@ function jsonResponse(statusCode, payload) {
   };
 }
 
+function binaryResponse(statusCode, { mimeType, filename, base64Data, cacheSeconds = 300 }) {
+  const safeName = String(filename || 'application.pdf').replace(/[^\w.\- ()]+/g, '_');
+  return {
+    statusCode,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Content-Type': mimeType || 'application/octet-stream',
+      'Content-Disposition': `inline; filename="${safeName}"`,
+      'Cache-Control': `private, max-age=${cacheSeconds}`,
+    },
+    body: base64Data,
+    isBase64Encoded: true,
+  };
+}
+
+/** Metadata only — never select full base64 blobs for the application tab list. */
+async function loadApplicationScanMeta(db, memberId) {
+  await db.query('ALTER TABLE members ADD COLUMN IF NOT EXISTS application_scan JSONB');
+  const scanRes = await db.query(
+    `SELECT
+       application_drive_url,
+       CASE
+         WHEN application_scan IS NULL THEN '[]'::jsonb
+         WHEN jsonb_typeof(application_scan->'files') = 'array' THEN (
+           SELECT COALESCE(jsonb_agg(
+             jsonb_build_object(
+               'filename', COALESCE(f->>'filename', 'application.pdf'),
+               'mime_type', f->>'mime_type',
+               'byte_size', NULLIF(f->>'byte_size', '')::int,
+               'uploaded_at', COALESCE(f->>'uploaded_at', application_scan->>'uploaded_at'),
+               'has_data', (f ? 'data' AND length(COALESCE(f->>'data', '')) > 0)
+             ) ORDER BY ord
+           ), '[]'::jsonb)
+           FROM jsonb_array_elements(application_scan->'files') WITH ORDINALITY AS t(f, ord)
+         )
+         WHEN application_scan ? 'data' AND application_scan ? 'mime_type' THEN jsonb_build_array(
+           jsonb_build_object(
+             'filename', COALESCE(application_scan->>'filename', 'application.pdf'),
+             'mime_type', application_scan->>'mime_type',
+             'byte_size', NULLIF(application_scan->>'byte_size', '')::int,
+             'uploaded_at', application_scan->>'uploaded_at',
+             'has_data', (application_scan ? 'data' AND length(COALESCE(application_scan->>'data', '')) > 0)
+           )
+         )
+         ELSE '[]'::jsonb
+       END AS files_meta
+     FROM members WHERE id = $1 LIMIT 1`,
+    [memberId]
+  );
+  const row = scanRes.rows[0] || null;
+  const filesMeta = Array.isArray(row?.files_meta) ? row.files_meta : [];
+  const scanned_applications = filesMeta
+    .filter((f) => f && f.has_data && f.mime_type)
+    .map((f, index) => ({
+      index,
+      filename: f.filename || 'application.pdf',
+      mime_type: f.mime_type,
+      byte_size: f.byte_size || null,
+      uploaded_at: f.uploaded_at || null,
+    }));
+  return {
+    application_drive_url: row?.application_drive_url || null,
+    scanned_applications,
+    scanned_application: scanned_applications[0] || null,
+  };
+}
+
+/** Fetch one file's base64 only (not the sibling PDFs). */
+async function loadApplicationScanFile(db, memberId, index) {
+  await db.query('ALTER TABLE members ADD COLUMN IF NOT EXISTS application_scan JSONB');
+  const scanRes = await db.query(
+    `SELECT
+       CASE
+         WHEN jsonb_typeof(application_scan->'files') = 'array' THEN application_scan->'files'->($2::int)
+         WHEN ($2::int) = 0 AND application_scan ? 'data' THEN application_scan
+         ELSE NULL
+       END AS file,
+       application_scan->>'uploaded_at' AS uploaded_at
+     FROM members WHERE id = $1 LIMIT 1`,
+    [memberId, index]
+  );
+  return scanRes.rows[0] || null;
+}
+
 function getPath(event) {
   const basePath = '/.netlify/functions/portal';
   const candidates = [event.path, event.rawUrl, event.rawPath].filter(Boolean);
@@ -1438,7 +1523,50 @@ exports.handler = async (event) => {
       }
       const db = getDb();
       const application = await getApplicationForMember(db, memberId, true);
-      return jsonResponse(200, { application });
+      try {
+        const scanMeta = await loadApplicationScanMeta(db, memberId);
+        return jsonResponse(200, {
+          application,
+          scanned_application: scanMeta.scanned_application,
+          scanned_applications: scanMeta.scanned_applications,
+          application_drive_url: scanMeta.application_drive_url,
+        });
+      } catch (err) {
+        console.warn('application_scan lookup failed:', err.message);
+        return jsonResponse(200, {
+          application,
+          scanned_application: null,
+          scanned_applications: [],
+        });
+      }
+    }
+
+    if (event.httpMethod === 'GET' && path === '/member/application-scan') {
+      const memberId = query.memberId ? Number(query.memberId) : null;
+      const index = query.index != null ? Number(query.index) : 0;
+      if (!memberId) {
+        return jsonResponse(400, { error: 'memberId is required.' });
+      }
+      if (!Number.isFinite(index) || index < 0) {
+        return jsonResponse(400, { error: 'index must be a non-negative number.' });
+      }
+      const db = getDb();
+      try {
+        const row = await loadApplicationScanFile(db, memberId, index);
+        const file = row?.file;
+        if (!file?.data || !file?.mime_type) {
+          return jsonResponse(404, { error: 'Scan file not found.' });
+        }
+        // Binary PDF/image — much smaller/faster than JSON data-URL wrappers.
+        return binaryResponse(200, {
+          mimeType: file.mime_type,
+          filename: file.filename || `scan-${index}.pdf`,
+          base64Data: file.data,
+        });
+      } catch (err) {
+        console.warn('application-scan fetch failed:', err.message);
+        return jsonResponse(500, { error: err.message || 'Failed to load scan.' });
+      }
     }
 
     if (event.httpMethod === 'GET' && path === '/member/journey') {
@@ -1449,6 +1577,43 @@ exports.handler = async (event) => {
       const db = getDb();
       const journey = await getMemberJourney(db, memberId);
       return jsonResponse(200, journey);
+    }
+
+    if (event.httpMethod === 'POST' && path === '/sync-application-scans') {
+      const db = getDb();
+      const access = await loadBoardMemberAccess(db, adminPayload);
+      const denied = assertCanWriteAll(access);
+      if (denied) return jsonResponse(403, { error: denied });
+      try {
+        const pathMod = require('path');
+        const fsMod = require('fs');
+        const syncPath = pathMod.join(__dirname, '../../scripts/lib/application-scan-sync.js');
+        if (!fsMod.existsSync(syncPath)) {
+          return jsonResponse(200, { skipped: true, reason: 'sync module missing' });
+        }
+        const { syncApplicationScans, DEFAULT_ROOT, markSyncedToday } = require(syncPath);
+        const root = process.env.APPLICATION_SCANS_ROOT || DEFAULT_ROOT;
+        if (!fsMod.existsSync(root)) {
+          return jsonResponse(200, {
+            skipped: true,
+            reason: 'Scan folder not on this host — open Admin on a machine with Drive Desktop to import',
+            root,
+          });
+        }
+        const result = await syncApplicationScans(db, {
+          root,
+          onlyEmpty: false,
+          dryRun: false,
+          log: console.log,
+        });
+        if (result.ok !== false && typeof markSyncedToday === 'function') {
+          try { markSyncedToday(); } catch (_) { /* ignore stamp errors */ }
+        }
+        return jsonResponse(200, result);
+      } catch (err) {
+        console.error('sync-application-scans failed:', err);
+        return jsonResponse(500, { error: err.message });
+      }
     }
 
     if (event.httpMethod === 'POST' && path === '/member') {

@@ -276,6 +276,7 @@ ALTER TABLE membership_applications ADD COLUMN IF NOT EXISTS registration_invoic
 CREATE INDEX IF NOT EXISTS idx_invoices_membership_application ON invoices(membership_application_id);
 CREATE INDEX IF NOT EXISTS idx_membership_applications_reg_invoice ON membership_applications(registration_invoice_id);
 ALTER TABLE members ADD COLUMN IF NOT EXISTS application_drive_url TEXT;
+ALTER TABLE members ADD COLUMN IF NOT EXISTS application_scan JSONB;
 ALTER TABLE membership_applications ADD COLUMN IF NOT EXISTS applicant_signature JSONB;
 -- Audit log migration (existing databases):
 -- ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS member_id INTEGER REFERENCES members(id);
