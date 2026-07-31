@@ -3990,7 +3990,17 @@ async function saveAnnouncementIntake() {
     const createdMsg = collecting && res?.event?.created
       ? ` #${payload.event_number} (${formatAnnDeceasedDisplay(payload)}) was added to the deceased list.`
       : '';
-    showAdminToast(`Announcement saved.${createdMsg} Public site will show this on refresh.`, 'ok');
+    const crm = res?.crm_update;
+    let crmMsg = '';
+    if (crm?.action === 'marked_deceased') crmMsg = ' CRM marked Deceased.';
+    else if (crm?.action === 'spouse_primary') crmMsg = ' Surviving spouse is now primary in CRM.';
+    else if (crm?.action === 'spouse_cleared') crmMsg = ' Spouse cleared in CRM (primary continues).';
+    else if (crm?.error) crmMsg = ` CRM note: ${crm.error}`;
+    showAdminToast(`Announcement saved.${createdMsg}${crmMsg} Public site will show this on refresh.`, 'success');
+    if (crm?.action === 'marked_deceased' || crm?.action === 'spouse_primary' || crm?.action === 'spouse_cleared') {
+      invalidateAdminCaches();
+      try { await refreshAdminSections(['members']); } catch (_) { /* ignore */ }
+    }
     await fetchAnnouncementIntakeData();
     renderAnnouncementView();
   } catch (e) {
@@ -4146,6 +4156,7 @@ function renderAnnouncementView(options = {}) {
                   <button type="button" id="annSpouseContinueNone" class="ann-yesno-btn alt${spouseContinueNone ? ' active' : ''}" onclick="setAnnSpouseContinueStatus('no_spouse')">No spouse</button>
                 </div>
               </div>
+              <p class="ann-intake-hint">Saving updates CRM: Yes → spouse becomes primary; No / No spouse → membership marked Deceased. If the spouse died, spouse is cleared and the primary stays Active.</p>
             </div>
           </div>
         </div>
@@ -4292,7 +4303,7 @@ function renderMembersTableHtml(filtered) {
       <td data-label="Spouse"><div class="tracker-member-name tracker-member-spouse">${spouse ? esc(spouse) : '<span class="tracker-member-empty">—</span>'}</div></td>
       <td data-label="Email">${esc(d.email || '—')}</td>
       <td class="tracker-phone-cell" data-label="Phone">${adminPhoneCell(d.mobile || d.home)}</td>
-      <td data-label="Status"><span class="tracker-status ${m.status === 'Active' ? 'paid' : 'unpaid'}">${esc(m.status)}</span></td>
+      <td data-label="Status"><span class="tracker-status ${m.status === 'Active' ? 'paid' : m.status === 'Deceased' ? 'cancelled' : 'unpaid'}">${esc(m.status || '—')}</span></td>
       <td class="admin-m-col-action" data-label="Action"><button type="button" class="tracker-mark-btn" onclick="event.stopPropagation();openMemberDetail(${m.id})">View / Edit</button></td>
     </tr>`;
   }).join('') : '';
@@ -4328,7 +4339,7 @@ function renderMembersView() {
       <select class="tracker-select" onchange="memberFilter=this.value; updateMembersList()">
         <option value="active"${memberFilter === 'active' ? ' selected' : ''}>Active</option>
         <option value="all"${memberFilter === 'all' ? ' selected' : ''}>All Members</option>
-        <option value="inactive"${memberFilter === 'inactive' ? ' selected' : ''}>Inactive</option>
+        <option value="inactive"${memberFilter === 'inactive' ? ' selected' : ''}>Inactive / Deceased</option>
         <option value="late"${memberFilter === 'late' ? ' selected' : ''}>Late payers</option>
       </select>
       <div class="tracker-results">${filtered.length} member${filtered.length !== 1 ? 's' : ''}</div>

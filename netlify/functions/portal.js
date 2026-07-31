@@ -27,6 +27,7 @@ const {
   WRITE_DENIED_MSG,
 } = require('./board-permissions');
 const { stampBoardNote, mergeBoardNotes } = require('./board-notes');
+const { makeSpousePrimary: makeSpousePrimaryCore } = require('./member-succession');
 const {
   getInvoiceStatsCache,
   setInvoiceStatsCache,
@@ -543,140 +544,23 @@ async function updateMember(data, actor) {
   return result.rows[0] ? buildMemberPayload(result.rows[0]) : null;
 }
 
-function splitPersonName(full) {
-  const text = String(full || '').trim();
-  if (!text) return { first_name: '', last_name: '' };
-  const parts = text.split(/\s+/).filter(Boolean);
-  if (parts.length === 1) return { first_name: parts[0], last_name: parts[0] };
-  return { first_name: parts[0], last_name: parts.slice(1).join(' ') };
-}
-
-function householdPrimaryName(row) {
-  const paypal = String(row.paypal_name || '').trim();
-  if (paypal) return paypal;
-  const fromSlash = String(row.full_name || '').includes('/')
-    ? String(row.full_name).split('/')[0].trim()
-    : '';
-  if (fromSlash) return fromSlash;
-  const parts = [row.first_name, row.last_name].filter(Boolean).join(' ').trim();
-  if (parts) return parts;
-  return String(row.full_name || '').trim();
-}
-
-function householdSpouseName(row) {
-  const explicit = String(row.spouse_name || '').trim();
-  if (explicit) return explicit;
-  if (String(row.full_name || '').includes('/')) {
-    return String(row.full_name).split('/').slice(1).join('/').trim();
-  }
-  return '';
-}
-
-/**
- * When the primary dies and the surviving spouse continues the membership:
- * swap primary ↔ spouse names and mobile ↔ spouse cell. Same member # / invoices.
- */
 async function makeSpousePrimary(memberId, actor) {
   const db = getDb();
-  const id = Number(memberId);
-  if (!Number.isFinite(id) || id <= 0) {
-    return { error: 'Valid member id is required.', status: 400 };
-  }
-
-  const oldRes = await db.query(
-    `SELECT id, member_number, first_name, last_name, full_name, spouse_name, paypal_name,
-            email, mobile, home_phone, address, status, joined_date, created_at, updated_at,
-            notes, application_drive_url
-     FROM members WHERE id = $1`,
-    [id]
-  );
-  const oldRow = oldRes.rows[0];
-  if (!oldRow) {
-    return { error: 'Member not found.', status: 404 };
-  }
-
-  const formerPrimary = householdPrimaryName(oldRow);
-  const survivingSpouse = householdSpouseName(oldRow);
-  if (!survivingSpouse) {
-    return { error: 'No spouse on file to make primary.', status: 400 };
-  }
-  if (survivingSpouse.toLowerCase() === formerPrimary.toLowerCase()) {
-    return { error: 'Primary and spouse names are the same — fix the record first.', status: 400 };
-  }
-
-  const nameParts = splitPersonName(survivingSpouse);
-  const newFullName = formerPrimary
-    ? `${survivingSpouse}/${formerPrimary}`
-    : survivingSpouse;
-  const successionNote = `Spouse succession: ${survivingSpouse} is now primary / digital ID name (former primary ${formerPrimary || '—'} deceased / transferred). Phones swapped.`;
-  const notes = actor
-    ? mergeBoardNotes(oldRow.notes, successionNote, actor.actor_label)
-    : stampBoardNote(successionNote, 'Board');
-
-  const result = await db.query(
-    `UPDATE members SET
-       paypal_name = $1,
-       spouse_name = $2,
-       full_name = $3,
-       first_name = $4,
-       last_name = $5,
-       mobile = $6,
-       home_phone = $7,
-       notes = $8,
-       updated_at = NOW()
-     WHERE id = $9
-     RETURNING id, member_number, first_name, last_name, full_name, spouse_name, paypal_name,
-               email, mobile, home_phone, address, status, joined_date, created_at, updated_at,
-               notes, application_drive_url`,
-    [
-      survivingSpouse,
-      formerPrimary || null,
-      newFullName,
-      nameParts.first_name,
-      nameParts.last_name,
-      oldRow.home_phone || null,
-      oldRow.mobile || null,
-      notes,
-      id,
-    ]
-  );
-  const newRow = result.rows[0];
-  invalidateInvoiceStatsCache();
-
-  if (actor) {
-    try {
-      await syncMemberFromAdminUpdate(db, id, oldRow, newRow, actor);
-    } catch (err) {
-      console.error('Spouse succession sync failed:', err);
+  const result = await makeSpousePrimaryCore(db, memberId, actor);
+  if (result.error) return result;
+  if (result.member) {
+    const shaped = buildMemberPayload(result.member);
+    if (actor) {
+      try {
+        const oldStub = { id: memberId };
+        await syncMemberFromAdminUpdate(db, memberId, oldStub, result.member, actor);
+      } catch (err) {
+        console.error('Spouse succession sync failed:', err);
+      }
     }
-    try {
-      await logActivity(db, {
-        ...actor,
-        member_id: id,
-        action: 'member.spouse_made_primary',
-        entity_type: 'members',
-        table_name: 'members',
-        record_id: id,
-        summary: successionNote,
-        old_value: {
-          paypal_name: oldRow.paypal_name,
-          spouse_name: oldRow.spouse_name,
-          mobile: oldRow.mobile,
-          home_phone: oldRow.home_phone,
-        },
-        new_value: {
-          paypal_name: newRow.paypal_name,
-          spouse_name: newRow.spouse_name,
-          mobile: newRow.mobile,
-          home_phone: newRow.home_phone,
-        },
-      });
-    } catch (err) {
-      console.error('Spouse succession activity log failed:', err);
-    }
+    result.member = shaped;
   }
-
-  return { member: buildMemberPayload(newRow), message: successionNote };
+  return result;
 }
 
 async function updateInvoice(data, actor) {

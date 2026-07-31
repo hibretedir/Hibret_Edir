@@ -5,6 +5,7 @@
 const { getDb } = require('./db');
 const { loadLocalEnv, paypalApiBase } = require('./paypal-env');
 const { getPayPalAccessToken } = require('./paypal-client');
+const { applyAnnouncementCrmUpdate } = require('./member-succession');
 
 loadLocalEnv();
 
@@ -500,11 +501,17 @@ async function validateAnnouncementBody(db, meta) {
   if (meta.not_member) return;
 
   const memberCheck = await db.query(
-    `SELECT id FROM members WHERE id = $1 AND LOWER(COALESCE(status, '')) = 'active' LIMIT 1`,
+    `SELECT id, status FROM members WHERE id = $1 LIMIT 1`,
     [meta.member_id]
   );
   if (!memberCheck.rows.length) {
-    const err = new Error('Primary member must be an active member in the CRM.');
+    const err = new Error('Primary member must exist in the CRM.');
+    err.status = 400;
+    throw err;
+  }
+  const st = String(memberCheck.rows[0].status || '').trim().toLowerCase();
+  if (st && st !== 'active' && st !== 'deceased') {
+    const err = new Error('Linked CRM member must be Active or Deceased.');
     err.status = 400;
     throw err;
   }
@@ -591,11 +598,22 @@ async function saveMemorialAnnouncementOnly(db, body, actor) {
   const shaped = memorialRowAsEventShape(row);
   await recordServiceVenuesFromMeta(db, meta);
 
+  let crm_update = null;
+  try {
+    crm_update = await applyAnnouncementCrmUpdate(db, meta, actor, {
+      eventLabel: 'Memorial announcement',
+    });
+  } catch (err) {
+    console.error('CRM update after memorial announcement failed:', err);
+    crm_update = { error: err.message || 'CRM update failed' };
+  }
+
   return {
     source: 'memorial',
     announcement: meta,
     preview: buildPublicAnnouncementPayload(shaped, meta),
     saved_by: actor?.actor_label || null,
+    crm_update,
   };
 }
 
@@ -686,6 +704,16 @@ async function saveEventAnnouncement(db, eventNumber, body, actor) {
   const fullRow = updated.rows[0];
   await recordServiceVenuesFromMeta(db, meta);
 
+  let crm_update = null;
+  try {
+    crm_update = await applyAnnouncementCrmUpdate(db, meta, actor, {
+      eventLabel: `Event #${eventNumber}`,
+    });
+  } catch (err) {
+    console.error('CRM update after event announcement failed:', err);
+    crm_update = { error: err.message || 'CRM update failed' };
+  }
+
   return {
     event: {
       id: row.id,
@@ -698,6 +726,7 @@ async function saveEventAnnouncement(db, eventNumber, body, actor) {
     announcement: meta,
     preview: buildPublicAnnouncementPayload(fullRow, meta),
     saved_by: actor?.actor_label || null,
+    crm_update,
   };
 }
 
