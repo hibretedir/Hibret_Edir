@@ -69,14 +69,22 @@ function getNotifyConfig() {
   };
 }
 
-async function sendEmail({ to, subject, text, html, disableTracking = true }) {
+async function sendEmail({ to, cc = null, subject, text, html, disableTracking = true, attachments = null }) {
   const key = process.env.SENDGRID_API_KEY;
   if (!key) {
     console.warn('[notify] SENDGRID_API_KEY not set — email skipped:', subject, '→', to);
     return { ok: false, skipped: true, channel: 'Email' };
   }
+  const toList = (Array.isArray(to) ? to : [to])
+    .map((v) => (typeof v === 'string' ? { email: v } : v))
+    .filter((v) => v && v.email);
+  const ccList = (Array.isArray(cc) ? cc : (cc ? [cc] : []))
+    .map((v) => (typeof v === 'string' ? { email: v } : v))
+    .filter((v) => v && v.email);
+  const personalization = { to: toList };
+  if (ccList.length) personalization.cc = ccList;
   const body = {
-    personalizations: [{ to: [{ email: to }] }],
+    personalizations: [personalization],
     from: { email: fromEmail(), name: 'Hibret Edir' },
     reply_to: { email: replyToEmail(), name: 'Hibret Edir' },
     subject,
@@ -84,6 +92,15 @@ async function sendEmail({ to, subject, text, html, disableTracking = true }) {
   };
   if (html) {
     body.content.push({ type: 'text/html', value: html });
+  }
+  if (Array.isArray(attachments) && attachments.length) {
+    body.attachments = attachments.map((a) => ({
+      content: a.content,
+      type: a.type || 'application/octet-stream',
+      filename: a.filename || 'attachment',
+      disposition: a.disposition || 'attachment',
+      ...(a.contentId ? { content_id: a.contentId } : {}),
+    }));
   }
   if (disableTracking) {
     body.tracking_settings = {

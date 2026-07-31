@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Membership Card</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    width: fit-content;
+    height: fit-content;
+  }
+  body {
+    display: inline-block;
+    padding: 0;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  }
+  .membership-card {
+    position: relative;
+    overflow: hidden;
+    width: 520px;
+    margin: 0;
+    padding: 22px 22px 18px;
+    min-height: 210px;
+    border-radius: 18px;
+    color: #f8fafc;
+    background:
+      radial-gradient(90% 70% at 12% 18%, rgba(255, 255, 255, 0.08), transparent 50%),
+      radial-gradient(80% 90% at 88% 70%, rgba(252, 221, 9, 0.16), transparent 55%),
+      radial-gradient(60% 50% at 50% 100%, rgba(0, 0, 0, 0.25), transparent 60%),
+      linear-gradient(155deg, #023516 0%, #045a22 38%, #067a2c 68%, #04501e 100%);
+    border: 2px solid #d4af37;
+    box-shadow:
+      0 14px 36px rgba(2, 30, 12, 0.45),
+      0 0 0 1px rgba(252, 221, 9, 0.25),
+      inset 0 1px 0 rgba(255, 255, 255, 0.18),
+      inset 0 -18px 40px rgba(0, 0, 0, 0.22);
+  }
+  .mc-watermark {
+    position: absolute;
+    right: -18px;
+    bottom: -28px;
+    width: 210px;
+    height: 210px;
+    object-fit: contain;
+    opacity: 0.18;
+    filter: grayscale(0.15) brightness(1.35) contrast(1.05);
+    pointer-events: none;
+    z-index: 0;
+    transform: rotate(-8deg);
+  }
+  .mc-sheen {
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(118deg, transparent 42%, rgba(252, 221, 9, 0.09) 49%, transparent 58%),
+      repeating-linear-gradient(
+        -18deg,
+        transparent,
+        transparent 11px,
+        rgba(255, 255, 255, 0.015) 11px,
+        rgba(255, 255, 255, 0.015) 12px
+      );
+    pointer-events: none;
+    z-index: 0;
+  }
+  .mc-top {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: 10px;
+    margin-bottom: 18px;
+    position: relative;
+    z-index: 1;
+  }
+  .mc-logo {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #fff;
+    border: 2.5px solid #f0d060;
+    box-shadow:
+      0 6px 16px rgba(0, 0, 0, 0.35),
+      0 0 0 3px rgba(252, 221, 9, 0.2);
+    justify-self: start;
+  }
+  .mc-org {
+    text-align: center;
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    line-height: 1.2;
+    color: #fff;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+    min-width: 0;
+  }
+  .mc-org .am { display: none; }
+  .mc-foot .am { display: none; }
+  .mc-badge-wrap {
+    justify-self: end;
+    align-self: start;
+    padding-top: 2px;
+  }
+  .mc-badge-stack {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    line-height: 1.15;
+  }
+  .mc-badge {
+    display: block;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    margin: 0 -0.16em 0 0;
+    padding: 0;
+    color: #f5d76e;
+    text-transform: uppercase;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  }
+  .mc-since {
+    display: block;
+    margin: 4px -0.04em 0 0;
+    padding: 0;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: rgba(255, 255, 255, 0.9);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    white-space: nowrap;
+  }
+  .mc-name {
+    position: relative;
+    z-index: 1;
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 32px;
+    font-weight: 700;
+    line-height: 1.12;
+    letter-spacing: -0.01em;
+    color: #fff;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+    margin: 0 0 10px;
+    max-width: 72%;
+  }
+  .mc-number {
+    position: relative;
+    z-index: 1;
+    font-size: 19px;
+    font-weight: 700;
+    color: #f5d76e;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    margin: 0 0 6px;
+  }
+  .mc-meta {
+    position: relative;
+    z-index: 1;
+    font-size: 15px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.88);
+    margin: 0 0 20px;
+  }
+  .mc-foot {
+    position: relative;
+    z-index: 1;
+    padding-top: 14px;
+    border-top: 1px solid rgba(212, 175, 55, 0.55);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    color: rgba(255, 255, 255, 0.82);
+  }
+</style>
+</head>
+<body>
+  <article class="membership-card" id="card">
+    <img class="mc-watermark" id="wm" alt="" aria-hidden="true">
+    <div class="mc-sheen" aria-hidden="true"></div>
+    <div class="mc-top">
+      <img class="mc-logo" id="logo" alt="Hibret Edir" width="72" height="72">
+      <div class="mc-org">
+        <span class="en">Hibret Edir Association</span>
+        <span class="am">ሕብረት እድር</span>
+      </div>
+      <div class="mc-badge-wrap">
+        <div class="mc-badge-stack">
+          <span class="mc-badge">MEMBER</span>
+          <span class="mc-since" id="since"></span>
+        </div>
+      </div>
+    </div>
+    <div class="mc-name" id="name">—</div>
+    <div class="mc-number" id="number">Member #—</div>
+    <div class="mc-meta" id="meta">—</div>
+    <div class="mc-foot">
+      <span class="en">Hibret Edir Association · Greater Los Angeles</span>
+      <span class="am">ሕብረት እድር · ሎስ አንጀለስ</span>
+    </div>
+  </article>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const logoSrc = params.get('logo') || '';
+    const name = params.get('name') || 'Member';
+    const number = params.get('number') || '—';
+    const status = params.get('status') || 'Active';
+    const since = params.get('since') || '';
+    document.getElementById('logo').src = logoSrc;
+    document.getElementById('wm').src = logoSrc;
+    document.getElementById('name').textContent = name;
+    document.getElementById('number').textContent = 'Member #' + number;
+    document.getElementById('meta').textContent = status;
+    const sinceEl = document.getElementById('since');
+    if (since) {
+      sinceEl.textContent = 'Since ' + since;
+    } else {
+      sinceEl.style.display = 'none';
+    }
+  </script>
+</body>
+</html>

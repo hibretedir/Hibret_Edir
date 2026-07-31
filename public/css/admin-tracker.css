@@ -4742,6 +4742,15 @@ body.tracker .btn.primary {
   }
 }
 
+.follow-up-status-table th:nth-child(2),
+.follow-up-status-table th:nth-child(3),
+.follow-up-status-table th:nth-child(4),
+.follow-up-status-table td:nth-child(2),
+.follow-up-status-table td:nth-child(3),
+.follow-up-status-table td:nth-child(4) {
+  text-align: center;
+}
+
 /* Payment Follow-Up */
 .follow-up-banner {
   margin-bottom: 12px;
@@ -4947,6 +4956,13 @@ body.tracker .btn.primary {
   color: #fde68a;
   background: rgba(252, 221, 9, 0.12);
   border: 1px solid rgba(252, 221, 9, 0.28);
+}
+
+.follow-up-count-pill--zero {
+  color: var(--tk-muted, #6b7c6b);
+  background: rgba(4, 77, 26, 0.1);
+  border-color: rgba(4, 77, 26, 0.18);
+  font-weight: 600;
 }
 
 .follow-up-total-amt {

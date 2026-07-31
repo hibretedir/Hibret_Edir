@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/css/admin-tracker.css?v=admin79">
+<link rel="stylesheet" href="/css/admin-tracker.css?v=admin81">
 <link rel="stylesheet" href="/css/admin-tracker-mh.css?v=1">
 </head>
 <body class="app-admin tracker">
@@ -2637,6 +2637,11 @@ function trackerHeaderHtml(stats) {
     : currentView === 'messages' ? `${PIN_RESET_REQUESTS.filter(r => r.status === 'Pending').length} PIN resets · ${CONTACT_MESSAGES.length} contact`
     : currentView === 'follow-up' ? (followUpTab === 'assignments'
       ? `${FOLLOW_UP_ROSTER?.stats?.assigned || 0} assigned · ${FOLLOW_UP_ROSTER?.stats?.unassigned || 0} unassigned`
+      : followUpTab === 'status'
+        ? (() => {
+          const s = buildFollowUpStatusSummary();
+          return `${s.boardRows.length} board · ${s.totalUnpaid} unpaid invoices assigned`;
+        })()
       : `${FOLLOW_UP_MINE?.stats?.needs_follow_up || 0} need calls · ${FOLLOW_UP_MINE?.stats?.portfolio_size || 0} in your portfolio`)
     : currentView === 'events' ? `${stats.events} passed away · ${stats.total} active member invoices`
     : currentView === 'announcement' ? (ANNOUNCEMENT_EVENTS.length ? `${ANNOUNCEMENT_EVENTS.length} events · intake & preview` : 'Build the public memorial announcement')
@@ -6961,7 +6966,7 @@ function syncFollowUpBoardIdFromMine() {
 
 async function fetchFollowUpData(loadAll) {
   await refreshAdminUser();
-  const needRoster = loadAll || followUpTab === 'assignments';
+  const needRoster = loadAll || followUpTab === 'assignments' || followUpTab === 'status';
   const needMine = loadAll || followUpTab === 'mine';
   const tasks = [];
   if (needRoster) {
@@ -7033,7 +7038,9 @@ async function saveFollowUpSelfAssignment(memberId, boardMemberId, selectEl) {
 }
 
 function switchFollowUpTab(tab) {
-  followUpTab = tab === 'assignments' ? 'assignments' : 'mine';
+  if (tab === 'assignments') followUpTab = 'assignments';
+  else if (tab === 'status') followUpTab = 'status';
+  else followUpTab = 'mine';
   fetchFollowUpData(false).then(() => render()).catch((e) => {
     showAdminToast(e.message || 'Could not refresh follow-up.', 'err');
   });
@@ -7378,17 +7385,113 @@ function renderFollowUpMinePanel() {
   return `<div id="followUpMineWrap">${renderFollowUpMineContentHtml()}</div>`;
 }
 
+/** Board follow-up load: unpaid invoice counts per board member (from roster). */
+function buildFollowUpStatusSummary() {
+  const boardOptions = FOLLOW_UP_ROSTER?.board_options || [];
+  const rows = FOLLOW_UP_ROSTER?.rows || [];
+  const byBoard = new Map();
+  for (const b of boardOptions) {
+    byBoard.set(Number(b.id), {
+      id: Number(b.id),
+      display_name: b.display_name || b.email || `Board #${b.id}`,
+      assigned_members: 0,
+      members_with_unpaid: 0,
+      unpaid_invoices: 0,
+    });
+  }
+  let unassignedUnpaid = 0;
+  let unassignedMembersWithUnpaid = 0;
+  for (const row of rows) {
+    const unpaid = (row.unpaid_invoices || []).length;
+    const boardId = row.assignment?.board_member_id != null
+      ? Number(row.assignment.board_member_id)
+      : null;
+    if (!boardId || !byBoard.has(boardId)) {
+      if (unpaid) {
+        unassignedUnpaid += unpaid;
+        unassignedMembersWithUnpaid += 1;
+      }
+      continue;
+    }
+    const stats = byBoard.get(boardId);
+    stats.assigned_members += 1;
+    if (unpaid) {
+      stats.members_with_unpaid += 1;
+      stats.unpaid_invoices += unpaid;
+    }
+  }
+  const boardRows = [...byBoard.values()].sort((a, b) => {
+    if (b.unpaid_invoices !== a.unpaid_invoices) return b.unpaid_invoices - a.unpaid_invoices;
+    return String(a.display_name).localeCompare(String(b.display_name));
+  });
+  const totalUnpaid = boardRows.reduce((sum, r) => sum + r.unpaid_invoices, 0);
+  return {
+    boardRows,
+    totalUnpaid,
+    unassignedUnpaid,
+    unassignedMembersWithUnpaid,
+  };
+}
+
+function renderFollowUpStatusContentHtml() {
+  const { boardRows, totalUnpaid, unassignedUnpaid, unassignedMembersWithUnpaid } = buildFollowUpStatusSummary();
+  if (!boardRows.length) {
+    return `<div class="tracker-empty">No board members with follow-up permission yet.</div>`;
+  }
+  const unassignedBanner = unassignedUnpaid
+    ? `<div class="tracker-banner follow-up-banner" role="status"><strong>${unassignedUnpaid}</strong> unpaid invoice${unassignedUnpaid === 1 ? '' : 's'} on <strong>${unassignedMembersWithUnpaid}</strong> unassigned member${unassignedMembersWithUnpaid === 1 ? '' : 's'} — assign them on the Assignments tab.</div>`
+    : '';
+  const body = boardRows.map((r) => {
+    const pillCls = r.unpaid_invoices > 0 ? 'follow-up-count-pill' : 'follow-up-count-pill follow-up-count-pill--zero';
+    return `<tr class="follow-up-mobile-card">
+      <td data-label="Board member" class="follow-up-col-member"><div class="tracker-member-name">${esc(r.display_name)}</div></td>
+      <td data-label="Assigned">${r.assigned_members}</td>
+      <td data-label="Members unpaid">${r.members_with_unpaid}</td>
+      <td data-label="Unpaid invoices"><span class="${pillCls}">${r.unpaid_invoices}</span></td>
+    </tr>`;
+  }).join('');
+  return `
+    ${unassignedBanner}
+    <div class="follow-up-mine-summary">
+      <span><strong>${boardRows.length}</strong> board contacts</span>
+      <span><strong>${totalUnpaid}</strong> unpaid invoices assigned</span>
+    </div>
+    <div class="tracker-table-wrap follow-up-mine-table-wrap tracker-table-wrap--fluid admin-mobile-list">
+      <table class="tracker-table follow-up-status-table">
+        <thead>
+          <tr>
+            <th>Board member</th>
+            <th>Assigned members</th>
+            <th>Members with unpaid</th>
+            <th>Unpaid invoices</th>
+          </tr>
+        </thead>
+        <tbody>${body}</tbody>
+      </table>
+    </div>`;
+}
+
+function renderFollowUpStatusPanel() {
+  return `<div id="followUpStatusWrap">${renderFollowUpStatusContentHtml()}</div>`;
+}
+
 function renderFollowUpView() {
   const stats = { total: 0, unpaid: 0, totalOwed: 0, events: 0, lateInvoices: 0, paidSession: 0, uniqueMembers: 0 };
   const subtabs = `
     <nav class="tracker-subtabs follow-up-subtabs" aria-label="Follow-up views">
       <button type="button" class="tracker-tab${followUpTab === 'assignments' ? ' active' : ''}" onclick="switchFollowUpTab('assignments')">Assignments</button>
       <button type="button" class="tracker-tab${followUpTab === 'mine' ? ' active' : ''}" onclick="switchFollowUpTab('mine')">My Follow-Up List</button>
+      <button type="button" class="tracker-tab${followUpTab === 'status' ? ' active' : ''}" onclick="switchFollowUpTab('status')">Status</button>
     </nav>`;
+  const panel = followUpTab === 'assignments'
+    ? renderFollowUpAssignmentsPanel()
+    : followUpTab === 'status'
+      ? renderFollowUpStatusPanel()
+      : renderFollowUpMinePanel();
   document.getElementById('mainArea').innerHTML = `
     ${trackerHeaderHtml(stats)}
     ${adminStickyDockHtml(subtabs + (followUpTab === 'assignments' ? renderFollowUpAssignmentsControls() : ''))}
-    ${followUpTab === 'assignments' ? renderFollowUpAssignmentsPanel() : renderFollowUpMinePanel()}`;
+    ${panel}`;
   updateSidebar();
 }
 

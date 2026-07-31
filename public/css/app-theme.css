@@ -1807,25 +1807,35 @@ body.app-admin {
 }
 
 .app-portal .mc-badge-wrap {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
   justify-self: end;
   align-self: start;
   padding-top: 2px;
 }
 
+.app-portal .mc-badge-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  line-height: 1.15;
+}
+
 .app-portal .mc-badge {
+  display: block;
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.16em;
+  margin: 0 -0.16em 0 0; /* cancel trailing letter-spacing for true center */
+  padding: 0;
   color: #f5d76e;
   text-transform: uppercase;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
 .app-portal .mc-since {
+  display: block;
+  margin: 4px -0.04em 0 0;
+  padding: 0;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
