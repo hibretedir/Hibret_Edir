@@ -560,7 +560,7 @@ const PORTAL_I18N = {
   notOnFile: { en: 'Not on file', am: 'በፋይል ላይ የለም' },
   edit: { en: 'Edit', am: 'አስተካክል' },
   mobile: { en: 'Mobile', am: 'ሞባይል' },
-  homePhone: { en: 'Home Phone', am: 'የቤት ስልክ' },
+  homePhone: { en: 'Spouse cell', am: 'የባለቤት ስልክ' },
   email: { en: 'Email', am: 'ኢሜይል' },
   address: { en: 'Address', am: 'አድራሻ' },
   caughtUpTitle: { en: "You're all caught up!", am: 'ሁሉም ነገር ተሟልቷል!' },
@@ -1407,7 +1407,7 @@ function renderPortal(){
   // Profile fields
   const fields=[
     {ico:'📱',lbl:pt('mobile'),key:'mobile',val:profileFieldDisplay('mobile',m.mobile),editable:true},
-    {ico:'🏠',lbl:pt('homePhone'),key:'home',val:profileFieldDisplay('home',m.home),editable:true},
+    {ico:'📱',lbl:pt('homePhone'),key:'home',val:profileFieldDisplay('home',m.home),editable:true},
     {ico:'✉️',lbl:pt('email'),key:'email',val:profileFieldDisplay('email',m.email),editable:true},
     {ico:'📍',lbl:pt('address'),key:'address',val:profileFieldDisplay('address',m.address),editable:true},
   ];

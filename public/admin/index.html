@@ -1522,7 +1522,7 @@ function renderMemberApplicationReadOnlyHtml(app, member) {
         <div class="review-field"><span>Spouse</span><strong>${esc(app.spouse_full_name || '—')}</strong></div>
         <div class="review-field"><span>Email</span><strong>${esc(app.email || '—')}</strong></div>
         <div class="review-field"><span>Cell</span><strong>${esc(app.cell_phone || '—')}</strong></div>
-        <div class="review-field"><span>Home</span><strong>${esc(app.home_phone || '—')}</strong></div>
+        <div class="review-field"><span>Spouse cell</span><strong>${esc(app.home_phone || '—')}</strong></div>
         ${app.office_phone ? `<div class="review-field"><span>Office</span><strong>${esc(app.office_phone)}</strong></div>` : ''}
         <div class="review-field"><span>Address</span><strong>${esc([app.address, app.city, app.state, app.zip].filter(Boolean).join(', ') || '—')}</strong></div>
       </div>
@@ -1559,7 +1559,7 @@ function renderMemberProfileFormHtml(m) {
       <div><label style="font-size:11px;color:var(--tk-muted)">Last</label><input class="field-input" id="ef_last" value="${esc(m.last)}"${ro}></div>
       <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tk-muted)">Email</label><input class="field-input" id="ef_email" value="${esc(m.email)}"${ro}></div>
       <div><label style="font-size:11px;color:var(--tk-muted)">Mobile</label><input class="field-input" id="ef_mobile" value="${esc(m.mobile)}"${ro}></div>
-      <div><label style="font-size:11px;color:var(--tk-muted)">Home</label><input class="field-input" id="ef_home" value="${esc(m.home)}"${ro}></div>
+      <div><label style="font-size:11px;color:var(--tk-muted)">Spouse cell</label><input class="field-input" id="ef_home" value="${esc(m.home)}"${ro} placeholder="Spouse mobile number"></div>
       <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tk-muted)">Address</label><input class="field-input" id="ef_address" value="${esc(m.address)}"${ro}></div>
       <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tk-muted)">Board notes (conversations, reminders)</label><textarea class="field-input" id="ef_notes" rows="4" placeholder="Call log, payment reminders, follow-ups…">${esc(m.notes || '')}</textarea>${boardNotesFieldHint()}</div>
       <div style="grid-column:1/-1"><label style="font-size:11px;color:var(--tk-muted)">Legacy application (Google Drive)</label><input class="field-input" id="ef_application_drive_url" type="url" placeholder="https://drive.google.com/..." value="${esc(m.application_drive_url || '')}"${ro}>

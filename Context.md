@@ -441,7 +441,7 @@ Placeholders show `—` until API loads. Regenerate static JSON: `python scripts
 
 **Admin auth UI (June 17):** Logout visible on PC when signed in (sidebar foot + header); `ADMIN_AUTH_ENABLED=false` locally still shows logout for dev session.
 
-**Members CRM (June 17):** List shows **Member** + **Spouse** columns; profile form has separate spouse field; `members.spouse_name` backfilled from `full_name` where `Primary/Spouse` format exists.
+**Members CRM (June 17):** List shows **Member** + **Spouse** columns; profile form has separate spouse field; `members.spouse_name` backfilled from `full_name` where `Primary/Spouse` format exists. **`home_phone` UI label = Spouse cell** (July 30) — stores spouse mobile; DB column unchanged; portal login still matches both `mobile` and `home_phone`.
 
 **Refresh behavior:** Members and Invoices tabs refetch on switch; Event Summary loads full invoices + stats.
 

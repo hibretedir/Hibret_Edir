@@ -689,7 +689,7 @@ const MEMBER_EDIT_FIELDS = {
 
 const FIELD_LABELS = {
   mobile: 'Mobile',
-  home: 'Home Phone',
+  home: 'Spouse cell',
   email: 'Email',
   address: 'Address',
 };
