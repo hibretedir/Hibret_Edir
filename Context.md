@@ -1,6 +1,6 @@
 # Hibret Edir — Agent Context & Handoff
 
-**Last updated:** July 3, 2026 (Messages inbox, HTML reply emails, follow-up policy, LA timezone sitewide)  
+**Last updated:** July 30, 2026 (waiting list Pass for non-responders)  
 **Purpose:** Onboard a new Cursor agent quickly. Read this file first, then `HIBRET_EDIR_PROJECT_HANDOFF (1).md` for deeper business rules and by-laws.
 
 **Current focus (next agent):** **Twilio SMS** — buy number, set `TWILIO_*` on Netlify, `npm run test:notify -- --send`. Then **production smoke-test**: shared-phone account picker; **portal login-help** (wrong number → required email → board reply emailed); Admin **Messages** email inbox + follow-up replies; board Access Management on phone + PC. **Database:** local `.env` `DATABASE_URL` points at **Render Postgres** — `npm run db:migrate` from your laptop **is** production DB ops. Confirm **`ADMIN_AUTH_ENABLED=true`** and **`BOARD_SUPER_ADMIN_EMAILS`** on Netlify. SendGrid is **done** — see **`docs/notifications-setup.md`**. QA playbook: **`docs/system-validation-playbook.md`**. **Local mobile testing:** `npm run dev` → phone browser `http://<PC-LAN-IP>:8888/admin/` or `/portal/`. **All user-visible dates/times** display in **Pacific (America/Los_Angeles)** via `public/js/datetime-la.js` + `netlify/functions/datetime-la.js`.
@@ -245,6 +245,7 @@ Notifications **skip gracefully** when Twilio is unset; email sends when SendGri
 |--------|---------|
 | `Pending` / `Registered` | In queue |
 | `Invited to Apply` | Board sent invite |
+| `Passed` | Invited but did not respond — board **Pass** freed the slot; still on list, ranked behind Pending/Registered for the next invite |
 | `Application Submitted` | Form received |
 | `Added as Member` | Paid and in CRM |
 | `Rejected` | Removed from queue (Remove button) |
@@ -336,6 +337,7 @@ Base URL: `/.netlify/functions/<name>`
 | POST | `/verify`, `/membership` | — | Application gate (must be `Invited to Apply`) |
 | GET | `/waiting-list` | Admin | Full queue + slot math |
 | POST | `/waiting-list/:id/invite` | Admin | Send invitation |
+| POST | `/waiting-list/:id/pass` | Admin (`waiting_list_invite`) | Pass invited non-responder — status → `Passed`, frees pipeline slot for next in line |
 | POST | `/waiting-list/:id/reject` | Admin | Remove → status `Rejected` |
 | GET/PATCH | `/applications/:id` | Admin | List / save review checklist |
 | POST | `/applications/:id/approve-for-payment` | Admin | Vet + send PayPal registration invoice → `Awaiting Payment` |
@@ -345,7 +347,7 @@ Base URL: `/.netlify/functions/<name>`
 | POST | `/demo-qa/test-notify` | Admin | Send test email to `DEMO_QA_EMAIL` (NTF-01) |
 | POST | `/demo-qa/reset` | Admin | Reset QA demo cycle (DEMO_QA_EMAIL only) |
 
-**Contact messages (`contact_messages`):** Sources: **website** (public Contact Us), **portal** (signed-in member), **portal-login** (cannot sign in — phone not found). On submit, board is emailed via SendGrid. On board reply: signed-in portal messages also appear under Home → **Messages from the Board**; **portal-login** users cannot see portal replies — board reply is **emailed** to the address they provided (**email required** for `portal-login`). Admin Messages tab labels login help; reply modal forces email notify for login help. **Communication policy:** append-only — second+ replies **append** to `board_reply` with `[[FOLLOWUP:ISO]]` markers; no delete/edit UI or API; email sends **only new follow-up text**. Branded HTML reply emails via `notify.js` `buildBoardReplyEmail()`. CSS `admin-tracker.css` **admin73** (email inbox + gold reply button).
+**Contact messages (`contact_messages`):** Sources: **website** (public Contact Us), **portal** (signed-in member), **portal-login** (cannot sign in — phone not found). On submit, board is emailed via SendGrid. On board reply: signed-in portal messages also appear under Home → **Messages from the Board**; **portal-login** users cannot see portal replies — board reply is **emailed** to the address they provided (**email required** for `portal-login`). Admin Messages tab labels login help; reply modal forces email notify for login help. **Communication policy:** append-only — second+ replies **append** to `board_reply` with `[[FOLLOWUP:ISO]]` markers; no delete/edit UI or API; email sends **only new follow-up text**. Branded HTML reply emails via `notify.js` `buildBoardReplyEmail()`. CSS `admin-tracker.css` **admin74** (email inbox + Pass on waiting list).
 
 **Membership onboarding (live):** invite → apply → board review (3 checks) → **Approve & Send Invoice** → PayPal registration fee → **member created automatically on PayPal paid** (sync or completion job). **Mark Registration Paid** / **Approve & Add to CRM** = fallback for Zelle/BofA. See **`docs/membership-onboarding-workflow.md`** and **`docs/system-validation-playbook.md`**.
 
@@ -455,12 +457,14 @@ Placeholders show `—` until API loads. Regenerate static JSON: `python scripts
 
 | Tab | Contents |
 |-----|----------|
-| **Waiting List** | All · Invited · In Progress — invite from **All** with **Send Invitation →** (no separate “Ready to Invite” tab) |
+| **Waiting List** | All · Invited · In Progress — invite from **All** with **Send Invitation →**; **Pass** on Invited (no application yet) frees the slot for the next person |
 | **Applications** | Membership only — Pending (incl. Awaiting Payment) · Approved · Rejected |
 | **Board Requests** | Operational approvals — **Mark Paid**, **Beneficiary** changes; own Pending · Approved · Rejected · All |
 
 | Action | Where |
 |--------|-------|
+| Invite to apply | Waiting List → **Send Invitation →** (eligible rows) |
+| Pass non-responder | Waiting List → Invited → **Pass** (withdraws invite, next in line becomes eligible; person stays on list as `Passed`) |
 | Vet new member | Applications → 3 checks (name, fields, ID) → **Approve & Send Invoice** |
 | Zelle registration | Applications → **Mark Registration Paid** when Awaiting Payment (unpaid) |
 | After PayPal paid | Member auto-created on sync; **Approve & Add to CRM** only if sync lag / manual pay |
@@ -653,6 +657,13 @@ From by-laws / handoff:
 ---
 
 ## 12. Recent session changelog
+
+### July 30, 2026 — Waiting list Pass for non-responders
+
+- **Pass button** on Admin → Waiting List → Invited rows (`Invited to Apply`, no application yet).
+- `POST apply/waiting-list/:id/pass` → status **`Passed`**, clears `invited_at`, frees pipeline slot; next Pending/Registered becomes eligible.
+- **Passed** stays on the list, ranked **after** Pending/Registered for the next invite round; can be re-invited later. Application verify still requires `Invited to Apply`.
+- UI: amber **Pass** next to Invited; CSS `admin74`. Activity: `waiting_list.pass`.
 
 ### July 3, 2026 — Messages inbox, HTML replies, follow-up policy, LA timezone
 

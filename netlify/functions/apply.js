@@ -73,10 +73,16 @@ const { buildMonitorHealthDashboard } = require('./demo-qa-dashboard');
 const MEMBER_CAP = Number(process.env.MEMBER_CAP || 200);
 const WAITING_LIST_PIPELINE_STATUSES = ['Invited to Apply', 'Application Submitted'];
 // Imported rows may use Registered; new sign-ups use Pending — both are in the queue.
-const WAITING_LIST_QUEUE_STATUSES = ['Pending', 'Registered'];
+// Passed = invited but did not respond; still queueable, ranked after Pending/Registered.
+const WAITING_LIST_QUEUE_STATUSES = ['Pending', 'Registered', 'Passed'];
+const WAITING_LIST_PRIMARY_QUEUE_STATUSES = ['Pending', 'Registered'];
 
 function isWaitingListQueueAwaiting(status) {
   return WAITING_LIST_QUEUE_STATUSES.includes(status);
+}
+
+function isWaitingListPrimaryQueue(status) {
+  return WAITING_LIST_PRIMARY_QUEUE_STATUSES.includes(status);
 }
 
 const headers = {
@@ -117,6 +123,7 @@ function publicWaitingListStatusLabels(status) {
   if (status === 'Registered') return { en: 'Registered', am: 'ተመዝግቧል' };
   if (status === 'Invited to Apply') return { en: 'Invitation Sent', am: 'ግብአት ተላልፏል' };
   if (status === 'Application Submitted') return { en: 'Invitation Sent', am: 'ግብአት ተላልፏል' };
+  if (status === 'Passed') return { en: 'Pending', am: 'በመጠባበቅ ላይ' };
   if (status === 'Canceled') return { en: 'Canceled', am: 'ተሰርዟል' };
   if (status === 'Rejected') return { en: 'Removed', am: 'ተወግዷል' };
   return { en: 'Pending', am: 'በመጠባበቅ ላይ' };
@@ -178,20 +185,37 @@ function waitingListDisplayRank({ pending_rank, active_pipeline_rank, queue_posi
   return queue_position;
 }
 
+/** Invite order: Pending/Registered first (by applied_at), then Passed — so Pass frees the slot for the next primary waiter. */
+function buildWaitingListInviteRankMap(rows) {
+  const rankById = new Map();
+  let rank = 0;
+  for (const row of rows) {
+    if (isWaitingListPrimaryQueue(row.status)) {
+      rank += 1;
+      rankById.set(Number(row.id), rank);
+    }
+  }
+  for (const row of rows) {
+    if (row.status === 'Passed') {
+      rank += 1;
+      rankById.set(Number(row.id), rank);
+    }
+  }
+  return rankById;
+}
+
 function enrichWaitingListQueue(rows, slots = null) {
-  let pendingRank = 0;
+  const inviteRankById = buildWaitingListInviteRankMap(rows);
   let activePipelineRank = 0;
   return rows.map((row, idx) => {
     const queue_position = idx + 1;
-    let pending_rank = null;
+    const pending_rank = inviteRankById.has(Number(row.id))
+      ? inviteRankById.get(Number(row.id))
+      : null;
     let eligible_for_invite = false;
-    if (isWaitingListQueueAwaiting(row.status)) {
-      pendingRank += 1;
-      pending_rank = pendingRank;
-      if (slots) {
-        eligible_for_invite = pendingRank <= slots.invite_slots_remaining
-          || isDemoQaInviteEligible(row, slots);
-      }
+    if (pending_rank != null && slots) {
+      eligible_for_invite = pending_rank <= slots.invite_slots_remaining
+        || isDemoQaInviteEligible(row, slots);
     }
     let active_pipeline_rank = null;
     if (!WAITING_LIST_PUBLIC_HIDDEN.has(row.status)) {
@@ -1822,7 +1846,10 @@ async function getWaitingListPendingRank(db, waitingListId) {
   const res = await db.query(
     `SELECT id FROM waiting_list
      WHERE status = ANY($1::text[])
-     ORDER BY applied_at ASC NULLS LAST, id ASC`,
+     ORDER BY
+       CASE WHEN status = 'Passed' THEN 1 ELSE 0 END ASC,
+       applied_at ASC NULLS LAST,
+       id ASC`,
     [WAITING_LIST_QUEUE_STATUSES]
   );
   const idx = res.rows.findIndex((r) => Number(r.id) === Number(waitingListId));
@@ -1945,6 +1972,68 @@ async function inviteWaitingListEntry(id, body, actor) {
   return json(200, {
     ok: true,
     message: 'Invitation sent. Applicant can verify at /application/.',
+    entry: buildWaitingListRow(updated, null),
+  });
+}
+
+async function passWaitingListEntry(id, body, actor) {
+  const db = getDb();
+  const existing = await db.query(
+    `SELECT wl.*,
+      EXISTS (SELECT 1 FROM membership_applications ma WHERE ma.waiting_list_id = wl.id) AS has_application
+     FROM waiting_list wl WHERE wl.id = $1 LIMIT 1`,
+    [id]
+  );
+  const row = existing.rows[0];
+  if (!row) return json(404, { error: 'Waiting list entry not found.' });
+  if (row.status !== 'Invited to Apply') {
+    return json(409, {
+      error: row.status === 'Application Submitted' || row.has_application
+        ? 'They already submitted an application — review in Applications, or use Remove.'
+        : 'Pass is only for invited applicants who have not responded yet.',
+    });
+  }
+  if (row.has_application) {
+    return json(409, {
+      error: 'They already submitted an application — review in Applications, or use Remove.',
+    });
+  }
+
+  const note = stampBoardNote(
+    body.notes || body.reason || 'Passed — invitation not used; slot freed for next in line',
+    actor?.actor_label
+  );
+  await db.query(
+    `UPDATE waiting_list
+     SET status = 'Passed',
+         invited_at = NULL,
+         reviewed_at = NOW(),
+         notes = TRIM(BOTH FROM COALESCE(notes, '') || E'\n' || $2)
+     WHERE id = $1`,
+    [id, note]
+  );
+
+  const refreshed = await db.query(
+    `SELECT wl.*,
+      EXISTS (SELECT 1 FROM membership_applications ma WHERE ma.waiting_list_id = wl.id) AS has_application
+     FROM waiting_list wl WHERE wl.id = $1 LIMIT 1`,
+    [id]
+  );
+  const updated = refreshed.rows[0];
+
+  await logActivity(db, {
+    ...actor,
+    action: 'waiting_list.pass',
+    entity_type: 'waiting_list',
+    record_id: id,
+    summary: `Passed over ${updated.full_name || updated.email || id} (no application) — slot opened for next in line`,
+    old_value: { status: 'Invited to Apply' },
+    new_value: { status: 'Passed', email: updated.email },
+  });
+
+  return json(200, {
+    ok: true,
+    message: 'Passed. Slot freed — next person in line can be invited.',
     entry: buildWaitingListRow(updated, null),
   });
 }
@@ -2221,7 +2310,7 @@ exports.handler = async (event) => {
 
   const isWaitingListAdminRoute = wlPath && (
     (event.httpMethod === 'GET' && !wlPath.id)
-    || (event.httpMethod === 'POST' && wlPath.id && (wlPath.action === 'invite' || wlPath.action === 'reject'))
+    || (event.httpMethod === 'POST' && wlPath.id && (wlPath.action === 'invite' || wlPath.action === 'reject' || wlPath.action === 'pass'))
   );
 
   if (isWaitingListAdminRoute) {
@@ -2243,6 +2332,11 @@ exports.handler = async (event) => {
         const denied = assertPerm(access, 'waiting_list_invite', 'You do not have permission to invite waiting list members.');
         if (denied) return json(403, { error: denied });
         return await inviteWaitingListEntry(wlPath.id, body, actor);
+      }
+      if (event.httpMethod === 'POST' && wlPath.id && wlPath.action === 'pass') {
+        const denied = assertPerm(access, 'waiting_list_invite', 'You do not have permission to pass waiting list invitations.');
+        if (denied) return json(403, { error: denied });
+        return await passWaitingListEntry(wlPath.id, body, actor);
       }
       if (event.httpMethod === 'POST' && wlPath.id && wlPath.action === 'reject') {
         const denied = assertPerm(access, 'waiting_list_remove', 'You do not have permission to remove waiting list members.');

@@ -289,7 +289,8 @@ After onboarding, the **same platform** handles $110 event invoices, portal paym
 | Status | Meaning | Admin tab |
 |--------|---------|-----------|
 | `Registered` / `Pending` | In queue, not yet invited | **All** |
-| `Invited to Apply` | Invitation sent, awaiting form | **Invited** |
+| `Invited to Apply` | Invitation sent, awaiting form | **Invited** — **Pass** if no response |
+| `Passed` | Invited, did not respond; slot freed; ranked after Pending for next invite | **All** |
 | `Application Submitted` | Form received, under board review | **In Progress** |
 | `Added as Member` | Completed onboarding | **All** (collapsed section) |
 | `Rejected` | Removed from process | — |
@@ -314,7 +315,7 @@ open_invite_slots = MEMBER_CAP − active_members − in_pipeline
 
 **In pipeline** = waiting list rows with status `Invited to Apply` or `Application Submitted`, plus applications `Awaiting Payment`.
 
-Only the top N queue members (by `applied_at`) are marked **eligible for invite** in the admin UI. The **Send Invitation** button appears on **All** for eligible rows only.
+Only the top N **Pending/Registered** queue members (by `applied_at`) are marked **eligible for invite**, then any **Passed** rows. The **Send Invitation** button appears on **All** for eligible rows. **Pass** (`POST apply/waiting-list/:id/pass`) moves `Invited to Apply` → `Passed` when there is no application yet, freeing the pipeline slot.
 
 ---
 
@@ -324,6 +325,8 @@ Only the top N queue members (by `applied_at`) are marked **eligible for invite*
 |-------|-------------|------|
 | Waiting list signup | `waiting_list.registered` | Public form submit |
 | Invitation sent | `waiting_list.invite` | Board invite |
+| Invitation passed | `waiting_list.pass` | Board Pass (no response) |
+| Waiting list rejected | `waiting_list.reject` | Board remove |
 | Application submitted | `application.submitted` | Applicant form |
 | Board review saved | `application.reviewed` | Checklist update |
 | Invoice sent | `application.invoice_sent` | Approve & send invoice *(target)* |
@@ -353,6 +356,7 @@ Board admins can view the **Activity Log** under Admin → Security.
 | Step | Status |
 |------|--------|
 | Invite | ✅ `POST apply/waiting-list/:id/invite` |
+| Pass non-responder | ✅ `POST apply/waiting-list/:id/pass` |
 | Application submit | ✅ `POST apply/membership` |
 | Board review checklist (3 items) | ✅ `PATCH apply/applications/:id` |
 | Approve & send $200 PayPal invoice | ✅ `POST apply/applications/:id/approve-for-payment` |

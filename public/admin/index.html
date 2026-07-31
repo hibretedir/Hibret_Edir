@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="/css/admin-tracker.css?v=admin73">
+<link rel="stylesheet" href="/css/admin-tracker.css?v=admin74">
 <link rel="stylesheet" href="/css/admin-tracker-mh.css?v=1">
 </head>
 <body class="app-admin tracker">
@@ -2050,6 +2050,10 @@ async function fetchMarkPaidRequests() {
 }
 
 function isWlQueueAwaiting(status) {
+  return status === 'Pending' || status === 'Registered' || status === 'Passed';
+}
+
+function isWlPrimaryQueue(status) {
   return status === 'Pending' || status === 'Registered';
 }
 
@@ -2067,14 +2071,27 @@ function isDemoQaReservedSlotOpenClient(slots) {
 
 function normalizeWaitingListRows(rows, slots) {
   if (!rows.length) return rows;
-  let rank = 0;
   const remaining = slots?.invite_slots_remaining;
   const qaOpen = slots?.qa_reserved_slot_open === true || isDemoQaReservedSlotOpenClient(slots);
+  let rank = 0;
+  const rankById = new Map();
+  for (const row of rows) {
+    if (isWlPrimaryQueue(row.status)) {
+      rank += 1;
+      rankById.set(Number(row.id), rank);
+    }
+  }
+  for (const row of rows) {
+    if (row.status === 'Passed') {
+      rank += 1;
+      rankById.set(Number(row.id), rank);
+    }
+  }
   return rows.map((row) => {
     const copy = { ...row };
-    if (!isWlQueueAwaiting(copy.status)) return copy;
-    rank += 1;
-    if (copy.pending_rank == null) copy.pending_rank = rank;
+    const computed = rankById.get(Number(row.id));
+    if (computed == null) return copy;
+    if (copy.pending_rank == null) copy.pending_rank = computed;
     const isQa = isDemoQaWaitingListRowClient(copy);
     if (isQa && qaOpen) {
       copy.eligible_for_invite = true;
@@ -2844,22 +2861,33 @@ function renderReadyToInviteCardsHtml(entries) {
 function renderWaitingListRow(w, muted) {
   const statusClass = w.status === 'Invited to Apply' ? 'paid'
     : w.eligible_for_invite ? 'warn'
-    : w.status === 'Pending' ? 'warn'
+    : w.status === 'Passed' ? 'warn'
+    : w.status === 'Pending' || w.status === 'Registered' ? 'warn'
     : w.status === 'Added as Member' ? 'paid'
     : w.status === 'Rejected' ? 'unpaid' : '';
   const canInvite = adminCanInviteWaitingList() && isWlQueueAwaiting(w.status) && w.eligible_for_invite;
+  const canPass = adminCanInviteWaitingList() && w.status === 'Invited to Apply';
   const canReject = adminCanRemoveWaitingList() && !['Added as Member', 'Rejected'].includes(w.status);
-  const statusLabel = w.eligible_for_invite ? 'Ready to Invite' : w.status;
-  return `<tr class="data-row admin-mobile-card${w.eligible_for_invite ? ' wl-eligible-row' : ''}${muted ? ' wl-added-row' : ''}">
+  const statusLabel = w.eligible_for_invite
+    ? 'Ready to Invite'
+    : (w.status === 'Passed' ? 'Passed' : w.status);
+  const inviteCell = canInvite
+    ? `<button type="button" class="wl-invite-btn wl-invite-btn-compact" onclick="inviteWaitingListEntry(${w.id})">Send Invitation →</button>`
+    : canPass
+      ? `<div class="wl-invite-actions">
+          <span class="tracker-mark-done">Invited</span>
+          <button type="button" class="wl-pass-btn" onclick="passWaitingListEntry(${w.id})" title="They did not respond — free this slot for the next person">Pass</button>
+        </div>`
+      : isWlQueueAwaiting(w.status)
+        ? '<span class="tracker-mark-done" style="opacity:.55">Waiting for slot</span>'
+        : '—';
+  return `<tr class="data-row admin-mobile-card${w.eligible_for_invite ? ' wl-eligible-row' : ''}${muted ? ' wl-added-row' : ''}${w.status === 'Passed' ? ' wl-passed-row' : ''}">
     <td data-label="#"><span class="tracker-inv-num">#${w.display_rank ?? w.pending_rank ?? w.queue_position ?? w.id}</span></td>
     <td class="admin-m-col-head"><div class="tracker-member-name">${esc(w.full_name || '—')}</div><div class="tracker-member-email">${esc(w.email || '—')}</div></td>
     <td data-label="Phone">${esc(w.phone || '—')}</td>
     <td data-label="Applied"><span class="tracker-date">${esc(fmtDate(w.applied_at))}</span></td>
     <td data-label="Status"><span class="tracker-status ${statusClass}"><span class="tracker-status-dot"></span>${esc(statusLabel)}</span></td>
-    <td class="admin-m-col-action wl-invite-cell" data-label="Invite">${canInvite
-      ? `<button type="button" class="wl-invite-btn wl-invite-btn-compact" onclick="inviteWaitingListEntry(${w.id})">Send Invitation →</button>`
-      : w.status === 'Invited to Apply' ? '<span class="tracker-mark-done">Invited</span>'
-      : isWlQueueAwaiting(w.status) ? '<span class="tracker-mark-done" style="opacity:.55">Waiting for slot</span>' : '—'}</td>
+    <td class="admin-m-col-action wl-invite-cell" data-label="Invite">${inviteCell}</td>
     <td class="admin-m-col-action" data-label="Remove">${canReject
       ? `<button type="button" class="tracker-mark-btn" style="opacity:.85" onclick="rejectWaitingListEntry(${w.id})">Remove</button>`
       : '—'}</td>
@@ -2905,6 +2933,21 @@ async function inviteWaitingListEntry(id) {
     showAdminToast('Invitation sent to ' + label, 'ok');
   } catch (e) {
     alert(e.message || 'Could not send invitation.');
+  }
+}
+
+async function passWaitingListEntry(id) {
+  const w = WAITING_LIST.find(x => Number(x.id) === Number(id));
+  const label = w?.full_name || 'this applicant';
+  if (!confirm(`Pass ${label}? Their invitation will be withdrawn so the next person in line can be invited.\n\nThey stay on the waiting list (behind people who have not been invited yet) and can be invited again later.`)) return;
+  try {
+    await apiPost('apply/waiting-list/' + id + '/pass', {});
+    await fetchApprovalData();
+    if (currentView === 'applications') renderApplicationsView();
+    updateSidebar();
+    showAdminToast('Passed ' + label + ' — next in line can be invited.', 'ok');
+  } catch (e) {
+    alert(e.message || 'Could not pass this invitation.');
   }
 }
 
