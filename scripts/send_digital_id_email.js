@@ -1,6 +1,9 @@
 /**
  * Render Profile membership card → PNG and email it (matches portal Profile).
- * Usage: node scripts/send_digital_id_email.js [--member 52]
+ * Usage:
+ *   node scripts/send_digital_id_email.js [--member 52] [--to a@x.com] [--cc a@x.com]
+ *   node scripts/send_digital_id_email.js --all-board [--cc a@x.com]
+ * Default CC (when --cc omitted): DIGITAL_ID_CC_EMAIL or BOARD_NOTIFY_EMAIL from env.
  */
 require('dotenv').config();
 const fs = require('fs');
@@ -314,7 +317,10 @@ async function main() {
       .split(',')
       .map((s) => s.trim())
       .filter(Boolean)
-    : ['jaklilu@gmail.com'];
+    : String(process.env.DIGITAL_ID_CC_EMAIL || process.env.BOARD_NOTIFY_EMAIL || '')
+      .split(/[,;]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
 
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
