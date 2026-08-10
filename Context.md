@@ -1,9 +1,9 @@
 # Hibret Edir — Agent Context & Handoff
 
-**Last updated:** July 31, 2026 (in-Admin scanned PDFs + daily/Application-tab sync)  
+**Last updated:** August 10, 2026 (Context catch-up — Follow-Up, spouse succession, digital ID email, board forgot-password; July 31 scans already in code)  
 **Purpose:** Onboard a new Cursor agent quickly. Read this file first, then `HIBRET_EDIR_PROJECT_HANDOFF (1).md` for deeper business rules and by-laws.
 
-**Current focus (next agent):** **Push/deploy** today’s scan-preview work if not live yet. Then **Twilio SMS** — buy number, set `TWILIO_*` on Netlify, `npm run test:notify -- --send`. Production smoke-test: shared-phone picker; portal login-help; Admin Messages; Access Management. **Database:** local `.env` `DATABASE_URL` = Render — `npm run db:migrate` is production DB ops. Confirm **`ADMIN_AUTH_ENABLED=true`** and **`BOARD_SUPER_ADMIN_EMAILS`** on Netlify. SendGrid is **done**. QA: **`docs/system-validation-playbook.md`**. Local: `npm run dev` → `http://localhost:8888/admin/` or `/portal/`. Dates/times: Pacific via `datetime-la.js`.
+**Current focus (next agent):** **Twilio SMS** — buy number, set `TWILIO_*` on Netlify, `npm run test:notify -- --send`. Then **production smoke-test:** Payment Follow-Up (Assignments + Status); spouse succession on Announce; digital ID card + optional `send_digital_id_email.js`; shared-phone picker; login-help; Messages; Access Management; board forgot-password. Confirm **`ADMIN_AUTH_ENABLED=true`** and **`BOARD_SUPER_ADMIN_EMAILS`** on Netlify. **Database:** local `.env` `DATABASE_URL` = Render — `npm run db:migrate` is production DB ops. SendGrid is **done**. QA: **`docs/system-validation-playbook.md`**. Local: `npm run dev` → `http://localhost:8888/admin/` or `/portal/`. Dates/times: Pacific via `datetime-la.js`.
 
 ---
 
@@ -61,13 +61,17 @@ hibretedir/
 │   ├── portal.js                  # Members, invoices, profile, stats, activity
 │   ├── apply.js                   # Waiting list, applications, site-stats, announcement routes
 │   ├── event-announcement.js      # Memorial intake API, current-announcement, venues, PayPal balance hint
+│   ├── member-succession.js       # Spouse → primary; Announce CRM updates (deceased / spouse died)
+│   ├── follow-up.js               # Payment Follow-Up: claim/assign members, unpaid roster, my-list
+│   ├── application-scan-sync.js   # Netlify daily cron for Drive scan import (no-ops without Drive path)
 │   ├── demo-qa-dashboard.js       # System Health API + ONB validation steps (+ NTF-01 test email)
 │   ├── demo-qa-reset.js           # QA demo cycle reset (DEMO_QA_EMAIL only)
 │   ├── membership-completion.js   # Create active member after registration payment
 │   ├── paypal-registration-invoice.js  # Registration PayPal invoice on board approve
+│   ├── paypal-client.js / paypal-invoice-actions.js  # Shared PayPal API helpers
 │   ├── receipts.js                # Member receipt upload + admin review
 │   ├── payouts.js                 # $15K payout document workflow
-│   ├── notify.js                  # SendGrid + Twilio
+│   ├── notify.js                  # SendGrid + Twilio (+ digital ID email helper paths)
 │   ├── sync.js                    # Cross-entity sync + audit triggers (NOT PayPal)
 │   ├── audit.js                   # Activity log read/write
 │   ├── db.js                      # pg Pool singleton + timeouts
@@ -79,7 +83,7 @@ hibretedir/
 │   ├── payment-methods.js         # PayPal vs Zelle & BofA classification for stats
 │   ├── invoice-stats-cache.js     # 60s TTL cache for admin invoice stats
 │   ├── board-notes.js             # Board note merge helpers
-│   ├── board-permissions.js       # Granular board perms (17 keys), tiers, restricted CRM scope
+│   ├── board-permissions.js       # Granular board perms (19 keys incl. follow_up), tiers, restricted CRM scope
 │   ├── datetime-la.js             # Server-side Pacific date/time + calendar-date helpers
 │   └── member-snapshot.js         # Static member export + dev PIN file
 ├── db/schema.sql                  # PostgreSQL schema + idempotent migrations
@@ -92,7 +96,7 @@ hibretedir/
 │   ├── board-meeting-handout.html
 │   └── scheduled-paypal-sync.md
 ├── scripts/
-│   ├── start-dev.js               # Dev entry (delegates to dev-local.js)
+│   ├── start-dev.js               # Dev entry (Google Drive → temp Netlify CLI / local functions)
 │   ├── dev-local.js               # Local server: public/ + functions; QA banner; /apply redirect
 │   ├── demo_cycle_reset.js        # npm run demo:reset / demo:reset:apply
 │   ├── test_qa_invite_local.js    # npm run test:qa-invite
@@ -100,10 +104,18 @@ hibretedir/
 │   ├── run_schema.js              # npm run db:migrate (connects to Render via .env — same DB as production)
 │   ├── seed_announcement_venues.js  # npm run db:seed-ann-venues — LA church/cemetery presets for Admin dropdowns
 │   ├── check_current_announcement.js  # Debug which event/memorial is live on public site
+│   ├── lib/application-scan-sync.js   # Shared Drive → application_scan import (daily + Application-tab)
+│   ├── sync_application_scans_daily.js  # npm run sync:scans:daily
+│   ├── watch_application_scans.js     # Optional poller — npm run watch:scans
+│   ├── import_member_application_scans_batch.js  # npm run sync:scans
+│   ├── send_digital_id_email.js   # Render portal-matching digital ID PNG → email (--member / --all-board)
+│   ├── membership-card-render.html  # Headless Chrome template for digital ID emails
+│   ├── board_admin_smoke.js       # Quick admin API smoke checks
 │   ├── seed_from_exports.py
 │   ├── import_waiting_list.py     # Excel import + public JSON export
 │   ├── fix_waiting_list_order.py  # Same-day queue tie-break from Order of Registration.xlsx
 │   ├── add_yonas_misrak_crm.js    # One-off board CRM import (membership-completion flow)
+│   ├── add_sara_tedjitou_crm.js   # One-off CRM import (Sara Mesfin / Tedjitou Dessalegn)
 │   ├── lookup_yonas_misrak.js     # DB lookup helper for CRM imports
 │   ├── mark_added_waiting_list_members.py
 │   ├── mark_invitations_sent.py
@@ -193,6 +205,9 @@ See `.env.example`. Critical ones:
 | `DEMO_QA_EMAIL` / `DEMO_QA_PHONE` / `DEMO_QA_NAME` | Dedicated test identity (never a real member). **`DEMO_QA_PHONE` must not match any real member** — use `3105550199` after June 2026 collision fix |
 | `REGISTRATION_FEE` | `200` production; `1` for live PayPal QA smoke test |
 | `ANNOUNCEMENT_FUND_THRESHOLD` | Optional — auto-suggest no collection when PayPal balance ≥ this (default 50000) |
+| `DIGITAL_ID_CC_EMAIL` | Optional CC for `npm run`-style `node scripts/send_digital_id_email.js` (falls back to `BOARD_NOTIFY_EMAIL`) |
+| `APPLICATION_SCANS_ROOT` | Local DriveFS path to scanned membership PDFs (required for scan sync; Netlify cron no-ops without it) |
+| `GOOGLE_DRIVE_APPLICATIONS_FOLDER_ID` | Optional Drive parent folder id for applications |
 
 **SendGrid production values (June 2026):**
 
@@ -244,11 +259,13 @@ Notifications **skip gracefully** when Twilio is unset; email sends when SendGri
 | `pin_reset_requests` | Member forgot-PIN requests |
 | `event_payouts` | $15K payout document + approval workflow |
 | `audit_log` | Activity log |
-| `board_members` | Board login accounts; `display_name` (Access Management label only — **not** CRM); `member_id` link to CRM; `board_perms` JSONB (17 granular keys); legacy boolean columns kept for compat |
+| `board_members` | Board login accounts; `display_name` (Access Management label only — **not** CRM); `member_id` link to CRM; `board_perms` JSONB (**19** granular keys incl. `follow_up`); legacy boolean columns kept for compat |
 | `board_member_emails` | Multiple login emails per board account (aliases → one `board_members` row) |
+| `board_password_reset_tokens` | Board admin self-service forgot-password email links |
+| `member_board_assignments` | Payment Follow-Up portfolios — one board member per CRM member (`UNIQUE member_id`) |
 | `notifications` | Email/SMS send log |
 
-**Recent schema additions:** performance indexes; `invoices.paid_note`, `invoice_mark_paid_requests`; `waiting_list.invited_at`; `invoices.membership_application_id`; `membership_applications.registration_invoice_id`; `board_members.board_perms` JSONB + `display_name`; `board_member_emails`; `members.spouse_name`; `members.application_drive_url`; `membership_applications.applicant_signature`; **`memorial_announcements`**; **`announcement_service_venues`** (June 16–17).
+**Recent schema additions:** performance indexes; `invoices.paid_note`, `invoice_mark_paid_requests`; `waiting_list.invited_at`; `invoices.membership_application_id`; `membership_applications.registration_invoice_id`; `board_members.board_perms` JSONB + `display_name`; `board_member_emails`; `members.spouse_name`; `members.application_drive_url`; `membership_applications.applicant_signature`; **`memorial_announcements`**; **`announcement_service_venues`**; **`members.application_scan`**; **`member_board_assignments`** + `follow_up` perm backfill; **`board_password_reset_tokens`** (June–July 2026).
 
 **Waiting list statuses (admin + DB):**
 
@@ -310,12 +327,15 @@ Base URL: `/.netlify/functions/<name>`
 | POST | `/admin/reset-pin` | Admin | Clear PIN from member modal |
 | GET | `/me` | Member JWT | Current member |
 | POST | `/admin/login` | — | Board JWT |
+| POST | `/admin/forgot-password` | — | Email reset link (SendGrid); tokens in `board_password_reset_tokens` |
+| GET/POST | `/admin/reset-password` | — | Validate token / set new board password |
 | GET | `/admin/me` | Board JWT | Profile + `perms` |
 | GET/POST | `/admin/board-members` | Super admin | List / invite board logins |
 | POST | `/admin/board-members/:id/permissions` | Super admin | Save `board_perms` + `display_name` (board only — never CRM) |
 | POST | `/admin/board-members/:id/deactivate` | Super admin | Deactivate login (stays in list; cannot sign in) |
 | POST | `/admin/board-members/:id/reactivate` | Super admin | Restore login (new password on next sign-in) |
 | POST | `/admin/board-members/:id/update-email` | Super admin | Change board login email (alias table updated) |
+| POST | `/admin/board-members/:id/reset-password` | Super admin | Admin-initiated password reset for a board login |
 
 **Board member list (`listBoardMembers`):** Backfills empty `display_name` from linked CRM `members.full_name`; `linkBoardMemberToCrm` on invite sets `display_name` when CRM email matches.
 
@@ -331,10 +351,26 @@ Base URL: `/.netlify/functions/<name>`
 | PUT | `/beneficiary` | Member | Submits change request (board approval) |
 | GET | `/activity` | Admin or Member | Audit log |
 | POST | `/invoice` | Admin | Mark paid (with approval flow where configured) |
+| GET | `/member/application-scan` | Admin | Binary PDF for in-Admin Application tab (`?memberId=&index=`) |
+| POST | `/sync-application-scans` | Admin | Catch-up Drive → `application_scan` (Application tab) |
+| POST | `/member/make-spouse-primary` | Admin (`edit_members`) | Promote surviving spouse to primary (names + phones swap; same member #) |
 
 **Member invoices:** `dedupeInvoicesByEvent()` on server; portal counts **Deaths Paid** = paid invoices with `event_number` (not legacy unlinked rows).
 
 **Recipient matching:** Many invoices were bulk-imported with wrong `member_id` but correct PayPal `recipient_name`. Portal matches by member's `paypal_name` / `full_name` so counts stay accurate (~21 active members affected).
+
+### `follow-up.js` (Payment Follow-Up — `follow_up` perm)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/board-options` | Admin | Board members eligible to own a portfolio |
+| GET | `/roster` | Admin | All active members + assignment + unpaid summary (Assignments / Status) |
+| GET | `/my-list` | Admin | Caller’s portfolio — unpaid invoices needing follow-up |
+| POST | `/claim/:memberId` | Admin | Self-claim a member into portfolio |
+| PUT | `/assignments/:memberId` | Admin | Assign/reassign to a board member (`board_member_id`) |
+| DELETE | `/assignments/:memberId` | Admin | Clear assignment |
+
+**Rules:** One board owner per CRM member (`member_board_assignments`). Outstanding unpaid / partial ≥ $10; due window = 3 days after sent. Matching uses same paypal/household name rules as CRM. Admin UI tabs: **Assignments** · **My list** · **Status** (board load summary). Notes still edited on member CRM. **Not** automated day-3/7/14 SMS/email — that remains EVT-08.
 
 ### `apply.js` (public + admin highlights)
 
@@ -384,9 +420,9 @@ See **`docs/scheduled-paypal-sync.md`** for schedule explanation.
 
 **Registration payment completion:** `paypal-sync.js` calls `processPaidRegistrationInvoices()` after sync. Core logic in `membership-completion.js`.
 
-### `receipts.js`, `payouts.js`, `notify.js`, `sync.js`
+### `receipts.js`, `payouts.js`, `notify.js`, `sync.js`, `follow-up.js`
 
-Unchanged in role: receipts workflow, payout fund, notifications, internal CRM sync (not PayPal).
+Unchanged in role unless noted elsewhere: receipts workflow, payout fund, notifications, internal CRM sync (not PayPal), Payment Follow-Up portfolios.
 
 ---
 
@@ -416,7 +452,7 @@ Placeholders show `—` until API loads. Regenerate static JSON: `python scripts
 
 - Invoices from DB with recipient-name matching + event dedupe
 - **Deaths Paid** = count of **paid event invoices** (unique events)
-- **Digital membership card (July 30)** — Profile tab live card (logo, name, member #, status, joined year); CSS `app-theme.css` **portal30**
+- **Digital membership card (July 30)** — Profile tab live card (logo, **Name = `paypal_name`** / digital ID name, member #, status, joined year centered); CSS `app-theme.css` **portal30**
 - Notifications built from live unpaid invoices + board message replies + activity (no mock array)
 - **Instant tab switches (June 17)** — Home / Invoices / Profile / etc. render from in-memory cache immediately; background fetch only when tab data is missing or stale (60s TTL). Lazy-load: activity + board messages only when Notifications / Board Messages opened; events when Upload opened. Invoice fetch capped at **150** per request (was 2500). Thin gold loading bar under nav during background refresh.
 - **Bilingual logged-in UI (June 17)** — `PORTAL_I18N` + `pt()` helper; EN/አማ toggle updates portal screens (not auth-only)
@@ -437,15 +473,21 @@ Placeholders show `—` until API loads. Regenerate static JSON: `python scripts
 
 | Section | Views |
 |---------|-------|
-| Main | Members CRM, Invoices, Approval, Receipts, Messages |
+| Main | Members CRM, Invoices, Approval, Receipts, Messages, **Payment Follow-Up** |
 | Reports | Event Summary, Payout Fund |
-| **Announce** | Memorial intake — collection-first flow, spouse question, venue dropdowns, live preview, PayPal event auto-link when collecting |
+| **Announce** | Memorial intake — collection-first flow, spouse question, venue dropdowns, live preview, PayPal event auto-link when collecting; **CRM succession on save** via `member-succession.js` |
 | System Health | **Dashboard** (integrations, **Send test email**, health checks) · **QA Testing** (ONB step playbook incl. NTF-01) |
 | Security | **Access Management** (super admin only), Activity Log |
 
 **Live stats bar:** Unpaid, Paid (PayPal), Zelle & BofA, Late — colors: green / green / red. **Partial** invoices are not counted as late.
 
-**Board permissions (June 17):** Super Admin (`BOARD_SUPER_ADMIN_EMAILS`) manages **Access Management** (master-detail: pick member → grant tier or individual perms). **17 granular keys** in `board_perms` JSONB (`board-permissions.js`). **Access tiers:** **Restricted** (read-only Members CRM only — hides other nav), **Read-only** (view all except Security), **Basic** (notes + PayPal sync + messages), **Operation** (+ edit members, reset/approve PIN), **Approver** (broad ops without full CRM write). Tier buttons highlight gold when active (`board-access-preset-btn.is-active`). **Security** (Access Management + Activity Log) is **super-admin only**. Read-only board members cannot see Security. Enforced in `board-permissions.js` across `auth.js`, `apply.js`, `portal.js`, `payouts.js`, `receipts.js`, `paypal-sync.js`.
+**Payment Follow-Up (June 25–July 31):** Sidebar **Payment Follow-Up** (`follow_up` perm). Tabs: **Assignments** (claim/assign board owners), **My list** (caller’s unpaid portfolio — call/note), **Status** (board load summary). API: `follow-up.js`. Schema: `member_board_assignments`. Mobile admin hardened June 27 (sticky dock, cards, no horizontal scroll).
+
+**Board login forgot-password (June 29):** Login screen → email reset link → `/admin` reset UI; tokens in `board_password_reset_tokens`. Requires SendGrid.
+
+**Members CRM — spouse succession (July 30):** **Make spouse primary** button (`POST portal/member/make-spouse-primary`) swaps primary ↔ spouse names and mobile ↔ spouse cell; keeps same member # / invoices; sets `paypal_name` to surviving spouse (digital ID name). Announce save also auto-updates CRM: spouse continues → promote; no / no spouse → mark Deceased; spouse died → clear spouse, keep primary Active (`member-succession.js`).
+
+**Board permissions (June 17 + Follow-Up):** Super Admin (`BOARD_SUPER_ADMIN_EMAILS`) manages **Access Management** (master-detail: pick member → grant tier or individual perms). **19 granular keys** in `board_perms` JSONB (`board-permissions.js`) including **`follow_up`**. **Access tiers:** **Restricted** (read-only Members CRM only — hides other nav), **Read-only** (view all except Security), **Basic** (notes + PayPal sync + messages + follow-up), **Operation** (+ edit members, reset/approve PIN), **Approver** (broad ops without full CRM write). Tier buttons highlight gold when active (`board-access-preset-btn.is-active`). **Security** (Access Management + Activity Log) is **super-admin only**. Read-only board members cannot see Security. Enforced in `board-permissions.js` across `auth.js`, `apply.js`, `portal.js`, `payouts.js`, `receipts.js`, `paypal-sync.js`, **`follow-up.js`**.
 
 **Access Management UX (June 17, `ec09b90`):** Super-admin **Security → Access Management** (mobile: ☰ → Security). **Add board member** form at top (email → invite). Per member: **Remove** (deactivate — stays in list), **Re-add**, **Reset password**, **Update email**, tier presets + individual checkboxes → **Save access**. Deactivated members remain visible; super admins cannot be removed (env `BOARD_SUPER_ADMIN_EMAILS`). **Mobile:** controls-only layout — hides helper paragraphs, permission descriptions, duplicate login line, joined/summary chips (full detail on PC). CSS cache bust `admin69` in `admin-tracker.css`.
 
@@ -583,7 +625,7 @@ Auth, portal, admin CRM, applications, waiting list, notifications, audit, payou
 ### June 2026 — Access Management & board permissions (June 17)
 
 - [x] **Access Management UI** — Master-detail layout; board names by CRM `#` + `display_name` (not email); access tier presets with gold active-state highlight
-- [x] **17 granular permissions** — `board_perms` JSONB; default invite = Basic rights
+- [x] **17 granular permissions** — `board_perms` JSONB; default invite = Basic rights → later **19 keys** with `follow_up` (June 25)
 - [x] **Restricted tier** — `view_members_crm` only; Members CRM read-only; API + nav gated
 - [x] **Security super-admin only** — Access Management + Activity Log hidden from non–super-admins
 - [x] **Board display names** — Separate from CRM; edits in Access Management do not update `members` table; CRM name auto-fill on invite/link
@@ -608,16 +650,32 @@ Auth, portal, admin CRM, applications, waiting list, notifications, audit, payou
 - [x] **Deploy** — pushed `1684565` to `main`
 - [ ] **EVT-06** — bulk PayPal invoices to all members on new event (noted in Admin UI)
 
+### June–July 2026 — Payment Follow-Up, succession, digital ID, scans
+
+- [x] **Payment Follow-Up** — `follow-up.js`, `member_board_assignments`, `follow_up` perm; Assignments / My list / Status (`db360b2` → `efbad39`)
+- [x] **Board forgot-password** — email reset tokens (`4b9f6a0`)
+- [x] **Admin mobile harden** — sticky dock, cards, follow-up fixes (`b9fcb57`+)
+- [x] **Digital membership card** — portal Profile; Name = `paypal_name` (`04e4f0e`, `748d131`)
+- [x] **Make spouse primary + Announce CRM succession** — `member-succession.js` (`748d131`, `5e8486b`)
+- [x] **Spouse cell label** — `home_phone` UI (`b906c9e`)
+- [x] **Waiting-list Pass** — non-responder frees slot (`74161e6`)
+- [x] **In-Admin application scans** — multi-file JSONB + daily/tab sync (`c7f8c62`)
+- [x] **Digital ID email tooling** — `send_digital_id_email.js` (`efbad39`, `d31bee7`)
+- [ ] **EVT-08 automated reminders** — still open (manual Follow-Up is not a substitute for cron)
+
 ### Still partial / ops
 
 - [ ] **Twilio SMS** — **NEXT** — SendGrid done; follow `docs/notifications-setup.md` § Twilio
 - [x] **Local E2E onboarding QA** — full cycle with `DEMO_QA_*` + `MEMBER_CAP=201` + `$1` PayPal (June 14, 2026)
 - [ ] **Netlify env for QA** — set `DEMO_QA_*`, `MEMBER_CAP=201`, `PUBLIC_SITE_URL`, `REGISTRATION_FEE` when deploying
-- [ ] Admin create event → bulk PayPal invoices via API
+- [ ] Admin create event → bulk PayPal invoices via API (**EVT-06**)
+- [x] **Payment Follow-Up UI** — board assignments + unpaid call list + Status tab (**live**; June–July 2026)
+- [ ] **EVT-08 automated reminders** — day 3/7/14 email/SMS (manual Follow-Up is live; cron not started)
 - [ ] All members have portal PINs (ops)
 - [ ] Fix mislinked `member_id` on bulk-imported invoices (recipient match covers portal; admin may still show wrong owner on some rows)
 - [ ] S3 for receipts (optional; currently DB base64)
-- [ ] Automated payment reminders (day 3/7/14)
+- [x] **Digital membership card** on portal Profile; **ops email** via `scripts/send_digital_id_email.js` (welcome blast still optional)
+- [x] **Spouse succession** — Make spouse primary + Announce CRM auto-update
 
 ---
 
@@ -626,12 +684,16 @@ Auth, portal, admin CRM, applications, waiting list, notifications, audit, payou
 | Item | Notes |
 |------|-------|
 | ~~Admin UI for event announcement~~ | **Done** — Admin → **Announce** (`1684565`); CLI `set_event_announcement.js` still available |
-| `events.js` | No admin “create event → auto ~197 invoices” via PayPal API (EVT-06) |
-| Automated payment reminders | Not started |
-| Twilio SMS bot | Not started |
-| Welcome email + digital membership card | Portal **digital card** live on Profile (July 30); welcome email asset still optional |
+| ~~Payment Follow-Up (manual)~~ | **Done** — Admin → Payment Follow-Up (`follow-up.js`, `member_board_assignments`) |
+| ~~Board forgot-password~~ | **Done** — email reset link (`board_password_reset_tokens`) |
+| ~~Spouse succession / digital ID name~~ | **Done** — Make spouse primary + Announce CRM updates; card uses `paypal_name` |
+| ~~In-Admin application scans~~ | **Done** — `application_scan` JSONB + daily/tab sync (`c7f8c62`) |
+| `events.js` / **EVT-06** | No admin “create event → auto ~197 invoices” via PayPal API |
+| **EVT-08** automated payment reminders | Planned cron day 3/7/14 — **not** the Follow-Up UI |
+| Twilio SMS bot | Not started (keys unset) |
+| Welcome email blast to all members | Card live; `send_digital_id_email.js --all-board` / `--member` for ops; mass welcome optional |
 | 4-month waiting period tracking | Not started |
-| Reporting (event collection, delinquency) | Not started |
+| Reporting (event collection, delinquency) | Partial via Follow-Up Status + Event Summary; full reporting not started |
 | Receipt storage at scale | Base64 in Postgres OK for now |
 | End-to-end onboarding test | **Done locally** (June 2026) — see `docs/system-validation-playbook.md`; production repeat after Netlify deploy |
 
@@ -690,7 +752,12 @@ The board operator expects the agent to **figure it out and make it happen**. Do
 
 ## 12. Recent session changelog
 
-### July 31, 2026 — In-Admin scanned PDF + auto-import
+### August 10, 2026 — Context.md catch-up (no feature commit)
+
+- Documented work that landed in code but was missing or stale in this file: **Payment Follow-Up** (`follow-up.js`, Status tab), **board forgot-password**, **spouse succession** / Make spouse primary, **digital ID email** tooling, **19** board perms (`follow_up`), repo tree + API tables, EVT-08 clarified as *automated* reminders only.
+- Priorities refreshed; Twilio still next.
+
+### July 31, 2026 — In-Admin scanned PDF + auto-import + Follow-Up Status + digital ID email
 
 - Drive folder links alone were too heavy (Drive → Adobe). Scans store in `members.application_scan` and preview inside Admin → Member → **Application**.
 - **Multi-file:** `application_scan.files[]`. Admin loads each PDF via `GET portal/member/application-scan?memberId=&index=` as **binary PDF** (blob URL iframe) — not giant JSON data-URLs (those timed out ~30s).
@@ -701,13 +768,31 @@ The board operator expects the agent to **figure it out and make it happen**. Do
 - Portal login: **mobile or spouse cell (`home_phone`)** opens the same membership; **one shared PIN** per member row.
 - Verify: `node scripts/verify_sara_dual_scans.js` + `node scripts/verify_sara_scan_http.js`
 - Agent rules: **execute don’t delegate**; **verify before claiming done** (`.cursor/rules/execute-dont-delegate.mdc`).
+- **Follow-Up Status tab** — board load summary under Payment Follow-Up (`efbad39`).
+- **Digital ID email** — `scripts/send_digital_id_email.js` + `membership-card-render.html` (Chrome headless PNG matching Profile card); `--member N` / `--all-board`; optional CC via `DIGITAL_ID_CC_EMAIL` / `BOARD_NOTIFY_EMAIL`. Hardcoded emails removed (`d31bee7`).
 
-### July 30, 2026 — Waiting list Pass for non-responders
+### July 30, 2026 — Spouse succession, digital card, Spouse cell, waiting-list Pass
 
+- **Make spouse primary** — Admin Members CRM; `POST portal/member/make-spouse-primary`; shared core in `member-succession.js`.
+- **Announce → CRM** — On save: spouse continues → promote; no/no spouse → mark Deceased; spouse died → clear spouse, keep primary Active (`5e8486b`).
+- **Digital membership card** — Portal Profile; Name line uses **`paypal_name`** (digital ID name); joined year wiring (`04e4f0e`, `748d131`).
+- **`home_phone` UI = Spouse cell** — CRM + portal; login still matches mobile or spouse cell (`b906c9e`).
 - **Pass button** on Admin → Waiting List → Invited rows (`Invited to Apply`, no application yet).
 - `POST apply/waiting-list/:id/pass` → status **`Passed`**, clears `invited_at`, frees pipeline slot; next Pending/Registered becomes eligible.
 - **Passed** stays on the list, ranked **after** Pending/Registered for the next invite round; can be re-invited later. Application verify still requires `Invited to Apply`.
 - UI: amber **Pass** next to Invited; CSS `admin74`. Activity: `waiting_list.pass`.
+- CRM import: Sara Mesfin / Tedjitou Dessalegn (`86f38e1`).
+
+### June 25–27, 2026 — Payment Follow-Up + admin mobile harden
+
+- **Payment Follow-Up** — `follow-up.js`; `member_board_assignments`; `follow_up` board perm (19 keys total); claim/assign, my unpaid list, call/note workflow (`db360b2`).
+- Fixes: self-assignment save; perms after mobile session refresh; unpaid data on roster (`0fda976`, `d063395`, `b9fcb57`).
+- **Admin mobile** — sticky dock/header, cards, no horizontal scroll, menu icon top-right (`6bab365`–`a5cb856`).
+- Smoke: `scripts/board_admin_smoke.js`.
+
+### June 29, 2026 — Board forgot-password
+
+- Login **Forgot password** → email token → reset page (`4b9f6a0`); table `board_password_reset_tokens`.
 
 ### July 3, 2026 — Messages inbox, HTML replies, follow-up policy, LA timezone
 
@@ -894,7 +979,11 @@ The board operator expects the agent to **figure it out and make it happen**. Do
 | Invoice sent date off by one day | Fixed July 2026 — `toDateOnlyString()` uses LA timezone in `datetime-la.js` / `portal.js` |
 | Portal login shows wrong member name | Phone collision — set `DEMO_QA_PHONE=3105550199`; run `fix_qa_phone_collision.js` on DB if QA still shares a real phone |
 | Profile address shows a date | Legacy CRM data in `address` — `normalizePortalAddress()` in `portal.js`; field editable to real address |
-| Netlify build failed secrets scan | Hardcoded emails in scripts — use env vars / member_number roster (`sync_board_member_names.js` fixed June 17) |
+| Netlify build failed secrets scan | Hardcoded emails in scripts — use env vars / member_number roster (`sync_board_member_names.js` / `send_digital_id_email.js` fixed) |
+| Follow-Up empty / 403 | Run `npm run db:migrate` (`member_board_assignments` + `follow_up` perm); re-login; confirm `follow_up` in Access Management |
+| Board forgot-password email missing | SendGrid env on Netlify; check spam; token table via `db:migrate` |
+| Digital ID email fails | Chrome/Edge installed; `node scripts/send_digital_id_email.js --member <n>`; SendGrid configured |
+| Application scan missing after PDF drop | `APPLICATION_SCANS_ROOT` set; open Application tab (catch-up) or `npm run sync:scans:daily`; verify folder name `#N First Last` |
 
 ---
 
@@ -917,14 +1006,16 @@ The board operator expects the agent to **figure it out and make it happen**. Do
 
 ---
 
-## 15. Next agent priorities (July 3, 2026)
+## 15. Next agent priorities (August 10, 2026)
 
 1. **Twilio SMS** — Buy US SMS number; add `TWILIO_*` to Netlify; set `DEMO_QA_PHONE=3105550199`; `npm run test:notify -- --send`.
-2. **Production smoke-test** — Portal: shared-phone picker; login-help flow (bad phone → email required → admin reply → check inbox); Admin **Messages** inbox + follow-up reply; verify **LA timestamps** on Activity log; instant tabs + EN/አማ; **Access Management** on phone + PC; confirm `ADMIN_AUTH_ENABLED` + `BOARD_SUPER_ADMIN_EMAILS` on Netlify.
+2. **Production smoke-test** — Payment Follow-Up (Assignments / My list / Status); Make spouse primary + Announce CRM succession; portal digital ID card; board forgot-password; shared-phone picker; login-help email; Messages inbox; Access Management; confirm `ADMIN_AUTH_ENABLED` + `BOARD_SUPER_ADMIN_EMAILS` on Netlify.
 3. **EVT-06** — Admin create event + bulk PayPal invoices to all active members.
-4. **EVT-08** — Payment reminders.
-5. **Optional portal** — Extend Amharic to dynamic invoice card strings; one-off script to clear date-like `address` values in CRM for legacy members.
+4. **EVT-08** — Automated payment reminders (day 3/7/14 email/SMS). Manual Follow-Up UI is already live — do not rebuild it.
+5. **Optional** — Mass digital ID / welcome email via `node scripts/send_digital_id_email.js`; extend Amharic on dynamic invoice strings; clear legacy date-like `address` values in CRM.
 
-**Done this cycle:** Messages email inbox; HTML board reply emails; append-only follow-up replies; Pacific timezone sitewide; shared-phone account picker; login-help required email + board reply by email; CRM cell import (25 mobiles on Render); PayPal sync date fix (`b48d782`); board Access Management (`ec09b90`); portal mobile perf (`21e1514`).
+**Done (previously missing from this file):** Payment Follow-Up + Status tab; board forgot-password; spouse succession / Make spouse primary; digital ID card + email script; in-Admin multi-file scans; waiting-list Pass; Messages inbox / Pacific TZ / shared-phone (earlier July).
 
-**Do not regress:** Portal tabs must stay instant (no full `refreshPortalData()` on every tap); shared-phone login must always show account picker when multiple CRM rows match (never silent auto-pick); PINs are per `member_id` not per phone; inactive members cannot portal-login; **portal-login help must require email and email replies** (not portal-only); **board replies are append-only** (no edit/delete); **all displayed times must stay Pacific (LA)**; `DEMO_QA_PHONE` must not match a real member; Board `display_name` must never UPDATE `members` (except read-only backfill from CRM when empty); sync script must not overwrite non-empty `display_name` without `--force-names`; Security views super-admin only; Restricted scope limits to Members CRM; deactivated board members stay in Access Management list; Meridian showcase; waiting list order; current announcement uses `event_number`.
+**Still missing / do next:** Twilio keys; EVT-06 bulk funeral invoices; EVT-08 *automated* reminders; optional mass welcome email; 4-month waiting-period tracker.
+
+**Do not regress:** Portal tabs must stay instant (no full `refreshPortalData()` on every tap); shared-phone login must always show account picker when multiple CRM rows match (never silent auto-pick); PINs are per `member_id` not per phone; inactive members cannot portal-login; **portal-login help must require email and email replies** (not portal-only); **board replies are append-only** (no edit/delete); **all displayed times must stay Pacific (LA)**; `DEMO_QA_PHONE` must not match a real member; Board `display_name` must never UPDATE `members` (except read-only backfill from CRM when empty); sync script must not overwrite non-empty `display_name` without `--force-names`; Security views super-admin only; Restricted scope limits to Members CRM; deactivated board members stay in Access Management list; Meridian showcase; waiting list order; current announcement uses `event_number`; **Follow-Up** one board owner per member; **Make spouse primary** keeps same member #; digital ID **Name** = `paypal_name`; scan sync must not shrink multi-file `application_scan.files[]`.

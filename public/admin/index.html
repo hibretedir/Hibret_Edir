@@ -2722,7 +2722,8 @@ function updateSidebar() {
   const unpaidEl = document.getElementById('sb-unpaid');
   const membersEl = document.getElementById('sb-members');
   const footerEl = document.getElementById('sidebarFooter');
-  const unpaidCount = (stats.unpaid || 0) + (stats.partial || 0);
+  // Sidebar badge = fully unpaid only (exclude partially paid — those have their own tab)
+  const unpaidCount = stats.unpaid || 0;
   const membersCount = MEMBERS.length ? activeMembers : '—';
   if (unpaidEl) unpaidEl.textContent = unpaidCount;
   if (membersEl) membersEl.textContent = membersCount;
